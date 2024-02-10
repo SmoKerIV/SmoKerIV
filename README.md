@@ -5,16 +5,16 @@
 
 - 🌱 I’m currently learning **Vue.js**
 
-- 👨‍💻 All of my projects are available at [workingonit.com](workingonit.com)
+- 👨‍💻 All of my projects are available at [Work in progress](workingonit.com)
 
 - 📫 How to reach me **baker.alazzawi0@gmail.com**
 
-- 📄 Know about my experiences [https://docs.google.com/document/d/e/2PACX-1vQnf73_Hoa8bGsfnwh14bDCdq8pfxOTXXj2YsUFy-6LZwWMgINu_6DewYZkAvFpnD7sDgkbrVz82Kv3/pub](https://docs.google.com/document/d/e/2PACX-1vQnf73_Hoa8bGsfnwh14bDCdq8pfxOTXXj2YsUFy-6LZwWMgINu_6DewYZkAvFpnD7sDgkbrVz82Kv3/pub)
+- 📄 Know about my experiences [CV](https://docs.google.com/document/d/e/2PACX-1vQnf73_Hoa8bGsfnwh14bDCdq8pfxOTXXj2YsUFy-6LZwWMgINu_6DewYZkAvFpnD7sDgkbrVz82Kv3/pub)
 
 <h3 align="left">Connect with me:</h3>
 <p align="left">
 <a href="https://twitter.com/smoker_iv" target="blank"><img align="center" src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/twitter.svg" alt="smoker_iv" height="30" width="40" /></a>
-<a href="https://www.linkedin.com/in/baker-alazzawi/" target="blank"><img align="center" src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/linked-in-alt.svg" alt="https://www.linkedin.com/in/baker-alazzawi/" height="30" width="40" /></a>
+<a href="https://www.linkedin.com/in/baker-alazzawi/" target="blank"><img align="center" src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/linked-in-alt.svg" alt="baker-alazzawi" height="30" width="40" /></a>
 <a href="https://fb.com/BakerAlazzawi" target="blank"><img align="center" src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/facebook.svg" alt="baker a. alazzawi" height="30" width="40" /></a>
 <a href="https://instagram.com/smoker_iv" target="blank"><img align="center" src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/instagram.svg" alt="smoker_iv" height="30" width="40" /></a>
 <a href="https://discord.gg/smoker_iv" target="blank"><img align="center" src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/discord.svg" alt="smoker_iv" height="30" width="40" /></a>
