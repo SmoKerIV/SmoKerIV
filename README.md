@@ -1,11 +1,11 @@
 <h1 align="center">Hi 👋, I'm Baker Alazzawi</h1>
-<h3 align="center">I'm a recent Computer Science graduate from the University of Technology, with a specialization in Artificial Intelligence. I am currently working as a Junior Software Developer at PureTik, primarily focusing on web development while also taking on various other tasks. Committed to self-development, I actively explore AI and maintain a strong interest in web development. I am eager to contribute my skills and enthusiasm to innovative projects in both AI and web development.</h3>
+<h3 align="center">I'm a Computer Science graduate from the University of Technology, with a specialization in Artificial Intelligence. I am currently working as a Junior Software Developer at PureTik, primarily focusing on web development while also taking on various other tasks. Committed to self-development, I actively explore AI and maintain a strong interest in web development. I am eager to contribute my skills and enthusiasm to innovative projects in both AI and web development.</h3>
 
 - 🌱 I’m currently learning **Vue.js**
 
 - 👨‍💻 All of my projects are available at [Work in progress](workingonit.com)
 
-- 📫 How to reach me **baker.alazzawi0@gmail.com**
+- 📫 How to reach me **<baker.alazzawi0@gmail.com>**
 
 - 📄 Know about my experiences [CV](https://docs.google.com/document/d/e/2PACX-1vQnf73_Hoa8bGsfnwh14bDCdq8pfxOTXXj2YsUFy-6LZwWMgINu_6DewYZkAvFpnD7sDgkbrVz82Kv3/pub)
 
