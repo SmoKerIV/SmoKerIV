@@ -20,7 +20,7 @@ watch(isDark, (newVal) => {
 </script>
 
 <template>
-    <div id="app" :class="{ 'dark': isDark, 'light': !isDark }" class="min-h-screen transition-colors duration-300">
+    <div id="app" :class="{ 'dark': isDark }" class="min-h-screen transition-colors duration-300">
         <AppHeader @toggle-theme="toggleTheme" :isDark="isDark" />
         <HomePage :isDark="isDark" />
     </div>
