@@ -27,6 +27,19 @@ watch(isDark, (newVal) => {
 </template>
 
 <style>
+#app {
+    width: 100%;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* Ensure no horizontal scrolling */
+body,
+html {
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
 .light {
     background-color: #ffffff;
     color: #1f2937;

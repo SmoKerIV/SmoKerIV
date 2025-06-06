@@ -1,5 +1,5 @@
-# Vue 3 + TypeScript + Vite
+<h1 align="center">Hi 👋, I'm Baker Alazzawi</h1>
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+<h3 align="center">Computer Science graduate from the University of Technology, with a specialization in Artificial Intelligence. I am currently working as a Junior Software Developer at PureTik, primarily focusing on web development while also taking on various other tasks. Committed to self-development, I actively explore AI and maintain a strong interest in web development. I am eager to contribute my skills and enthusiasm to innovative projects web development.</h3>
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+- 🌱 I’m currently learning **Vue.js**
