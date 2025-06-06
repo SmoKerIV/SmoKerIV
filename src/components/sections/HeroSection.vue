@@ -18,10 +18,6 @@ const typeGreeting = async () => {
     }
 }
 
-const scrollToSection = (sectionId: string) => {
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' })
-}
-
 onMounted(() => {
     typeGreeting()
 

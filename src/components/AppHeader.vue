@@ -90,6 +90,14 @@ import {
 } from '@heroicons/vue/24/outline'
 import { Icon } from '@iconify/vue'
 
+defineProps<{
+  isDark: boolean
+}>()
+
+defineEmits<{
+  'toggle-theme': []
+}>()
+
 const mobileMenuOpen = ref(false)
 const scrolled = ref(false)
 const activeNav = ref('home')
