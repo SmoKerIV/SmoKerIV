@@ -1,6 +1,5 @@
 /* filepath: d:\Code\SmoKerIV\src\components\HomePage.vue */
 <script setup lang="ts">
-import CustomCursor from './ui/CustomCursor.vue'
 import HeroSection from './sections/HeroSection.vue'
 import AboutSection from './sections/AboutSection.vue'
 import ExperienceSection from './sections/ExperienceSection.vue'
@@ -14,14 +13,14 @@ defineProps<{
 </script>
 
 <template>
-  <CustomCursor />
-
-  <main class="relative pt-24">
-    <HeroSection />
-    <AboutSection />
-    <ExperienceSection />
-    <EducationSection />
-    <SkillsSection />
-    <ContactSection />
-  </main>
+  <div>
+    <main class="relative pt-24">
+      <HeroSection />
+      <AboutSection />
+      <ExperienceSection />
+      <EducationSection />
+      <SkillsSection />
+      <ContactSection />
+    </main>
+  </div>
 </template>
