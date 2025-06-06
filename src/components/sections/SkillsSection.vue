@@ -176,29 +176,4 @@ onMounted(() => {
 .dark .skill-hex-content svg[fill="currentColor"] {
     color: white;
 }
-
-/* Hide scrollbars */
-#skills {
-    overflow-x: hidden;
-}
-
-#skills * {
-    scrollbar-width: none;
-    /* Firefox */
-    -ms-overflow-style: none;
-    /* Internet Explorer 10+ */
-}
-
-#skills *::-webkit-scrollbar {
-    display: none;
-    /* WebKit */
-}
-
-@media (max-width: 768px) {
-    .skill-hex {
-        width: 80px;
-        height: 80px;
-        margin: 20px auto;
-    }
-}
 </style>

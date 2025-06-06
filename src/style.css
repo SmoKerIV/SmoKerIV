@@ -22,8 +22,36 @@
     overflow-x: hidden;
   }
 
-  /* Custom cursor - only on non-mobile */
-  @media (min-width: 769px) and (hover: hover) {
+  /* Hide all scrollbars globally */
+  * {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+  }
+
+  *::-webkit-scrollbar {
+    display: none; /* WebKit browsers (Chrome, Safari, Edge) */
+  }
+
+  /* Ensure body and html don't show scrollbars */
+  html,
+  body {
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Fix any container overflow issues */
+  .container {
+    overflow-x: hidden;
+  }
+
+  /* Remove custom cursor styles */
+  /* @media (min-width: 769px) and (hover: hover) {
     * {
       cursor: none;
     }
@@ -32,7 +60,7 @@
     button {
       cursor: none;
     }
-  }
+  } */
 }
 
 @layer components {
@@ -329,8 +357,8 @@
   animation: digitalFlicker 3s ease-in-out infinite;
 }
 
-/* Custom cursor styles - only active on desktop */
-@media (min-width: 769px) and (hover: hover) {
+/* Remove custom cursor styles completely */
+/* @media (min-width: 769px) and (hover: hover) {
   .cursor {
     position: fixed;
     width: 20px;
@@ -352,7 +380,7 @@
     z-index: 9998;
     transition: all 0.3s ease;
   }
-}
+} */
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
