@@ -74,16 +74,15 @@ onMounted(() => {
 })
 </script>
 
-<template>
-    <section id="contact" class="py-20 bg-white dark:bg-gray-900">
-        <div class="container mx-auto px-4">
+<template>    <section id="contact" class="py-20 bg-white dark:bg-gray-900 overflow-hidden">
+        <div class="container mx-auto px-4 max-w-full">
             <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold gradient-text mb-6">Let's Build Something Amazing</h2>
-                <p class="text-lg text-slate-700 dark:text-gray-300">Ready to turn ideas into reality? Let's connect!
+                <h2 class="text-4xl font-bold gradient-text mb-6 break-words">Let's Build Something Amazing</h2>
+                <p class="text-lg text-slate-700 dark:text-gray-300 break-words">Ready to turn ideas into reality? Let's connect!
                 </p>
             </div>
 
-            <div class="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-16">
+            <div class="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-16 overflow-hidden">
                 <a v-for="contact in contactMethods" :key="contact.type" :href="contact.href"
                     class="contact-card glass rounded-2xl p-8 text-center floating-card contact-method-card group">
                     <div
@@ -91,23 +90,23 @@ onMounted(() => {
                         <component :is="contact.icon"
                             class="w-8 h-8 text-white group-hover:scale-110 transition-transform" />
                     </div>
-                    <h3 class="text-xl font-bold mb-2 gradient-text">{{ contact.type }}</h3>
-                    <p class="text-slate-700 dark:text-gray-300">{{ contact.value }}</p>
+                    <h3 class="text-xl font-bold mb-2 gradient-text break-words">{{ contact.type }}</h3>
+                    <p class="text-slate-700 dark:text-gray-300 break-words">{{ contact.value }}</p>
                 </a>
             </div>
 
-            <div class="max-w-2xl mx-auto">
+            <div class="max-w-2xl mx-auto overflow-hidden">
                 <div class="contact-form glass rounded-2xl p-8 floating-card">
-                    <h3 class="text-2xl font-bold gradient-text mb-6 text-center">Send me a message</h3>
-                    <form @submit.prevent="sendMessage" class="space-y-6">
-                        <div class="grid md:grid-cols-2 gap-6">
+                    <h3 class="text-2xl font-bold gradient-text mb-6 text-center break-words">Send me a message</h3>
+                    <form @submit.prevent="sendMessage" class="space-y-6 overflow-hidden">
+                        <div class="grid md:grid-cols-2 gap-6 overflow-hidden">
                             <div>
                                 <label
                                     class="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Name</label>
                                 <input v-model="form.name" type="text" required class="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-gray-600 
                               bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm text-slate-800 dark:text-white
                               focus:ring-2 focus:ring-cyan-500 focus:border-transparent 
-                              transition-all duration-200">
+                              transition-all duration-200 overflow-hidden">
                             </div>
                             <div>
                                 <label
@@ -115,7 +114,7 @@ onMounted(() => {
                                 <input v-model="form.email" type="email" required class="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-gray-600 
                               bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm text-slate-800 dark:text-white
                               focus:ring-2 focus:ring-cyan-500 focus:border-transparent 
-                              transition-all duration-200">
+                              transition-all duration-200 overflow-hidden">
                             </div>
                         </div>
                         <div>
@@ -124,7 +123,7 @@ onMounted(() => {
                             <input v-model="form.subject" type="text" required class="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-gray-600 
                             bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm text-slate-800 dark:text-white
                             focus:ring-2 focus:ring-cyan-500 focus:border-transparent 
-                            transition-all duration-200">
+                            transition-all duration-200 overflow-hidden">
                         </div>
                         <div>
                             <label
@@ -132,7 +131,7 @@ onMounted(() => {
                             <textarea v-model="form.message" required rows="5" class="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-gray-600 
                                bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm text-slate-800 dark:text-white
                                focus:ring-2 focus:ring-cyan-500 focus:border-transparent 
-                               transition-all duration-200 resize-none"></textarea>
+                               transition-all duration-200 resize-none overflow-hidden"></textarea>
                         </div>
                         <button type="submit" class="morph-btn w-full">
                             <span class="flex items-center justify-center">

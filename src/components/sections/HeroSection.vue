@@ -69,8 +69,8 @@ onMounted(() => {
 
 <template>
     <section id="home"
-        class="hero-section min-h-screen flex items-center justify-center relative bg-white dark:bg-gray-900">
-        <div class="absolute inset-0 z-1">
+        class="hero-section min-h-screen flex items-center justify-center relative bg-white dark:bg-gray-900 overflow-hidden">
+        <div class="absolute inset-0 overflow-hidden">
             <div class="floating-shape absolute top-20 left-10 w-32 h-32 bg-cyan-500/6 dark:bg-cyan-400/8 rounded-full">
             </div>
             <div
@@ -84,20 +84,20 @@ onMounted(() => {
             </div>
         </div>
 
-        <div class="container mx-auto px-4 text-center relative z-10">
+        <div class="container mx-auto px-4 text-center relative max-w-full overflow-hidden">
             <div class="hero-card glass rounded-3xl p-12 max-w-4xl mx-auto floating-card">
                 <div class="mb-8">
                     <span class="text-lg text-slate-600 dark:text-gray-400 font-mono">{{ typedGreeting }}</span>
                     <span class="animate-pulse">|</span>
                 </div>
 
-                <h1 class="text-5xl sm:text-7xl lg:text-8xl font-bold mb-6 leading-tight">
+                <h1 class="text-5xl sm:text-7xl lg:text-8xl font-bold mb-6 leading-tight break-words">
                     <span class="gradient-text">Baker</span>
                     <br>
                     <span class="font-mono text-3xl sm:text-4xl lg:text-5xl">&lt;Alazzawi/&gt;</span>
                 </h1>
 
-                <div class="text-xl sm:text-2xl mb-8 text-slate-600 dark:text-gray-300">
+                <div class="text-xl sm:text-2xl mb-8 text-slate-600 dark:text-gray-300 break-words">
                     <span class="font-mono bg-gradient-to-r from-cyan-700 to-teal-700 bg-clip-text text-transparent">
                         Full-Stack Developer
                     </span>
@@ -107,12 +107,13 @@ onMounted(() => {
                     </span>
                 </div>
 
-                <p class="text-lg max-w-2xl mx-auto mb-12 text-slate-600 dark:text-gray-300 leading-relaxed">
+                <p
+                    class="text-lg max-w-2xl mx-auto mb-12 text-slate-600 dark:text-gray-300 leading-relaxed break-words">
                     Crafting digital experiences with code, creativity, and artificial intelligence.
                     Building the future one algorithm at a time.
                 </p>
 
-                <div class="flex flex-col sm:flex-row gap-6 justify-center">
+                <div class="flex flex-col sm:flex-row gap-6 justify-center overflow-hidden">
                     <a href="#contact" class="hero-btn hero-btn-primary group">
                         <span class="flex items-center justify-center">
                             <ChatBubbleLeftRightIcon class="w-5 h-5 mr-2 group-hover:animate-pulse" />
@@ -127,7 +128,6 @@ onMounted(() => {
                     </a>
                 </div>
             </div>
-
             <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
                 <ChevronDownIcon class="w-6 h-6 text-gray-400" />
             </div>

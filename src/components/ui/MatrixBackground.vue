@@ -98,8 +98,9 @@ onUnmounted(() => {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 2;
+    z-index: 1;
     opacity: 0.8;
+    overflow: hidden;
 }
 
 .dark .matrix-background {
@@ -112,11 +113,13 @@ onUnmounted(() => {
     left: 0;
     width: 100%;
     height: 100vh;
-    z-index: 2;
+    z-index: 1;
+    overflow: hidden;
 }
 
 .matrix-background canvas {
     width: 100%;
     height: 100%;
+    overflow: hidden;
 }
 </style>

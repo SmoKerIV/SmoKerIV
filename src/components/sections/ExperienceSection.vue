@@ -81,34 +81,33 @@ onMounted(() => {
 })
 </script>
 
-<template>
-    <section id="experience" class="py-20 bg-white dark:bg-gray-900">
-        <div class="container mx-auto px-4">
+<template>    <section id="experience" class="py-20 bg-white dark:bg-gray-900 overflow-hidden">
+        <div class="container mx-auto px-4 max-w-full">
             <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold gradient-text mb-6">Experience Journey</h2>
-                <p class="text-lg text-slate-700 dark:text-gray-300">My professional evolution in tech</p>
+                <h2 class="text-4xl font-bold gradient-text mb-6 break-words">Experience Journey</h2>
+                <p class="text-lg text-slate-700 dark:text-gray-300 break-words">My professional evolution in tech</p>
             </div>
 
-            <div class="max-w-4xl mx-auto">
-                <div v-for="(exp, index) in experiences" :key="index" class="timeline-item mb-12">
+            <div class="max-w-4xl mx-auto overflow-hidden">
+                <div v-for="(exp, index) in experiences" :key="index" class="timeline-item mb-12 overflow-hidden">
                     <div class="timeline-card glass rounded-2xl p-8 floating-card ml-8 experience-card">
-                        <div class="flex flex-col md:flex-row md:items-start md:justify-between mb-6">
-                            <div class="flex-1">
-                                <h3 class="text-xl font-bold mb-2 text-slate-800 dark:text-white">{{ exp.title }}</h3>
-                                <p class="text-cyan-700 dark:text-cyan-400 font-semibold mb-2">{{ exp.company }}</p>
-                                <p class="text-slate-600 dark:text-gray-400 text-sm">{{ exp.period }}</p>
+                        <div class="flex flex-col md:flex-row md:items-start md:justify-between mb-6 overflow-hidden">
+                            <div class="flex-1 min-w-0">
+                                <h3 class="text-xl font-bold mb-2 text-slate-800 dark:text-white break-words">{{ exp.title }}</h3>
+                                <p class="text-cyan-700 dark:text-cyan-400 font-semibold mb-2 break-words">{{ exp.company }}</p>
+                                <p class="text-slate-600 dark:text-gray-400 text-sm break-words">{{ exp.period }}</p>
                             </div>
-                            <div class="mt-4 md:mt-0">
+                            <div class="mt-4 md:mt-0 flex-shrink-0">
                                 <span :class="getStatusClass(exp.status)" class="status-pill">
                                     <span class="status-dot" :class="getStatusDotClass(exp.status)"></span>
                                     {{ exp.status }}
                                 </span>
                             </div>
                         </div>
-                        <ul class="space-y-3 text-slate-700 dark:text-gray-300">
-                            <li v-for="achievement in exp.achievements" :key="achievement" class="flex items-start">
+                        <ul class="space-y-3 text-slate-700 dark:text-gray-300 overflow-hidden">
+                            <li v-for="achievement in exp.achievements" :key="achievement" class="flex items-start overflow-hidden">
                                 <SparklesIcon class="w-4 h-4 text-yellow-500 mr-3 mt-1 flex-shrink-0" />
-                                <span class="leading-relaxed">{{ achievement }}</span>
+                                <span class="leading-relaxed break-words">{{ achievement }}</span>
                             </li>
                         </ul>
                     </div>

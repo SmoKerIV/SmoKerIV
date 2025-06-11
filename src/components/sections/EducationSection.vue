@@ -55,31 +55,30 @@ onMounted(() => {
 })
 </script>
 
-<template>
-    <!-- Education Section -->
-    <section id="education" class="py-20 bg-white dark:bg-gray-900">
-        <div class="container mx-auto px-4">
+<template>    <!-- Education Section -->
+    <section id="education" class="py-20 bg-white dark:bg-gray-900 overflow-hidden">
+        <div class="container mx-auto px-4 max-w-full">
             <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold gradient-text mb-6">Education & Learning</h2>
-                <p class="text-lg text-slate-700 dark:text-gray-300">Academic foundation and continuous development</p>
+                <h2 class="text-4xl font-bold gradient-text mb-6 break-words">Education & Learning</h2>
+                <p class="text-lg text-slate-700 dark:text-gray-300 break-words">Academic foundation and continuous development</p>
             </div>
 
-            <div class="max-w-4xl mx-auto space-y-8">
+            <div class="max-w-4xl mx-auto space-y-8 overflow-hidden">
                 <div v-for="(edu, index) in education" :key="index"
                     class="education-card glass rounded-2xl p-8 floating-card">
-                    <div class="flex items-start space-x-4">
+                    <div class="flex items-start space-x-4 overflow-hidden">
                         <div class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
                             :class="edu.iconBg">
                             <component :is="edu.icon" class="w-6 h-6 text-white" />
                         </div>
-                        <div class="flex-1">
-                            <h3 class="text-xl font-bold mb-2 text-slate-800 dark:text-white">{{ edu.degree }}</h3>
-                            <p class="font-semibold mb-2" :class="edu.institutionColor">{{ edu.institution }}</p>
-                            <p class="text-slate-600 dark:text-gray-400 mb-4">{{ edu.period }}</p>
-                            <ul class="space-y-2 text-slate-700 dark:text-gray-300">
-                                <li v-for="highlight in edu.highlights" :key="highlight" class="flex items-start">
-                                    <span class="text-cyan-600 mr-2 mt-1">•</span>
-                                    {{ highlight }}
+                        <div class="flex-1 min-w-0 overflow-hidden">
+                            <h3 class="text-xl font-bold mb-2 text-slate-800 dark:text-white break-words">{{ edu.degree }}</h3>
+                            <p class="font-semibold mb-2 break-words" :class="edu.institutionColor">{{ edu.institution }}</p>
+                            <p class="text-slate-600 dark:text-gray-400 mb-4 break-words">{{ edu.period }}</p>
+                            <ul class="space-y-2 text-slate-700 dark:text-gray-300 overflow-hidden">
+                                <li v-for="highlight in edu.highlights" :key="highlight" class="flex items-start overflow-hidden">
+                                    <span class="text-cyan-600 mr-2 mt-1 flex-shrink-0">•</span>
+                                    <span class="break-words">{{ highlight }}</span>
                                 </li>
                             </ul>
                         </div>

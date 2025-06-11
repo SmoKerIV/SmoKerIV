@@ -20,7 +20,7 @@ watch(isDark, (newVal) => {
 </script>
 
 <template>
-    <div id="app" :class="{ 'dark': isDark }" class="min-h-screen transition-colors duration-300">
+    <div id="app" :class="{ 'dark': isDark }" class="min-h-screen transition-colors duration-300 overflow-x-hidden">
         <AppHeader @toggle-theme="toggleTheme" :isDark="isDark" />
         <HomePage :isDark="isDark" />
     </div>
@@ -31,6 +31,7 @@ watch(isDark, (newVal) => {
     width: 100%;
     min-height: 100vh;
     overflow-x: hidden;
+    max-width: 100vw;
 }
 
 /* Ensure no horizontal scrolling */
@@ -38,6 +39,7 @@ body,
 html {
     max-width: 100vw;
     overflow-x: hidden;
+    width: 100%;
 }
 
 .light {
@@ -48,5 +50,11 @@ html {
 .dark {
     background-color: #0f172a;
     color: #f8fafc;
+}
+
+/* Additional overflow prevention */
+* {
+    max-width: 100%;
+    box-sizing: border-box;
 }
 </style>

@@ -1,9 +1,8 @@
 /* filepath: d:\Code\SmoKerIV\src\components\AppHeader.vue */
-<template>
-  <header class="fixed top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-50 transition-all duration-500"
+<template>  <header class="fixed top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-50 transition-all duration-500"
     :class="scrolled ? 'sm:top-2' : 'sm:top-4'">
-    <div class="glass rounded-2xl sm:rounded-3xl px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 mx-auto max-w-6xl">
-      <div class="flex items-center justify-between">
+    <div class="glass rounded-2xl sm:rounded-3xl px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 mx-auto max-w-6xl backdrop-blur-md">
+      <div class="flex items-center justify-between overflow-hidden">
         <!-- Logo/Name with animation -->
         <div class="flex-shrink-0 group min-w-0">
           <h1 class="text-base sm:text-lg md:text-xl lg:text-2xl font-bold gradient-text font-mono truncate">
@@ -12,10 +11,8 @@
           <div
             class="h-0.5 bg-gradient-to-r from-cyan-600 to-teal-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300">
           </div>
-        </div>
-
-        <!-- Floating Navigation Pills -->
-        <nav class="hidden lg:flex items-center space-x-2 flex-shrink-0">
+        </div>        <!-- Floating Navigation Pills -->
+        <nav class="hidden lg:flex items-center space-x-2 flex-shrink-0 overflow-hidden">
           <div class="flex bg-white/10 dark:bg-black/20 rounded-full p-1 backdrop-blur-md">
             <a v-for="item in navItems" :key="item.id" :href="item.href" @click="setActive(item.id)" class="nav-pill"
               :class="{ 'nav-pill-active': activeNav === item.id }">
@@ -26,9 +23,9 @@
         </nav>
 
         <!-- Action Buttons -->
-        <div class="flex items-center space-x-1 sm:space-x-2 md:space-x-3 flex-shrink-0">
+        <div class="flex items-center space-x-1 sm:space-x-2 md:space-x-3 flex-shrink-0 overflow-hidden">
           <!-- Social Orbs -->
-          <div class="hidden md:flex items-center space-x-1 sm:space-x-2">
+          <div class="hidden md:flex items-center space-x-1 sm:space-x-2 overflow-hidden">
             <a v-for="social in socialLinks" :key="social.name" :href="social.url" target="_blank"
               class="social-orb group" :title="social.name">
               <Icon :icon="social.icon"
@@ -49,11 +46,9 @@
             <XMarkIcon v-else class="w-4 h-4 text-white" />
           </button>
         </div>
-      </div>
-
-      <!-- Mobile Dropdown Menu -->
+      </div>      <!-- Mobile Dropdown Menu -->
       <transition name="mobile-menu">
-        <div v-if="mobileMenuOpen" class="sm:hidden mt-3 sm:mt-4 md:mt-6 pb-2">
+        <div v-if="mobileMenuOpen" class="sm:hidden mt-3 sm:mt-4 md:mt-6 pb-2 overflow-hidden">
           <div class="flex flex-col space-y-1 sm:space-y-2">
             <a v-for="item in navItems" :key="item.id" :href="item.href" @click="mobileMenuOpen = false"
               class="mobile-nav-item">
@@ -62,7 +57,7 @@
             </a>
           </div>
           <!-- Mobile Social Links -->
-          <div class="flex justify-center space-x-3 sm:space-x-4 mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-white/20">
+          <div class="flex justify-center space-x-3 sm:space-x-4 mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-white/20 overflow-hidden">
             <a v-for="social in socialLinks" :key="social.name" :href="social.url" target="_blank" class="social-orb"
               :title="social.name">
               <Icon :icon="social.icon" class="w-4 h-4 sm:w-5 sm:h-5 text-white" />

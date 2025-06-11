@@ -1,47 +1,29 @@
-<template>
-    <section id="skills" class="py-20 bg-white dark:bg-gray-900 relative">
-        <div class="container mx-auto px-4">
+<template>    <section id="skills" class="py-20 bg-white dark:bg-gray-900 relative overflow-hidden">
+        <div class="container mx-auto px-4 max-w-full">
             <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold gradient-text mb-6">Tech Arsenal</h2>
-                <p class="text-lg text-slate-700 dark:text-gray-300">Weapons of choice in the digital battlefield</p>
+                <h2 class="text-4xl font-bold gradient-text mb-6 break-words">Tech Arsenal</h2>
+                <p class="text-lg text-slate-700 dark:text-gray-300 break-words">Weapons of choice in the digital battlefield</p>
             </div>
-
-            <!-- Skills Grid with Placeholder Icons -->
-            <!-- 
-        To replace with your own SVG icons:
-        1. Replace the icon component functions above with your SVG content
-        2. Each icon has a data-tech attribute for easy identification
-        3. Use the same component structure but replace the placeholder div with your SVG
-        
-        Example replacement:
-        const ReactIcon = () => h('svg', {
-          viewBox: '0 0 24 24',
-          class: 'w-8 h-8',
-          fill: '#61DAFB'
-        }, [
-          // Your SVG path content here
-        ])
-      -->
-            <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 max-w-6xl mx-auto mb-16">
+            <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 max-w-6xl mx-auto mb-16 overflow-hidden">
                 <div v-for="skill in skills" :key="skill.name" class="skill-hex floating-card">
                     <div class="skill-hex-content">
-                        <div class="w-8 h-8 mx-auto mb-2 flex items-center justify-center">
+                        <div class="w-8 h-8 mx-auto mb-2 flex items-center justify-center overflow-hidden">
                             <!-- Replace these placeholder icons with your SVG icons -->
                             <Icon :icon="skill.icon" class="w-8 h-8" />
                         </div>
-                        <p class="text-xs font-semibold text-slate-700 dark:text-white text-center">{{ skill.name }}</p>
+                        <p class="text-xs font-semibold text-slate-700 dark:text-white text-center break-words">{{ skill.name }}</p>
                     </div>
                 </div>
             </div>
 
             <!-- Skill Categories -->
-            <div class="mt-20 grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            <div class="mt-20 grid md:grid-cols-3 gap-8 max-w-4xl mx-auto overflow-hidden">
                 <div v-for="category in skillCategories" :key="category.title"
                     class="skill-category glass rounded-2xl p-6 floating-card">
-                    <h3 class="text-xl font-bold gradient-text mb-4">{{ category.title }}</h3>
-                    <div class="flex flex-wrap gap-2">
+                    <h3 class="text-xl font-bold gradient-text mb-4 break-words">{{ category.title }}</h3>
+                    <div class="flex flex-wrap gap-2 overflow-hidden">
                         <span v-for="skill in category.skills" :key="skill"
-                            class="px-3 py-1 bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 rounded-full text-sm font-medium">
+                            class="px-3 py-1 bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 rounded-full text-sm font-medium break-words">
                             {{ skill }}
                         </span>
                     </div>
@@ -153,7 +135,8 @@ onMounted(() => {
     left: 50%;
     transform: translate(-50%, -50%);
     text-align: center;
-    z-index: 2;
+    z-index: 3;
+    overflow: hidden;
 }
 
 .skill-hex-content>div {
