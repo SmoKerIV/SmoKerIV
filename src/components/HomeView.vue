@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { defineEmits } from 'vue'
+import { defineEmits } from "vue";
 
 // Single Responsibility: Display home page with name, description, and navigation
 interface Emits {
-  (e: 'navigate', page: 'home' | 'experience' | 'contact'): void
+  (e: "navigate", page: "home" | "experience" | "contact"): void;
 }
 
-const emit = defineEmits<Emits>()
+const emit = defineEmits<Emits>();
 
-const navigateTo = (page: 'experience' | 'contact'): void => {
-  emit('navigate', page)
-}
+const navigateTo = (page: "experience" | "contact"): void => {
+  emit("navigate", page);
+};
 </script>
 
 <template>
@@ -20,10 +20,13 @@ const navigateTo = (page: 'experience' | 'contact'): void => {
       <h1 class="text-5xl md:text-6xl text-slate-800 tracking-tight">
         Baker Alazzawi
       </h1>
-      
+
       <!-- Description -->
       <p class="text-lg md:text-xl text-slate-600 leading-relaxed max-w-xl">
-        Computer Science graduate specializing in AI, building full-stack applications with modern web technologies. Passionate about creating scalable solutions at the intersection of web development and artificial intelligence.
+        Computer Science graduate specializing in AI, building full-stack
+        applications with modern web technologies. Passionate about creating
+        scalable solutions at the intersection of web development and artificial
+        intelligence.
       </p>
 
       <!-- Navigation Buttons -->
@@ -34,7 +37,7 @@ const navigateTo = (page: 'experience' | 'contact'): void => {
         >
           Experience
         </button>
-        
+
         <button
           @click="navigateTo('contact')"
           class="btn-minimal px-8 py-4 border-2 border-slate-400 text-slate-700 rounded-lg font-medium hover:border-slate-500 hover:bg-slate-100"

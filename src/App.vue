@@ -1,29 +1,29 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import LoaderComponent from './components/LoaderComponent.vue'
-import HomeView from './components/HomeView.vue'
-import ExperienceView from './components/ExperienceView.vue'
-import ContactView from './components/ContactView.vue'
+import { ref, onMounted } from "vue";
+import LoaderComponent from "./components/LoaderComponent.vue";
+import HomeView from "./components/HomeView.vue";
+import ExperienceView from "./components/ExperienceView.vue";
+import ContactView from "./components/ContactView.vue";
 
 // Dependency Inversion Principle: Components depend on abstractions (events) not concrete implementations
-type PageType = 'home' | 'experience' | 'contact'
+type PageType = "home" | "experience" | "contact";
 
 // Interface Segregation Principle: Simple, focused state management
-const currentPage = ref<PageType>('home')
-const isLoading = ref<boolean>(true)
+const currentPage = ref<PageType>("home");
+const isLoading = ref<boolean>(true);
 
 // Single Responsibility: Handle page navigation
 const navigateTo = (page: PageType): void => {
-  currentPage.value = page
-}
+  currentPage.value = page;
+};
 
 // Liskov Substitution Principle: Any component can be swapped as long as it emits 'navigate'
 onMounted(() => {
   // Simulate initial load
   setTimeout(() => {
-    isLoading.value = false
-  }, 1500)
-})
+    isLoading.value = false;
+  }, 1500);
+});
 </script>
 
 <template>
@@ -33,15 +33,15 @@ onMounted(() => {
 
     <!-- Main Content with Transitions -->
     <Transition name="fade" mode="out-in">
-      <HomeView 
+      <HomeView
         v-if="!isLoading && currentPage === 'home'"
         @navigate="navigateTo"
       />
-      <ExperienceView 
+      <ExperienceView
         v-else-if="!isLoading && currentPage === 'experience'"
         @navigate="navigateTo"
       />
-      <ContactView 
+      <ContactView
         v-else-if="!isLoading && currentPage === 'contact'"
         @navigate="navigateTo"
       />

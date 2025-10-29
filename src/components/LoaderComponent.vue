@@ -1,21 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { gsap } from 'gsap'
+import { onMounted, ref } from "vue";
+import { gsap } from "gsap";
 
 // Loader component following Single Responsibility Principle
 // Only responsible for displaying the loading state with GSAP animation
 
-const loaderRef = ref<HTMLDivElement | null>(null)
+const loaderRef = ref<HTMLDivElement | null>(null);
 
 onMounted(() => {
   if (loaderRef.value) {
     // GSAP animation for the loader tag
     gsap.fromTo(
       loaderRef.value,
-      { 
-        opacity: 0, 
-        scale: 0.5, 
-        rotation: -15 
+      {
+        opacity: 0,
+        scale: 0.5,
+        rotation: -15,
       },
       {
         opacity: 1,
@@ -25,11 +25,11 @@ onMounted(() => {
         ease: "back.out(1.7)",
         yoyo: true,
         repeat: -1,
-        repeatDelay: 0.2
+        repeatDelay: 0.2,
       }
-    )
+    );
   }
-})
+});
 </script>
 
 <template>

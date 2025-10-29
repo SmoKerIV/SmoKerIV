@@ -1,63 +1,63 @@
 <script setup lang="ts">
-import { defineEmits } from 'vue'
+import { defineEmits } from "vue";
 
 // Single Responsibility: Display contact information
 interface ContactInfo {
-  id: number
-  label: string
-  value: string
-  link: string
-  type: 'email' | 'phone' | 'social'
+  id: number;
+  label: string;
+  value: string;
+  link: string;
+  type: "email" | "phone" | "social";
 }
 
 interface Emits {
-  (e: 'navigate', page: 'home' | 'experience' | 'contact'): void
+  (e: "navigate", page: "home" | "experience" | "contact"): void;
 }
 
-const emit = defineEmits<Emits>()
+const emit = defineEmits<Emits>();
 
 // Open/Closed Principle: Easy to add new contact methods
 const contacts: ContactInfo[] = [
   {
     id: 1,
-    label: 'Email',
-    value: 'baker.alazzawi0@gmail.com',
-    link: 'mailto:baker.alazzawi0@gmail.com',
-    type: 'email'
+    label: "Email",
+    value: "baker.alazzawi0@gmail.com",
+    link: "mailto:baker.alazzawi0@gmail.com",
+    type: "email",
   },
   {
     id: 2,
-    label: 'Phone',
-    value: '+964 773 098 2555',
-    link: 'tel:+9647730982555',
-    type: 'phone'
+    label: "Phone",
+    value: "+964 773 098 2555",
+    link: "tel:+9647730982555",
+    type: "phone",
   },
   {
     id: 3,
-    label: 'GitHub',
-    value: 'github.com/SmoKerIV',
-    link: 'https://github.com/SmoKerIV',
-    type: 'social'
+    label: "GitHub",
+    value: "github.com/SmoKerIV",
+    link: "https://github.com/SmoKerIV",
+    type: "social",
   },
   {
     id: 4,
-    label: 'LinkedIn',
-    value: 'linkedin.com/in/baker-alazzawi',
-    link: 'https://linkedin.com/in/baker-alazzawi',
-    type: 'social'
+    label: "LinkedIn",
+    value: "linkedin.com/in/baker-alazzawi",
+    link: "https://linkedin.com/in/baker-alazzawi",
+    type: "social",
   },
   {
     id: 5,
-    label: 'Instagram',
-    value: '@SmoKer_IV',
-    link: 'https://instagram.com/SmoKer_IV',
-    type: 'social'
-  }
-]
+    label: "Instagram",
+    value: "@SmoKer_IV",
+    link: "https://instagram.com/SmoKer_IV",
+    type: "social",
+  },
+];
 
-const navigateTo = (page: 'home'): void => {
-  emit('navigate', page)
-}
+const navigateTo = (page: "home"): void => {
+  emit("navigate", page);
+};
 </script>
 
 <template>
@@ -88,7 +88,9 @@ const navigateTo = (page: 'home'): void => {
           class="block border-l-2 border-slate-300 pl-6 py-3 hover:border-slate-500 transition-colors group"
         >
           <p class="text-sm text-slate-500 mb-1">{{ contact.label }}</p>
-          <p class="text-lg text-slate-700 group-hover:text-slate-900 transition-colors">
+          <p
+            class="text-lg text-slate-700 group-hover:text-slate-900 transition-colors"
+          >
             {{ contact.value }}
           </p>
         </a>

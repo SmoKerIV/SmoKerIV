@@ -1,33 +1,63 @@
 <script setup lang="ts">
-import { defineEmits } from 'vue'
+import { defineEmits } from "vue";
 
 // Single Responsibility: Display work experience list
 interface Experience {
-  id: number
-  company: string
-  role: string
-  period: string
+  id: number;
+  company: string;
+  role: string;
+  period: string;
 }
 
 interface Emits {
-  (e: 'navigate', page: 'home' | 'experience' | 'contact'): void
+  (e: "navigate", page: "home" | "experience" | "contact"): void;
 }
 
-const emit = defineEmits<Emits>()
+const emit = defineEmits<Emits>();
 
 // Open/Closed Principle: Easy to add new experiences without modifying component logic
 const experiences: Experience[] = [
-  { id: 1, company: 'Qi Card', role: 'Software Developer', period: '2025/Jul - Present' },
-  { id: 2, company: 'Alrabiaa TV', role: 'Software Developer', period: '2025/Feb - 2025/Jun' },
-  { id: 3, company: 'Puretik', role: 'Software Developer', period: '2024/Jun - 2025/Jun' },
-  { id: 4, company: 'Aon', role: 'Assistant Trainer', period: '2024/Oct - 2024/Dec' },
-  { id: 5, company: 'Vitex', role: 'Software Developer', period: '2024/Jan - 2024/Jun' },
-  { id: 6, company: 'Makers of Baghdad', role: 'Frontend Developer Intern', period: '2023/Jul-2023/Aug' },
-]
+  {
+    id: 1,
+    company: "Qi Card",
+    role: "Software Developer",
+    period: "2025/Jul - Present",
+  },
+  {
+    id: 2,
+    company: "Alrabiaa TV",
+    role: "Software Developer",
+    period: "2025/Feb - 2025/Jun",
+  },
+  {
+    id: 3,
+    company: "Puretik",
+    role: "Software Developer",
+    period: "2024/Jun - 2025/Jun",
+  },
+  {
+    id: 4,
+    company: "Aon",
+    role: "Assistant Trainer",
+    period: "2024/Oct - 2024/Dec",
+  },
+  {
+    id: 5,
+    company: "Vitex",
+    role: "Software Developer",
+    period: "2024/Jan - 2024/Jun",
+  },
+  {
+    id: 6,
+    company: "Makers of Baghdad",
+    role: "Frontend Developer Intern",
+    period: "2023/Jul-2023/Aug",
+  },
+];
 
-const navigateTo = (page: 'home'): void => {
-  emit('navigate', page)
-}
+const navigateTo = (page: "home"): void => {
+  emit("navigate", page);
+};
 </script>
 
 <template>
