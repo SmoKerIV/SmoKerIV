@@ -1,60 +1,63 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import AppHeader from './components/AppHeader.vue'
-import HomePage from './components/HomePage.vue'
+import { ref, onMounted } from 'vue'
+import LoaderComponent from './components/LoaderComponent.vue'
+import HomeView from './components/HomeView.vue'
+import ExperienceView from './components/ExperienceView.vue'
+import ContactView from './components/ContactView.vue'
 
-const isDark = ref(localStorage.getItem('theme') === 'dark' || false)
+// Dependency Inversion Principle: Components depend on abstractions (events) not concrete implementations
+type PageType = 'home' | 'experience' | 'contact'
 
-const toggleTheme = () => {
-    isDark.value = !isDark.value
-    localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+// Interface Segregation Principle: Simple, focused state management
+const currentPage = ref<PageType>('home')
+const isLoading = ref<boolean>(true)
+
+// Single Responsibility: Handle page navigation
+const navigateTo = (page: PageType): void => {
+  currentPage.value = page
 }
 
+// Liskov Substitution Principle: Any component can be swapped as long as it emits 'navigate'
 onMounted(() => {
-    document.documentElement.classList.toggle('dark', isDark.value)
-})
-
-watch(isDark, (newVal) => {
-    document.documentElement.classList.toggle('dark', newVal)
+  // Simulate initial load
+  setTimeout(() => {
+    isLoading.value = false
+  }, 1500)
 })
 </script>
 
 <template>
-    <div id="app" :class="{ 'dark': isDark }" class="min-h-screen transition-colors duration-300 overflow-x-hidden">
-        <AppHeader @toggle-theme="toggleTheme" :isDark="isDark" />
-        <HomePage :isDark="isDark" />
-    </div>
+  <div id="app" class="min-h-screen bg-slate-50">
+    <!-- Loader -->
+    <LoaderComponent v-if="isLoading" />
+
+    <!-- Main Content with Transitions -->
+    <Transition name="fade" mode="out-in">
+      <HomeView 
+        v-if="!isLoading && currentPage === 'home'"
+        @navigate="navigateTo"
+      />
+      <ExperienceView 
+        v-else-if="!isLoading && currentPage === 'experience'"
+        @navigate="navigateTo"
+      />
+      <ContactView 
+        v-else-if="!isLoading && currentPage === 'contact'"
+        @navigate="navigateTo"
+      />
+    </Transition>
+  </div>
 </template>
 
-<style>
-#app {
-    width: 100%;
-    min-height: 100vh;
-    overflow-x: hidden;
-    max-width: 100vw;
+<style scoped>
+/* Scoped styles for transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
 }
 
-/* Ensure no horizontal scrolling */
-body,
-html {
-    max-width: 100vw;
-    overflow-x: hidden;
-    width: 100%;
-}
-
-.light {
-    background-color: #ffffff;
-    color: #1f2937;
-}
-
-.dark {
-    background-color: #0f172a;
-    color: #f8fafc;
-}
-
-/* Additional overflow prevention */
-* {
-    max-width: 100%;
-    box-sizing: border-box;
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
