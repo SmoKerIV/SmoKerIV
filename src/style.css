@@ -13,19 +13,25 @@
 
   body {
     font-family: "JetBrains Mono", monospace;
-    overflow-x: hidden;
+    overflow: hidden;
     width: 100%;
+    height: 100vh;
+    background-color: #1e1e1e;
   }
 
   html {
     scroll-behavior: smooth;
+  }
+
+  ::selection {
+    background-color: #264f78;
   }
 }
 
 @layer components {
   .fade-enter-active,
   .fade-leave-active {
-    transition: opacity 0.3s ease;
+    transition: opacity 0.2s ease;
   }
 
   .fade-enter-from,
@@ -33,25 +39,122 @@
     opacity: 0;
   }
 
-  .btn-minimal {
-    transition: all 0.2s ease;
+  /* VS Code syntax colors */
+  .syn-keyword {
+    color: #569cd6;
+  }
+  .syn-type {
+    color: #4ec9b0;
+  }
+  .syn-string {
+    color: #ce9178;
+  }
+  .syn-number {
+    color: #b5cea8;
+  }
+  .syn-comment {
+    color: #6a9955;
+  }
+  .syn-function {
+    color: #dcdcaa;
+  }
+  .syn-variable {
+    color: #9cdcfe;
+  }
+  .syn-property {
+    color: #9cdcfe;
+  }
+  .syn-bracket {
+    color: #ffd700;
+  }
+  .syn-bracket2 {
+    color: #da70d6;
+  }
+  .syn-bracket3 {
+    color: #179fff;
+  }
+  .syn-operator {
+    color: #d4d4d4;
+  }
+  .syn-punctuation {
+    color: #d4d4d4;
+  }
+  .syn-interface {
+    color: #4ec9b0;
+  }
+  .syn-enum {
+    color: #4fc1ff;
+  }
+  .syn-decorator {
+    color: #dcdcaa;
+  }
+  .syn-regex {
+    color: #d16969;
+  }
+  .syn-link {
+    color: #ce9178;
+    text-decoration: none;
+    transition: filter 0.15s;
+  }
+  .syn-link:hover {
+    filter: brightness(1.3);
+    text-decoration: underline;
+  }
+  .syn-const {
+    color: #4fc1ff;
   }
 
-  .btn-minimal:hover {
-    transform: translateY(-2px);
+  .line-highlight {
+    background-color: rgba(255, 255, 255, 0.04);
   }
 
-  @keyframes pulse {
+  .cursor-blink::after {
+    content: "▌";
+    animation: blink 1s step-end infinite;
+    color: #aeafad;
+  }
+
+  @keyframes blink {
     0%,
     100% {
       opacity: 1;
     }
     50% {
-      opacity: 0.5;
+      opacity: 0;
     }
   }
 
-  .animate-pulse-slow {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  /* Scrollbar styling to match VS Code */
+  .editor-scroll::-webkit-scrollbar {
+    width: 14px;
+  }
+  .editor-scroll::-webkit-scrollbar-track {
+    background: #1e1e1e;
+  }
+  .editor-scroll::-webkit-scrollbar-thumb {
+    background: #424242;
+    border: 3px solid #1e1e1e;
+    border-radius: 7px;
+  }
+  .editor-scroll::-webkit-scrollbar-thumb:hover {
+    background: #4f4f4f;
+  }
+
+  /* Minimap effect */
+  .minimap {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 60px;
+    background: linear-gradient(
+      to bottom,
+      rgba(86, 156, 214, 0.03) 0%,
+      rgba(78, 201, 176, 0.03) 30%,
+      rgba(206, 145, 120, 0.03) 60%,
+      rgba(86, 156, 214, 0.03) 100%
+    );
+    pointer-events: none;
+    opacity: 0.6;
   }
 }

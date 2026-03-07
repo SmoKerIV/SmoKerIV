@@ -1,94 +1,445 @@
 <script setup lang="ts">
-import { defineEmits } from "vue";
+import { ref, onMounted, nextTick } from "vue";
+import { gsap } from "gsap";
 
-// Single Responsibility: Display work experience list
-interface Experience {
-  id: number;
-  company: string;
-  role: string;
-  period: string;
-}
+const codeRef = ref<HTMLElement | null>(null);
 
-interface Emits {
-  (e: "navigate", page: "home" | "experience" | "contact"): void;
-}
-
-const emit = defineEmits<Emits>();
-
-// Open/Closed Principle: Easy to add new experiences without modifying component logic
-const experiences: Experience[] = [
-  {
-    id: 1,
-    company: "Qi Card",
-    role: "Software Developer",
-    period: "2025/Jul - Present",
-  },
-  {
-    id: 2,
-    company: "Alrabiaa TV",
-    role: "Software Developer",
-    period: "2025/Feb - 2025/Jun",
-  },
-  {
-    id: 3,
-    company: "Puretik",
-    role: "Software Developer",
-    period: "2024/Jun - 2025/Jun",
-  },
-  {
-    id: 4,
-    company: "Aon",
-    role: "Assistant Trainer",
-    period: "2024/Oct - 2024/Dec",
-  },
-  {
-    id: 5,
-    company: "Vitex",
-    role: "Software Developer",
-    period: "2024/Jan - 2024/Jun",
-  },
-  {
-    id: 6,
-    company: "Makers of Baghdad",
-    role: "Frontend Developer Intern",
-    period: "2023/Jul-2023/Aug",
-  },
-];
-
-const navigateTo = (page: "home"): void => {
-  emit("navigate", page);
-};
+onMounted(async () => {
+  await nextTick();
+  if (codeRef.value) {
+    const lines = codeRef.value.querySelectorAll(".code-line");
+    gsap.set(lines, { opacity: 0 });
+    gsap.to(lines, { opacity: 1, duration: 0.03, stagger: 0.04, ease: "none" });
+  }
+});
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center px-6 bg-slate-50">
-    <div class="max-w-2xl w-full space-y-8 fade-enter-active">
-      <!-- Back Button -->
-      <button
-        @click="navigateTo('home')"
-        class="text-slate-600 hover:text-slate-800 transition-colors flex items-center gap-2 mb-8"
+  <div ref="codeRef" class="text-[13px] leading-6 pb-16">
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >1</span
       >
-        <span>←</span>
-        <span>Back</span>
-      </button>
-
-      <!-- Title -->
-      <h2 class="text-4xl md:text-5xl font-light text-slate-800 tracking-tight">
-        Experience
-      </h2>
-
-      <!-- Experience List -->
-      <div class="space-y-6 pt-4">
-        <div
-          v-for="exp in experiences"
-          :key="exp.id"
-          class="border-l-2 border-slate-300 pl-6 py-2 hover:border-slate-500 transition-colors"
-        >
-          <h3 class="text-xl font-medium text-slate-800">{{ exp.company }}</h3>
-          <p class="text-slate-600 mt-1">{{ exp.role }}</p>
-          <p class="text-sm text-slate-500 mt-1">{{ exp.period }}</p>
-        </div>
-      </div>
+      <span><span class="syn-comment">// Experience.tsx</span></span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >2</span
+      >
+      <span>&nbsp;</span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >3</span
+      >
+      <span
+        ><span class="syn-keyword">interface</span>
+        <span class="syn-interface">Role</span>
+        <span class="syn-bracket">{</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >4</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-property">company</span
+        ><span class="syn-operator">:</span> <span class="syn-type">string</span
+        ><span class="syn-punctuation">;</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >5</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-property">position</span
+        ><span class="syn-operator">:</span> <span class="syn-type">string</span
+        ><span class="syn-punctuation">;</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >6</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-property">period</span
+        ><span class="syn-operator">:</span> <span class="syn-type">string</span
+        ><span class="syn-punctuation">;</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >7</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-property">current</span
+        ><span class="syn-operator">?:</span>
+        <span class="syn-type">boolean</span
+        ><span class="syn-punctuation">;</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >8</span
+      >
+      <span><span class="syn-bracket">}</span></span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >9</span
+      >
+      <span>&nbsp;</span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >10</span
+      >
+      <span
+        ><span class="syn-keyword">const</span>
+        <span class="syn-const">experience</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-interface">Role</span
+        ><span class="syn-bracket2">[]</span>
+        <span class="syn-operator">=</span>
+        <span class="syn-bracket2">[</span></span
+      >
+    </div>
+    <!-- Qi Card -->
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >11</span
+      >
+      <span>&nbsp;&nbsp;<span class="syn-bracket">{</span></span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >12</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">company</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Qi Card"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >13</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">position</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Software Developer"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >14</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">period</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Jul 2025 — Present"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >15</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">current</span
+        ><span class="syn-operator">:</span> <span class="syn-const">true</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >16</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-bracket">}</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <!-- Alrabiaa TV -->
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >17</span
+      >
+      <span>&nbsp;&nbsp;<span class="syn-bracket">{</span></span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >18</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">company</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Alrabiaa TV"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >19</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">position</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Software Developer"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >20</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">period</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Feb — Jun 2025"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >21</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-bracket">}</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <!-- Puretik -->
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >22</span
+      >
+      <span>&nbsp;&nbsp;<span class="syn-bracket">{</span></span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >23</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">company</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Puretik"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >24</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">position</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Software Developer"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >25</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">period</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Jun 2024 — Jun 2025"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >26</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-bracket">}</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <!-- Aon -->
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >27</span
+      >
+      <span>&nbsp;&nbsp;<span class="syn-bracket">{</span></span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >28</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">company</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Aon"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >29</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">position</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Assistant Trainer"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >30</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">period</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Oct — Dec 2024"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >31</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-bracket">}</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <!-- Vitex -->
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >32</span
+      >
+      <span>&nbsp;&nbsp;<span class="syn-bracket">{</span></span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >33</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">company</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Vitex"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >34</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">position</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Software Developer"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >35</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">period</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Jan — Jun 2024"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >36</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-bracket">}</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <!-- Makers of Baghdad -->
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >37</span
+      >
+      <span>&nbsp;&nbsp;<span class="syn-bracket">{</span></span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >38</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">company</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Makers of Baghdad"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >39</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">position</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Frontend Intern"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >40</span
+      >
+      <span
+        >&nbsp;&nbsp;&nbsp;&nbsp;<span class="syn-property">period</span
+        ><span class="syn-operator">:</span>
+        <span class="syn-string">"Jul — Aug 2023"</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >41</span
+      >
+      <span
+        >&nbsp;&nbsp;<span class="syn-bracket">}</span
+        ><span class="syn-punctuation">,</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06] line-highlight">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >42</span
+      >
+      <span
+        ><span class="syn-bracket2">]</span
+        ><span class="syn-punctuation">;</span></span
+      >
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >43</span
+      >
+      <span>&nbsp;</span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >44</span
+      >
+      <span><span class="syn-comment">// 6 roles and counting...</span></span>
+    </div>
+    <div class="code-line flex hover:bg-[#ffffff06]">
+      <span class="w-12 shrink-0 text-right pr-5 text-[#858585] select-none"
+        >45</span
+      >
+      <span
+        ><span class="syn-keyword">export</span>
+        <span class="syn-keyword">default</span>
+        <span class="syn-variable">experience</span
+        ><span class="syn-punctuation">;</span><span class="cursor-blink"></span
+      ></span>
     </div>
   </div>
 </template>
