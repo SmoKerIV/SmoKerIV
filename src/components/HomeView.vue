@@ -51,7 +51,7 @@ onMounted(async () => {
         ><span class="syn-punctuation">,</span>
         <span class="syn-variable">dedication</span
         ><span class="syn-punctuation">,</span>
-        <span class="syn-variable">coffee</span>
+        <span class="syn-variable">caffeine</span>
         <span class="syn-bracket">}</span> <span class="syn-keyword">from</span>
         <span class="syn-string">"life"</span
         ><span class="syn-punctuation">;</span></span
@@ -356,7 +356,7 @@ onMounted(async () => {
         ><span class="syn-punctuation">,</span>
         <span class="syn-property">dedication</span
         ><span class="syn-punctuation">,</span>
-        <span class="syn-property">coffee</span>
+        <span class="syn-property">caffeine</span>
         <span class="syn-bracket">}</span><span class="syn-punctuation">)</span
         ><span class="syn-punctuation">;</span></span
       >
