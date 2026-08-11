@@ -49,7 +49,7 @@ export function buildPotions(): THREE.Group {
   flask.add(flaskGlass);
   const tealLiquid = new THREE.Mesh(
     new THREE.SphereGeometry(0.042, 12, 10),
-    liquidMaterial(0x35d0ba),
+    liquidMaterial(0x47bdad),
   );
   tealLiquid.scale.set(1, 0.78, 1);
   tealLiquid.position.y = 0.048;

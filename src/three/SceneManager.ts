@@ -694,12 +694,79 @@ export class SceneManager implements ISceneManager {
         mesh.receiveShadow = true;
       }
     });
+
+    // After the shadow traverse, so the quads never cast/receive real shadows.
+    this.addContactShadows(table, candleB);
   }
 
   private placeOnTable(group: THREE.Group, placement: Placement): void {
     group.position.set(placement.x, TABLE_SURFACE_Y, placement.z);
     group.rotation.y = placement.rotY;
     this.scene.add(group);
+  }
+
+  /**
+   * Subtle contact shadows: soft radial-gradient quads under each table
+   * item and one under the table itself — grounding the single 1024
+   * shadow map can't provide at grazing candle angles. The d20 is skipped
+   * (it rolls away from any static blob). dispose()'s scene traverse
+   * releases the geometry, materials and texture with everything else.
+   */
+  private addContactShadows(table: THREE.Group, candleB: THREE.Group): void {
+    const size = 128;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const gradient = ctx.createRadialGradient(
+      size / 2,
+      size / 2,
+      0,
+      size / 2,
+      size / 2,
+      size / 2,
+    );
+    gradient.addColorStop(0, "rgba(0, 0, 0, 0.85)");
+    gradient.addColorStop(0.45, "rgba(0, 0, 0, 0.38)");
+    gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+
+    const geometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    const drop = (root: THREE.Object3D, y: number, opacity: number): void => {
+      const box = new THREE.Box3();
+      root.updateWorldMatrix(true, true);
+      root.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (mesh.isMesh && mesh.visible) box.expandByObject(mesh);
+      });
+      if (box.isEmpty()) return;
+      const center = box.getCenter(new THREE.Vector3());
+      const extent = box.getSize(new THREE.Vector3());
+      const shadow = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity,
+          depthWrite: false,
+        }),
+      );
+      shadow.scale.set(extent.x * 1.5, 1, extent.z * 1.5);
+      shadow.position.set(center.x, y, center.z);
+      // Below the rune circle's +0.002 lift and drawn before it.
+      shadow.renderOrder = -1;
+      this.scene.add(shadow);
+    };
+
+    for (const [id, group] of this.itemGroups) {
+      if (id === "dice") continue;
+      drop(group, TABLE_SURFACE_Y + 0.0012, 0.3);
+    }
+    drop(candleB, TABLE_SURFACE_Y + 0.0012, 0.3);
+    drop(table, 0.0015, 0.2);
   }
 
   /**

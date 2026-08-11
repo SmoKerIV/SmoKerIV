@@ -23,7 +23,7 @@ const sparks = computed(() => {
     size: `${4 + Math.random() * 9}px`,
     delay: `${Math.random() * 0.7}s`,
     duration: `${0.9 + Math.random() * 1.3}s`,
-    color: Math.random() > 0.4 ? "#35d0ba" : "#d4af5e",
+    color: Math.random() > 0.4 ? "#47bdad" : "#d4af5e",
   }));
 });
 </script>

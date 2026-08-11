@@ -524,8 +524,8 @@ export function makeBladeRuneTexture(): THREE.CanvasTexture {
   const rand = mulberry32(777);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "#35d0ba";
-  ctx.shadowColor = "#35d0ba";
+  ctx.strokeStyle = "#47bdad";
+  ctx.shadowColor = "#47bdad";
   ctx.shadowBlur = 6;
   ctx.lineCap = "round";
   ctx.lineWidth = 5;
@@ -550,7 +550,7 @@ export function makeRuneCircleTexture(): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(size);
   const rand = mulberry32(6060);
   const c = size / 2;
-  const teal = "#35d0ba";
+  const teal = "#47bdad";
 
   ctx.clearRect(0, 0, size, size);
   ctx.strokeStyle = teal;

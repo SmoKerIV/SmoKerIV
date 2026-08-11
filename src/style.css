@@ -16,8 +16,9 @@
   --leather-light: #7a4630;
   --gold: #b08d3c;
   --gold-bright: #d4af5e;
-  --arcane: #35d0ba;
-  --arcane-dim: #1e8577;
+  --arcane: #47bdad;
+  --arcane-dim: #2a796e;
+  --arcane-dark: #1d5c52;
   --night: #0d0a08;
   --wax: #8b2320;
   --wax-dark: #5e130f;
@@ -44,7 +45,7 @@ body {
   margin: 0;
   background: var(--night);
   color: var(--parchment);
-  font-family: "EB Garamond", Garamond, "Times New Roman", serif;
+  font-family: "EB Garamond", serif;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -65,13 +66,16 @@ body {
   border-radius: 2px;
 }
 
-/* Kill the 300ms double-tap-zoom delay on everything interactive. */
+/* Kill the 300ms double-tap-zoom delay on everything interactive.
+   Form controls also don't inherit the page font by default — force it
+   so nothing ever renders in the system UI face. */
 button,
 a,
 input,
 select,
 textarea {
   touch-action: manipulation;
+  font-family: inherit;
 }
 
 /* Legibility floor on phones: the smallest button chrome (11px Cinzel
@@ -198,11 +202,14 @@ textarea {
   line-height: 1.7;
 }
 
+/* Chapter heads: engraved Cinzel caps. The decorative Uncial face is
+   reserved for the tome's H1 title (and the drop cap's single glyph). */
 .book-page h2 {
-  font-family: "Uncial Antiqua", "Cinzel", serif;
-  font-weight: 400;
-  font-size: 1.45rem;
-  letter-spacing: 0.05em;
+  font-family: "Cinzel", serif;
+  font-weight: 600;
+  font-size: 1.2rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--ink);
   display: flex;
   align-items: center;

@@ -17,7 +17,7 @@ export function buildRuneCircle(): THREE.Group {
 
   const material = new THREE.MeshBasicMaterial({
     map: makeRuneCircleTexture(),
-    color: 0x35d0ba,
+    color: 0x47bdad,
     transparent: true,
     opacity: BASE_OPACITY,
     blending: THREE.AdditiveBlending,

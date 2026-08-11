@@ -152,52 +152,59 @@ const contactLines = [
     @touchend.passive="onTouchEnd"
   >
     <main
-      class="parchment book-page mx-auto my-6 max-w-3xl px-6 py-10 shadow-tome sm:px-12 sm:py-14"
+      class="parchment book-page mx-auto my-6 max-w-3xl px-6 py-12 shadow-tome sm:px-14 sm:py-16"
       style="
         border: 1px solid rgba(176, 141, 60, 0.35);
         border-radius: 4px;
         margin-bottom: calc(1.5rem + var(--safe-bottom));
       "
     >
-      <!-- Header -->
-      <header class="mb-10 text-center">
-        <p class="m-0 font-body text-sm italic text-ink-faint">herein lies</p>
-        <h1 class="m-0 mt-2 font-decorative text-3xl font-bold text-ink sm:text-4xl">
+      <!-- Title page -->
+      <header class="mb-12 text-center">
+        <p class="m-0 font-heading text-[10px] font-semibold uppercase tracking-[0.35em] text-ink-faint">
+          Herein Lies
+        </p>
+        <h1 class="m-0 mt-3 font-decorative text-3xl text-ink sm:text-4xl">
           The Tome of {{ identity.name }}
         </h1>
-        <p class="m-0 mt-3 font-heading text-xs uppercase tracking-[0.3em] text-ink-soft">
+        <div class="ornament mx-auto mt-5" aria-hidden="true"><span /></div>
+        <p class="m-0 mt-5 font-heading text-xs font-semibold uppercase tracking-[0.3em] text-gold">
           {{ identity.fantasyClass }}
         </p>
-        <p class="m-0 mt-1 font-body text-sm italic text-ink-faint">
+        <p class="m-0 mt-1.5 font-body text-base text-ink-soft">
           {{ identity.profession }} · {{ identity.origin }}
         </p>
         <p
-          class="m-0 mt-3 font-heading text-[11px] uppercase tracking-widest"
+          class="m-0 mt-4 font-heading text-[11px] font-semibold uppercase tracking-widest"
           :class="identity.status === 'available' ? 'text-arcane-dim' : 'text-wax'"
         >
           ⟡ {{ identity.statusFlavor }}
         </p>
-        <p class="m-0 mt-4 font-body text-sm italic text-ink-soft md:hidden">
-          ✦ You hold the humble paper copy — visit on a bigger screen to sit
-          at the candle-lit 3D table itself.
+        <p class="m-0 mt-6 font-body text-sm italic text-ink-faint md:hidden">
+          ✦ You hold the paper copy — visit on a bigger screen to sit at the
+          candle-lit 3D table itself.
         </p>
       </header>
 
       <!-- Who am I -->
-      <section id="whoami" class="mb-10 scroll-mt-16">
+      <section id="whoami" class="mb-12 scroll-mt-16">
         <h2>The Character Sheet</h2>
         <p class="dropcap">{{ identity.bio }}</p>
-        <dl class="m-0 mt-4">
+        <dl class="m-0 mt-5 sm:grid sm:grid-cols-2 sm:gap-x-10">
           <div class="row"><dt>Name</dt><dd>{{ identity.name }} — "{{ identity.handle }}"</dd></div>
           <div class="row"><dt>Class</dt><dd>{{ identity.fantasyClass }}</dd></div>
           <div class="row"><dt>Origin</dt><dd>{{ identity.origin }}</dd></div>
           <div class="row"><dt>Alignment</dt><dd>{{ identity.alignment }}</dd></div>
         </dl>
-        <div class="mt-6">
-          <div v-for="stat in stats" :key="stat.short" class="mb-3">
-            <div class="mb-1 flex items-baseline justify-between font-heading text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
-              <span>{{ stat.short }} · {{ stat.label }}</span>
-              <span class="text-ink">{{ stat.value }}</span>
+        <div class="mt-7">
+          <div v-for="stat in stats" :key="stat.short" class="mb-3.5">
+            <div class="mb-1.5 flex items-baseline justify-between">
+              <span class="font-heading text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+                {{ stat.short }} · {{ stat.label }}
+              </span>
+              <span class="font-heading text-xs font-semibold text-ink">
+                {{ stat.value }}<span class="font-normal text-ink-faint"> / {{ STAT_MAX }}</span>
+              </span>
             </div>
             <div class="track"><div class="fill" :style="{ width: (stat.value / STAT_MAX) * 100 + '%' }" /></div>
           </div>
@@ -205,12 +212,10 @@ const contactLines = [
       </section>
 
       <!-- Skills -->
-      <section id="skills" class="mb-10 scroll-mt-16">
+      <section id="skills" class="mb-12 scroll-mt-16">
         <h2>Spells Known</h2>
-        <div v-for="school in spellSchools" :key="school.school" class="mb-5">
-          <h3 class="m-0 mb-2 font-heading text-sm font-semibold text-leather">
-            {{ school.school }}
-          </h3>
+        <div v-for="school in spellSchools" :key="school.school" class="mb-6">
+          <h3 class="school m-0 mb-2.5">{{ school.school }}</h3>
           <ul class="m-0 flex list-none flex-wrap gap-2 p-0">
             <li v-for="spell in school.spells" :key="spell" class="chip">{{ spell }}</li>
           </ul>
@@ -218,41 +223,41 @@ const contactLines = [
       </section>
 
       <!-- Career -->
-      <section id="career" class="mb-10 scroll-mt-16">
+      <section id="career" class="mb-12 scroll-mt-16">
         <h2>The Quest Log</h2>
         <article
           v-for="quest in quests"
           :key="quest.company"
-          class="mb-4 border-l-2 pl-4"
-          :style="{ borderColor: quest.current ? 'var(--arcane-dim)' : 'rgba(176, 141, 60, 0.55)' }"
+          class="mb-5 border-l-2 pl-4"
+          :style="{ borderColor: quest.current ? 'var(--arcane-dim)' : 'rgba(176, 141, 60, 0.45)' }"
         >
-          <h3 class="m-0 font-heading text-base font-bold text-ink">
-            {{ quest.role }}
-            <span class="font-body font-normal italic text-ink-faint">at</span>
-            {{ quest.company }}
-            <span v-if="quest.current" class="ml-2 font-heading text-[10px] font-semibold uppercase tracking-widest text-arcane-dim">⟡ Active Quest</span>
-          </h3>
-          <p class="m-0 mt-0.5 font-heading text-[11px] uppercase tracking-widest text-ink-faint">
+          <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <h3 class="m-0 font-heading text-[15px] font-bold text-ink">{{ quest.role }}</h3>
+            <span class="font-body text-ink-faint">at</span>
+            <span class="font-heading text-sm font-semibold text-leather">{{ quest.company }}</span>
+            <span v-if="quest.current" class="badge">Active Quest</span>
+          </div>
+          <p class="m-0 mt-1 font-heading text-[10px] uppercase tracking-[0.18em] text-ink-faint">
             {{ quest.period }}
           </p>
-          <p class="m-0 mt-1 italic text-ink-soft">{{ quest.summary }}</p>
+          <p class="m-0 mt-1.5 italic text-ink-soft">{{ quest.summary }}</p>
         </article>
       </section>
 
       <!-- Projects -->
-      <section id="projects" class="mb-10 scroll-mt-16">
+      <section id="projects" class="mb-12 scroll-mt-16">
         <h2>Artifacts Forged</h2>
         <div
           v-for="artifact in artifacts"
           :key="artifact.name"
-          class="mb-4 rounded border border-leather/35 bg-white/25 px-4 py-3"
+          class="mb-5 rounded border border-leather/25 bg-[rgba(255,252,240,0.35)] px-5 py-4"
         >
-          <p class="m-0 font-heading text-[10px] font-semibold uppercase tracking-[0.22em] text-gold">
+          <p class="m-0 font-heading text-[10px] font-semibold uppercase tracking-[0.24em] text-gold">
             {{ artifact.kind }}
           </p>
-          <h3 class="m-0 mt-0.5 font-heading text-base font-bold text-ink">{{ artifact.name }}</h3>
-          <p class="m-0 mt-1 italic text-ink-soft">{{ artifact.description }}</p>
-          <div class="mt-2 flex flex-wrap gap-1.5">
+          <h3 class="m-0 mt-1 font-heading text-base font-bold text-ink">{{ artifact.name }}</h3>
+          <p class="m-0 mt-1.5 text-ink-soft">{{ artifact.description }}</p>
+          <div class="mt-2.5 flex flex-wrap gap-1.5">
             <span v-for="tech in artifact.tech" :key="tech" class="chip">{{ tech }}</span>
           </div>
           <a
@@ -260,7 +265,7 @@ const contactLines = [
             :href="artifact.url"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn-leather mt-3 inline-block rounded px-4 py-1.5 text-[10px]"
+            class="btn-leather mt-3.5 inline-block rounded px-4 py-1.5 text-[10px]"
           >
             Inspect Artifact ↗
           </a>
@@ -268,7 +273,7 @@ const contactLines = [
       </section>
 
       <!-- Contact -->
-      <section id="contact" class="mb-8 scroll-mt-16">
+      <section id="contact" class="mb-10 scroll-mt-16">
         <h2>Send a Raven</h2>
         <ul class="m-0 list-none p-0">
           <li
@@ -287,14 +292,14 @@ const contactLines = [
             >{{ line.label }}</a>
           </li>
         </ul>
-        <div class="mt-6 text-center">
+        <div class="mt-7 text-center">
           <a :href="`mailto:${contact.email}`" class="btn-wax inline-block px-8 py-3.5 text-xs">
             Send the Raven
           </a>
         </div>
       </section>
 
-      <footer class="border-t border-gold/50 pt-5 text-center font-body text-xs italic text-ink-faint">
+      <footer class="border-t border-gold/40 pt-5 text-center font-body text-xs italic text-ink-faint">
         {{ colophon }}
       </footer>
     </main>
@@ -316,54 +321,116 @@ const contactLines = [
 </template>
 
 <style scoped>
+/* Gold hairline rule with a small diamond — the title page's ornament. */
+.ornament {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 13rem;
+  color: var(--gold);
+}
+.ornament::before,
+.ornament::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+}
+.ornament::before {
+  background: linear-gradient(90deg, transparent, var(--gold));
+}
+.ornament::after {
+  background: linear-gradient(90deg, var(--gold), transparent);
+}
+.ornament span {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  transform: rotate(45deg);
+  background: var(--gold);
+}
+
 .row {
   display: flex;
   gap: 0.8rem;
-  padding: 0.4rem 0;
-  border-bottom: 1px dotted rgba(74, 56, 38, 0.35);
+  padding: 0.45rem 0;
+  border-bottom: 1px dotted rgba(74, 56, 38, 0.3);
   align-items: baseline;
 }
 .row dt {
-  width: 6.5rem;
+  width: 6rem;
   flex-shrink: 0;
   font-family: "Cinzel", serif;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-faint);
 }
 .row dd {
   margin: 0;
 }
+
 .track {
-  height: 11px;
-  border: 1px solid rgba(42, 31, 20, 0.4);
+  height: 8px;
+  border: 1px solid rgba(42, 31, 20, 0.35);
   border-radius: 2px;
-  background: rgba(255, 250, 235, 0.45);
+  background: rgba(255, 250, 235, 0.4);
   overflow: hidden;
 }
 .fill {
   height: 100%;
   background: linear-gradient(90deg, var(--arcane-dim), var(--arcane));
 }
+
+/* Spell-school subheads: quiet engraved caps with a trailing hairline. */
+.school {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-family: "Cinzel", serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--leather);
+}
+.school::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, rgba(176, 141, 60, 0.45), transparent);
+}
+
+/* Ink-on-parchment chips; the arcane teal stays reserved for accents. */
 .chip {
   font-family: "Cinzel", serif;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--arcane-dim);
-  border: 1px solid rgba(30, 133, 119, 0.45);
+  color: var(--ink-soft);
+  border: 1px solid rgba(90, 46, 29, 0.35);
   border-radius: 3px;
-  padding: 0.3em 0.6em;
-  background: rgba(53, 208, 186, 0.08);
+  padding: 0.32em 0.65em;
+  background: rgba(255, 252, 240, 0.4);
 }
 /* Legibility floor for fingers-and-arm's-length reading. */
 @media (pointer: coarse) {
   .chip {
     font-size: 11px;
   }
+}
+
+.badge {
+  font-family: "Cinzel", serif;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--arcane-dim);
+  border: 1px solid rgba(42, 121, 110, 0.4);
+  border-radius: 999px;
+  padding: 0.2em 0.7em;
 }
 
 /* ------------------------------------------------------------- */
@@ -408,15 +475,19 @@ const contactLines = [
   border: 1px solid rgba(20, 8, 4, 0.85);
   border-radius: 5px 5px 0 0;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.45);
-  transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  transition: color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 .tab:hover {
   color: #f3e6cb;
   filter: brightness(1.15);
 }
+/* Active tab: raised, arcane ink on darker leather — no teal slab. */
 .tab-active {
   transform: translateY(-3px);
   color: var(--arcane);
-  background: linear-gradient(180deg, #1c6f63 0%, var(--arcane-dim) 45%, #0f4d45 100%);
+  background: linear-gradient(180deg, #4a2818 0%, var(--leather-dark) 100%);
+  box-shadow:
+    inset 0 2px 0 var(--arcane-dim),
+    0 -2px 8px rgba(0, 0, 0, 0.45);
 }
 </style>

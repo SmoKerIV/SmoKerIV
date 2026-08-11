@@ -65,6 +65,46 @@ const paneBase = {
   height: `${PAGE_CSS_H}px`,
 } as const;
 
+/** a–f of a CSS `matrix(...)` string (the scene never sends matrix3d). */
+function parseMatrix(
+  s: string,
+): { a: number; b: number; c: number; d: number; e: number; f: number } | null {
+  const m = s.match(/matrix\(([^)]+)\)/);
+  if (!m) return null;
+  const [a, b, c, d, e, f] = m[1]!.split(",").map(Number);
+  if ([a, b, c, d, e, f].some((n) => n === undefined || Number.isNaN(n))) {
+    return null;
+  }
+  return { a: a!, b: b!, c: c!, d: d!, e: e!, f: f! };
+}
+
+/**
+ * Section tabs sit on the top edge of the open spread, like index tabs
+ * glued to the pages: centred over the two panes, bottoms touching the
+ * highest projected top corner of the papers.
+ */
+const tabsStyle = computed<Record<string, string> | null>(() => {
+  const t = props.transforms;
+  if (!t) return null;
+  const L = parseMatrix(t.left);
+  const R = parseMatrix(t.right);
+  if (!L || !R) return null;
+  // Top corners of each pane: (0,0) → (e, f), (W,0) → (aW+e, bW+f).
+  const top = Math.min(
+    L.f,
+    L.b * PAGE_CSS_W + L.f,
+    R.f,
+    R.b * PAGE_CSS_W + R.f,
+  );
+  const leftX = L.e; // left pane, outer top corner
+  const rightX = R.a * PAGE_CSS_W + R.e; // right pane, outer top corner
+  return {
+    left: `${(leftX + rightX) / 2}px`,
+    top: `${top}px`,
+    transform: "translate(-50%, -100%)",
+  };
+});
+
 function navigate(to: BookSection): void {
   if (to === props.section) return;
   audio.playFlip();
@@ -343,7 +383,7 @@ watch(
             <div class="flex h-full flex-col items-center justify-center gap-3 text-center">
               <span class="font-body text-sm italic tracking-wide text-ink-faint">herein lies</span>
               <span class="text-gold" aria-hidden="true">✦ ❖ ✦</span>
-              <h1 class="m-0 font-decorative text-3xl font-bold leading-tight text-ink">
+              <h1 class="m-0 font-decorative text-3xl leading-tight text-ink">
                 The Tome of<br />{{ identity.name }}
               </h1>
               <span class="text-gold" aria-hidden="true">✦ ❖ ✦</span>
@@ -452,9 +492,9 @@ watch(
                 <circle cx="100" cy="100" r="94" fill="none" stroke="#5a2e1d" stroke-width="1.5" opacity="0.7" />
                 <circle cx="100" cy="100" r="86" fill="none" stroke="#b08d3c" stroke-width="0.7" opacity="0.6" />
                 <circle cx="100" cy="100" r="62" fill="none" stroke="#5a2e1d" stroke-width="0.8" opacity="0.55" />
-                <polygon :points="starPoints" fill="none" stroke="#1e8577" stroke-width="1" opacity="0.75" />
+                <polygon :points="starPoints" fill="none" stroke="#2a796e" stroke-width="1" opacity="0.75" />
                 <circle cx="100" cy="100" r="18" fill="none" stroke="#b08d3c" stroke-width="0.7" opacity="0.7" />
-                <text x="100" y="106" text-anchor="middle" font-size="15" fill="#1e8577" opacity="0.9">ᛒ</text>
+                <text x="100" y="106" text-anchor="middle" font-size="15" fill="#2a796e" opacity="0.9">ᛒ</text>
                 <text
                   v-for="(rune, i) in CIRCLE_RUNES"
                   :key="i"
@@ -693,7 +733,9 @@ watch(
     >›</button>
 
     <nav
-      class="pointer-events-auto fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-1.5"
+      v-if="tabsStyle"
+      class="pointer-events-auto fixed z-30 flex items-end gap-1"
+      :style="tabsStyle"
       aria-label="Tome sections"
     >
       <button
@@ -808,26 +850,26 @@ watch(
     height: 3rem;
   }
   .bookmark {
-    padding: 0.85rem 0.55rem;
+    padding: 0.7rem 0.9rem 0.85rem;
     font-size: 11px;
   }
 }
 
 .bookmark {
-  writing-mode: vertical-rl;
-  padding: 0.7rem 0.32rem;
+  padding: 0.5rem 0.75rem 0.65rem;
   font-family: "Cinzel", serif;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  white-space: nowrap;
   color: rgba(234, 217, 184, 0.75);
   background:
     linear-gradient(180deg, var(--leather-light) 0%, var(--leather) 55%, var(--leather-dark) 100%);
   border: 1px solid rgba(20, 8, 4, 0.85);
-  border-right: none;
-  border-radius: 5px 0 0 5px;
-  box-shadow: -2px 3px 8px rgba(0, 0, 0, 0.5);
+  border-bottom: none;
+  border-radius: 5px 5px 0 0;
+  box-shadow: 0 -3px 8px rgba(0, 0, 0, 0.35);
   transition: transform 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
 .bookmark:hover {
@@ -835,9 +877,9 @@ watch(
   filter: brightness(1.15);
 }
 .bookmark-active {
-  transform: translateX(-5px);
+  transform: translateY(-5px);
   color: var(--arcane);
-  background: linear-gradient(180deg, #1c6f63 0%, var(--arcane-dim) 45%, #0f4d45 100%);
+  background: linear-gradient(180deg, #256b61 0%, var(--arcane-dim) 45%, #174540 100%);
 }
 
 /* ------------------------------------------------------------- */
@@ -885,8 +927,8 @@ watch(
   animation: statFill 0.9s cubic-bezier(0.25, 0.9, 0.4, 1) both;
   background: repeating-linear-gradient(
     -55deg,
-    rgba(30, 133, 119, 0.85) 0 3px,
-    rgba(30, 133, 119, 0.45) 3px 6px
+    rgba(42, 121, 110, 0.85) 0 3px,
+    rgba(42, 121, 110, 0.45) 3px 6px
   );
 }
 
@@ -920,7 +962,7 @@ watch(
   content: "✦";
   margin-right: 0.5rem;
   font-size: 0.7em;
-  color: var(--arcane-dark, #1e8577);
+  color: var(--arcane-dark, #2a796e);
 }
 
 .quest {
@@ -930,7 +972,7 @@ watch(
   border-left: 2px solid rgba(176, 141, 60, 0.55);
 }
 .quest-current {
-  border-left-color: #1e8577;
+  border-left-color: #2a796e;
 }
 .quest-title {
   margin: 0;
@@ -968,7 +1010,7 @@ watch(
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #14655a;
+  color: #1d5c52;
   border: 1px solid rgba(20, 101, 90, 0.6);
   border-radius: 3px;
   padding: 0.3em 0.55em;
@@ -1026,7 +1068,7 @@ watch(
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #14655a;
+  color: #1d5c52;
   border: 1px solid rgba(20, 101, 90, 0.5);
   border-radius: 3px;
   padding: 0.26em 0.55em;
@@ -1038,7 +1080,7 @@ watch(
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #14655a;
+  color: #1d5c52;
   text-decoration: underline dotted rgba(20, 101, 90, 0.6);
   text-underline-offset: 3px;
 }
@@ -1057,7 +1099,7 @@ watch(
   transition: background 0.15s ease;
 }
 .toc-line:hover {
-  background: rgba(30, 133, 119, 0.1);
+  background: rgba(42, 121, 110, 0.1);
 }
 .toc-dots {
   flex: 1;
@@ -1100,14 +1142,14 @@ watch(
   font-size: 0.98rem;
   color: var(--ink);
   text-decoration: none;
-  background-image: linear-gradient(90deg, #14655a, #1e8577);
+  background-image: linear-gradient(90deg, #1d5c52, #2a796e);
   background-repeat: no-repeat;
   background-position: 0 100%;
   background-size: 0% 1.5px;
   transition: background-size 0.25s ease, color 0.2s ease;
 }
 .contact-link:hover {
-  color: #14655a;
+  color: #1d5c52;
   background-size: 100% 1.5px;
 }
 </style>

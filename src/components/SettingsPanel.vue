@@ -281,7 +281,7 @@ const flatUrl = ((): string => {
 }
 .quality-active {
   border-color: var(--arcane-dim);
-  background: rgba(53, 208, 186, 0.12);
+  background: rgba(71, 189, 173, 0.12);
   box-shadow: inset 0 0 0 1px var(--arcane-dim);
   color: var(--ink);
 }

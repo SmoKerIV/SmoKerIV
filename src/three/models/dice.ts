@@ -41,7 +41,7 @@ export function buildDice(): THREE.Group {
     new THREE.SphereGeometry(0.005, 6, 5),
     new THREE.MeshStandardMaterial({
       color: 0x0c2a26,
-      emissive: 0x35d0ba,
+      emissive: 0x47bdad,
       emissiveIntensity: 0.6,
       roughness: 0.4,
     }),

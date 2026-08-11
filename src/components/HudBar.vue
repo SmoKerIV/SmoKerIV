@@ -129,7 +129,7 @@ const emit = defineEmits<{
 }
 .hud-btn:hover {
   color: var(--arcane);
-  border-color: rgba(53, 208, 186, 0.5);
+  border-color: rgba(71, 189, 173, 0.5);
 }
 
 /* Fingers need ≥44px targets. */

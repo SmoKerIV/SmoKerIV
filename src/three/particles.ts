@@ -130,7 +130,7 @@ export class Particles {
       sizeAttenuation: true,
     });
     this.sparkleMaterial = new THREE.PointsMaterial({
-      color: 0x3fd6c2,
+      color: 0x55c6b6,
       size: 0.018,
       map: this.dotTexture,
       transparent: true,

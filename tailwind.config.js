@@ -3,11 +3,13 @@ export default {
   content: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      // Loaded webfonts only — generic families are the last-resort
+      // fallback, never a named system font.
       fontFamily: {
-        heading: ['"Cinzel"', "Georgia", "serif"],
+        heading: ['"Cinzel"', "serif"],
         decorative: ['"Uncial Antiqua"', '"Cinzel"', "serif"],
-        body: ['"EB Garamond"', "Garamond", '"Times New Roman"', "serif"],
-        mono: ['"Fira Code"', "ui-monospace", "SFMono-Regular", "monospace"],
+        body: ['"EB Garamond"', "serif"],
+        mono: ['"Fira Code"', "monospace"],
       },
       colors: {
         parchment: {
@@ -30,9 +32,10 @@ export default {
           bright: "#d4af5e",
         },
         arcane: {
-          DEFAULT: "#35d0ba",
-          dim: "#1e8577",
-          faint: "#0f4d45",
+          DEFAULT: "#47bdad",
+          dim: "#2a796e",
+          dark: "#1d5c52",
+          faint: "#174540",
         },
         night: "#0d0a08",
         wax: {

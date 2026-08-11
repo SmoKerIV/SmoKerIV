@@ -1,7 +1,7 @@
 /**
  * Shared, cached materials for the procedural inn scene.
  * Palette: browns #4a3524/#6b4a2f, leather #5a2e1d, parchment #e8dcc0,
- * iron #8a8f98, brass #b08d3c, arcane teal #35d0ba.
+ * iron #8a8f98, brass #b08d3c, arcane teal #47bdad.
  */
 import * as THREE from "three";
 import {

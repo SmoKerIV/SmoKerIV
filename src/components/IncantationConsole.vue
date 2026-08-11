@@ -87,7 +87,7 @@ function startFallingRunes(): void {
     for (let i = 0; i < cols; i++) {
       const glyph = RUNES[Math.floor(Math.random() * RUNES.length)];
       const y = drops[i] * fontSize;
-      ctx.fillStyle = Math.random() > 0.9 ? "#7df2df" : "#35d0ba";
+      ctx.fillStyle = Math.random() > 0.9 ? "#8ce4d6" : "#47bdad";
       ctx.fillText(glyph, i * fontSize, y);
       drops[i] += speeds[i];
       if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
@@ -317,7 +317,7 @@ onUnmounted(() => {
   transition: background 0.15s ease;
 }
 .spell-row:hover {
-  background: rgba(30, 133, 119, 0.1);
+  background: rgba(42, 121, 110, 0.1);
 }
 .spell-row:focus-visible {
   outline: 2px solid var(--arcane-dim);

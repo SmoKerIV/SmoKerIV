@@ -99,11 +99,11 @@ onUnmounted(() => {
         <circle
           cx="100" cy="100" :r="R"
           fill="none"
-          stroke="#35d0ba" stroke-width="2.5" stroke-linecap="round"
+          stroke="#47bdad" stroke-width="2.5" stroke-linecap="round"
           :stroke-dasharray="CIRCUMFERENCE"
           :stroke-dashoffset="dashOffset"
           transform="rotate(-90 100 100)"
-          style="transition: stroke-dashoffset 0.35s ease; filter: drop-shadow(0 0 6px rgba(53, 208, 186, 0.55))"
+          style="transition: stroke-dashoffset 0.35s ease; filter: drop-shadow(0 0 6px rgba(71, 189, 173, 0.55))"
         />
         <!-- inner decorative ring -->
         <circle

@@ -152,7 +152,7 @@ export function buildSpellbook(): THREE.Group {
   const runeTex = makeRuneCircleTexture();
   const runeMat = new THREE.MeshBasicMaterial({
     map: runeTex,
-    color: 0x35d0ba,
+    color: 0x47bdad,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,

@@ -102,7 +102,7 @@ export class Lights {
     this.group.add(this.lowFill);
 
     // Arcane teal above the spellbook, driven by setArcane (rune glow).
-    this.arcane = new THREE.PointLight(0x3fd6c2, 0, 3, 2);
+    this.arcane = new THREE.PointLight(0x55c6b6, 0, 3, 2);
     this.arcane.position.set(0, 1.45, -0.05);
     this.group.add(this.arcane);
 
