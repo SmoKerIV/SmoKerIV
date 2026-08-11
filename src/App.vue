@@ -637,7 +637,7 @@ import.meta.hot?.dispose(() => teardown());
           style="bottom: calc(1.5rem + var(--safe-bottom))"
         >
           <button
-            class="btn-wax pointer-events-auto flex items-center gap-2.5 whitespace-nowrap rounded-full px-6 py-3 text-[12px]"
+            class="btn-wax pointer-events-auto flex items-center gap-2.5 whitespace-nowrap rounded-full mb-10 px-6 py-3 text-[12px]"
             @click="openBookAt('cover')"
           >
             <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
