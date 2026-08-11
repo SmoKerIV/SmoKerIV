@@ -43,11 +43,27 @@ const FOCUS_PRESETS: Record<ItemId, FocusPreset> = {
 /** Open spread: cover lands left of the spine; center ≈ x −0.24 off the anchor. */
 const READING_TARGET_OFFSET = v3(-0.24, 0.005, -0.01);
 const SPREAD_WIDTH = 0.9;
-/** ~12° tilt toward the reader so the pages have a little depth. */
-const READING_TILT = { y: 0.978, z: 0.208 };
+/**
+ * Near-perfect top-down reading pose (≈1° toward the reader — just enough
+ * for lookAt's up vector to stay stable). Straight-down matters: the page
+ * planes then project to exact rectangles, so the DOM ink can be pinned
+ * with flat 2D transforms. Perspective matrix3d layers made Chromium
+ * intermittently blank the text; 2D transforms never hit that path.
+ */
+const READING_TILT = { y: 0.99995, z: 0.01 };
 
 const FOCUS_DURATION = 1.6;
 const REDUCED_DURATION = 0.3;
+const FOCUS_EASE = "power2.inOut";
+
+/**
+ * Reading up vector: the page top sits at world −Z, so up = (0, 0, −1)
+ * keeps the spread upright on screen. It also makes the near-vertical
+ * lookAt rock-stable — with the default (0, 1, 0) up, the derived roll
+ * swings wildly as the view direction approaches −Y (screen "rotates").
+ */
+const READING_UP = v3(0, 0, -1);
+const WORLD_UP = v3(0, 1, 0);
 
 /**
  * Owns the PerspectiveCamera: table pose, per-item focus poses,
@@ -60,6 +76,13 @@ export class CameraRig {
 
   private readonly basePosition = TABLE_POSE.position.clone();
   private readonly baseTarget = TABLE_POSE.target.clone();
+  /**
+   * Owned up vector, tweened alongside the pose. GSAP interpolates it
+   * (0,1,0) ↔ (0,0,−1) componentwise; along that path it never comes
+   * close to parallel with the view direction (which sweeps −Z → −Y
+   * while up sweeps +Y → −Z), so lookAt's roll stays steady in flight.
+   */
+  private readonly upVec = WORLD_UP.clone();
   private readonly lookAt = new THREE.Vector3();
 
   private readonly anchors = new Map<ItemId, THREE.Vector3>();
@@ -102,13 +125,14 @@ export class CameraRig {
   focusTo(item: ItemId | null): Promise<void> {
     this.killTween();
     const pose = this.poseFor(item);
+    const up = this.upFor(item);
     const duration = this.reducedMotion ? REDUCED_DURATION : FOCUS_DURATION;
 
     return new Promise<void>((resolve) => {
       this.resolveActive = resolve;
       this.tween = gsap
         .timeline({
-          defaults: { duration, ease: "power2.inOut" },
+          defaults: { duration, ease: FOCUS_EASE },
           onComplete: () => {
             this.tween = null;
             this.resolveActive = null;
@@ -116,7 +140,8 @@ export class CameraRig {
           },
         })
         .to(this.basePosition, { x: pose.position.x, y: pose.position.y, z: pose.position.z }, 0)
-        .to(this.baseTarget, { x: pose.target.x, y: pose.target.y, z: pose.target.z }, 0);
+        .to(this.baseTarget, { x: pose.target.x, y: pose.target.y, z: pose.target.z }, 0)
+        .to(this.upVec, { x: up.x, y: up.y, z: up.z }, 0);
     });
   }
 
@@ -125,18 +150,24 @@ export class CameraRig {
       this.parallax.set(0, 0);
       this.camera.position.copy(this.basePosition);
     } else {
-      // Frame-rate independent lerp toward the pointer.
+      // Frame-rate independent lerp toward the pointer. Amplitude is kept
+      // small: strong parallax makes the items drift away from the cursor
+      // exactly while the user is aiming at them.
       this.parallax.lerp(this.parallaxTarget, 1 - Math.exp(-delta * 4));
       const s = this.swayScale;
       const swayX = Math.sin(elapsed * 0.4) * 0.01 * s;
       const swayY = Math.sin(elapsed * 0.27 + 1.3) * 0.01 * s;
       this.camera.position.set(
-        this.basePosition.x + swayX + this.parallax.x * 0.04 * s,
-        this.basePosition.y + swayY + this.parallax.y * 0.04 * s,
+        this.basePosition.x + swayX + this.parallax.x * 0.012 * s,
+        this.basePosition.y + swayY + this.parallax.y * 0.012 * s,
         this.basePosition.z,
       );
     }
     this.lookAt.copy(this.baseTarget);
+    // Apply the owned up before lookAt: guard against a degenerate mid-tween
+    // vector, then normalize (lookAt assumes unit-ish up).
+    if (this.upVec.lengthSq() < 1e-8) this.upVec.copy(WORLD_UP);
+    this.camera.up.copy(this.upVec).normalize();
     this.camera.lookAt(this.lookAt);
   }
 
@@ -149,12 +180,15 @@ export class CameraRig {
    * Re-apply the (aspect-dependent) pose for the current focus instantly.
    * Called on resize: portrait re-centers the table on the tome, and the
    * reading pose recomputes its distance so the spread never overflows.
+   * Interrupts any in-flight transition — a stale tween would otherwise
+   * land the camera on a pose computed for the old aspect.
    */
   snapToPose(item: ItemId | null): void {
-    if (this.tween) return;
+    this.killTween();
     const pose = this.poseFor(item);
     this.basePosition.copy(pose.position);
     this.baseTarget.copy(pose.target);
+    this.upVec.copy(this.upFor(item));
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -169,6 +203,10 @@ export class CameraRig {
   dispose(): void {
     this.killTween();
     window.removeEventListener("pointermove", this.onPointerMove);
+  }
+
+  private upFor(item: ItemId | null): THREE.Vector3 {
+    return item === "spellbook" ? READING_UP : WORLD_UP;
   }
 
   private poseFor(item: ItemId | null): Pose {
@@ -198,7 +236,7 @@ export class CameraRig {
       const d = THREE.MathUtils.clamp(
         SPREAD_WIDTH / (0.88 * 2 * halfTan * aspect),
         0.62,
-        1.2,
+        1.4,
       );
       const target = anchor.clone().add(READING_TARGET_OFFSET);
       const position = target

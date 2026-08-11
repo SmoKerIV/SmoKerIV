@@ -31,6 +31,9 @@ const GUTTER_DURATION = 1.2;
 const FLARE_DURATION = 0.4;
 /** Candle light fade in/out on snuff/relight (seconds). */
 const SNUFF_FADE = 0.4;
+/** Fireball impact flash: instant spike, quadratic decay. */
+const IMPACT_FLASH_DURATION = 0.5;
+const IMPACT_FLASH_PEAK = 14;
 
 /**
  * All scene lighting for the inn. Exactly one shadow-casting light
@@ -47,6 +50,8 @@ export class Lights {
   /** Warm fill that substitutes for candle point lights on low quality. */
   private readonly lowFill: THREE.AmbientLight;
   private readonly arcane: THREE.PointLight;
+  /** Dormant fireball-impact flash, repositioned per cast. */
+  private readonly impactFlash: THREE.PointLight;
   private readonly candleFlickers: Flicker[] = [];
 
   private quality: Quality;
@@ -60,6 +65,7 @@ export class Lights {
   private gutterIndex = -1;
   private gutterStart = 0;
   private flareStart = -1;
+  private impactFlashStart = -1;
   private lastElapsed = 0;
 
   constructor(quality: Quality) {
@@ -99,6 +105,11 @@ export class Lights {
     this.arcane = new THREE.PointLight(0x3fd6c2, 0, 3, 2);
     this.arcane.position.set(0, 1.45, -0.05);
     this.group.add(this.arcane);
+
+    // Fireball impact flash, dormant until flashAt() is called.
+    this.impactFlash = new THREE.PointLight(0xff8a3d, 0, 7, 2);
+    this.impactFlash.visible = false;
+    this.group.add(this.impactFlash);
 
     this.setQuality(quality);
   }
@@ -168,6 +179,16 @@ export class Lights {
     this.flareStart = elapsed;
   }
 
+  /**
+   * Bright fireball detonation flash at a world position. Re-triggering
+   * mid-decay simply restarts the spike (safe for rapid re-casts).
+   */
+  flashAt(position: THREE.Vector3, elapsed: number): void {
+    this.impactFlash.position.copy(position);
+    this.impactFlashStart = elapsed;
+    this.impactFlash.visible = true;
+  }
+
   update(elapsed: number): void {
     // Local delta for the snuff fades (update only receives elapsed).
     const delta = THREE.MathUtils.clamp(elapsed - this.lastElapsed, 0, 0.1);
@@ -186,6 +207,17 @@ export class Lights {
       else fireBase *= 1 + 0.4 * Math.sin(Math.PI * t);
     }
     this.fire.intensity = fireBase * (1 + 0.1 * fireMix);
+
+    if (this.impactFlashStart >= 0) {
+      const t = (elapsed - this.impactFlashStart) / IMPACT_FLASH_DURATION;
+      if (t >= 1) {
+        this.impactFlashStart = -1;
+        this.impactFlash.intensity = 0;
+        this.impactFlash.visible = false;
+      } else {
+        this.impactFlash.intensity = IMPACT_FLASH_PEAK * (1 - t) * (1 - t);
+      }
+    }
 
     this.updateGutterSchedule(elapsed);
 

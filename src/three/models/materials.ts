@@ -8,7 +8,9 @@ import {
   makeLeatherTexture,
   makeParchmentTexture,
   makePlasterTexture,
+  makeScrollEndTexture,
   makeStoneTexture,
+  makeWaxTexture,
   makeWoodTexture,
 } from "./textures";
 
@@ -164,9 +166,68 @@ export function liquidMaterial(color: number): THREE.MeshStandardMaterial {
 export function waxMaterial(): THREE.MeshStandardMaterial {
   return cached("wax", () =>
     new THREE.MeshStandardMaterial({
-      color: 0xf3ead2,
-      roughness: 0.6,
+      map: makeWaxTexture(),
+      color: 0xfdf6e4,
+      roughness: 0.55,
       metalness: 0.0,
+    }),
+  );
+}
+
+/** Spiral cross-section for the flat ends of the scroll's parchment rolls. */
+export function scrollEndMaterial(): THREE.MeshStandardMaterial {
+  return cached("scrollEnd", () =>
+    new THREE.MeshStandardMaterial({
+      map: makeScrollEndTexture(),
+      roughness: 0.9,
+      metalness: 0.0,
+    }),
+  );
+}
+
+/** Red sealing wax (scroll seal). */
+export function sealWaxMaterial(): THREE.MeshStandardMaterial {
+  return cached("sealWax", () =>
+    new THREE.MeshStandardMaterial({
+      color: 0x9c2418,
+      roughness: 0.38,
+      metalness: 0.0,
+    }),
+  );
+}
+
+/** Dark amber ale/coffee surface: glossy with a warm inner glow. */
+export function drinkMaterial(): THREE.MeshStandardMaterial {
+  return cached("drink", () =>
+    new THREE.MeshStandardMaterial({
+      color: 0x6e3d0d,
+      emissive: 0x3a1c04,
+      emissiveIntensity: 0.35,
+      roughness: 0.15,
+      metalness: 0.0,
+    }),
+  );
+}
+
+/** Off-white matte foam head. */
+export function foamMaterial(): THREE.MeshStandardMaterial {
+  return cached("foam", () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xf2e8cf,
+      roughness: 0.95,
+      metalness: 0.0,
+    }),
+  );
+}
+
+/** Dark interior wall of the tankard (rendered from the inside). */
+export function tankardInnerMaterial(): THREE.MeshStandardMaterial {
+  return cached("tankardInner", () =>
+    new THREE.MeshStandardMaterial({
+      color: 0x2b1a10,
+      roughness: 0.9,
+      metalness: 0.0,
+      side: THREE.BackSide,
     }),
   );
 }

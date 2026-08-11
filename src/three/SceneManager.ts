@@ -13,7 +13,6 @@ import {
   type SpellbookParts,
   type TimeOfDay,
 } from "./types";
-import { computeMatrix3d } from "./pageProjection";
 import {
   buildCandle,
   buildDice,
@@ -29,7 +28,7 @@ import {
 } from "./models";
 import { CameraRig } from "./CameraRig";
 import { Lights } from "./lights";
-import { Particles } from "./particles";
+import { Particles, makeDotTexture } from "./particles";
 import { DicePhysics } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
 
@@ -64,6 +63,13 @@ const MOTH_TRAVEL_DURATION = 3;
 const SNUFF_CLICKS = 5;
 const SNUFF_WINDOW_MS = 4000;
 
+// --- Fireball (console easter egg) -------------------------------------------
+const FIREBALL_FLIGHT_DURATION = 0.8;
+/** Trail embers spawn every time the flight advances this far (t units). */
+const FIREBALL_TRAIL_STEP = 0.06;
+/** How far ahead of the camera the bead detonates (before clamping). */
+const FIREBALL_THROW_DISTANCE = 1.7;
+
 // --- Auto quality fail-down --------------------------------------------------
 const FRAME_WINDOW = 90;
 /** Rolling window average above this (< 25 fps) triggers a downgrade. */
@@ -76,6 +82,14 @@ interface Placement {
   x: number;
   z: number;
   rotY: number;
+}
+
+/** Reusable fireball projectile (emissive core + layered glow sprites). */
+interface FireballRig {
+  group: THREE.Group;
+  /** Sprite materials — not reached by the dispose() mesh traverse. */
+  spriteMaterials: THREE.SpriteMaterial[];
+  texture: THREE.Texture;
 }
 
 /** Tabletop still-life layout (world coords, items rest at TABLE_SURFACE_Y). */
@@ -145,6 +159,10 @@ export class SceneManager implements ISceneManager {
 
   private diceRolling = false;
   private dicePhysics: DicePhysics | null = null;
+
+  /** Lazily-built reusable fireball projectile (sphere + glow sprites). */
+  private fireball: FireballRig | null = null;
+  private fireballTween: gsap.core.Tween | null = null;
 
   /** Per-candle-instance snuff state (two roots share the "candle" itemId). */
   private readonly candleStates = new Map<
@@ -297,6 +315,69 @@ export class SceneManager implements ISceneManager {
     this.dicePhysics.roll(this.settings.reducedMotion);
   }
 
+  castFireball(): void {
+    if (this.disposed) return;
+    const camera = this.rig.camera;
+    camera.updateMatrixWorld();
+    const dir = camera.getWorldDirection(new THREE.Vector3());
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+
+    // Detonate ahead along the current view ray so the flight always crosses
+    // the frame, whatever pose the camera is in — clamped above the tabletop
+    // (close-up poses look steeply down) and inside the room walls.
+    const impact = camera.position
+      .clone()
+      .addScaledVector(dir, FIREBALL_THROW_DISTANCE);
+    impact.y = Math.max(impact.y, TABLE_SURFACE_Y + 0.18);
+    impact.x = THREE.MathUtils.clamp(impact.x, -2.6, 2.6);
+    impact.z = THREE.MathUtils.clamp(impact.z, -2.6, 2.6);
+
+    this.killFireball();
+
+    if (this.settings.reducedMotion) {
+      // No projectile flight — straight to the impact beat.
+      this.detonateFireball(impact);
+      return;
+    }
+
+    // Spawn in the camera's lower-left foreground, hurled from "the hand".
+    const spawn = camera.position
+      .clone()
+      .addScaledVector(dir, 0.4)
+      .addScaledVector(right, -0.28)
+      .addScaledVector(up, -0.2);
+    // Arc scales with the throw so close-up casts don't loop overhead.
+    const arc = Math.min(spawn.distanceTo(impact) * 0.22, 0.4);
+
+    const fb = this.ensureFireball();
+    fb.group.position.copy(spawn);
+    fb.group.visible = true;
+    const state = { t: 0, lastTrail: 0 };
+    this.fireballTween = gsap.to(state, {
+      t: 1,
+      duration: FIREBALL_FLIGHT_DURATION,
+      ease: "power2.in",
+      onUpdate: () => {
+        fb.group.position.lerpVectors(spawn, impact, state.t);
+        fb.group.position.y += Math.sin(Math.PI * state.t) * arc;
+        // t drives position linearly, so fixed t steps = even trail spacing.
+        while (state.t - state.lastTrail >= FIREBALL_TRAIL_STEP) {
+          state.lastTrail += FIREBALL_TRAIL_STEP;
+          this.particles.emitEmberAt(fb.group.position);
+        }
+      },
+      onComplete: () => {
+        this.fireballTween = null;
+        fb.group.visible = false;
+        this.detonateFireball(impact);
+      },
+      onInterrupt: () => {
+        fb.group.visible = false;
+      },
+    });
+  }
+
   setQuality(quality: Quality): void {
     this.settings.quality = quality;
     this.renderer.setPixelRatio(
@@ -360,6 +441,14 @@ export class SceneManager implements ISceneManager {
 
     this.bookTl?.kill();
     this.pageFlipTween?.kill();
+    this.killFireball();
+    if (this.fireball) {
+      // The scene traverse below only reaches mesh materials; the glow
+      // sprites and their shared texture must be released by hand.
+      for (const material of this.fireball.spriteMaterials) material.dispose();
+      this.fireball.texture.dispose();
+      this.fireball = null;
+    }
     this.dicePhysics?.dispose();
     gsap.killTweensOf(this.runeProxy);
     gsap.killTweensOf(this.moodProxy);
@@ -683,6 +772,67 @@ export class SceneManager implements ISceneManager {
     },
   };
 
+  /** Build the reusable projectile once: emissive core + layered glow. */
+  private ensureFireball(): FireballRig {
+    if (this.fireball) return this.fireball;
+    const texture = makeDotTexture();
+    const group = new THREE.Group();
+
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.035, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xffdfa8 }),
+    );
+    const halo = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: texture,
+        color: 0xff7a30,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    halo.scale.setScalar(0.3);
+    const innerGlow = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: texture,
+        color: 0xffc46b,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    innerGlow.scale.setScalar(0.16);
+    // A traveling warm light sells the projectile against the dark room.
+    const light = new THREE.PointLight(0xff9040, 3, 3.5, 2);
+
+    group.add(core, halo, innerGlow, light);
+    group.visible = false;
+    this.scene.add(group);
+    this.fireball = {
+      group,
+      spriteMaterials: [halo.material, innerGlow.material],
+      texture,
+    };
+    return this.fireball;
+  }
+
+  /** Impact beat: flash + radial embers + smoke, then the overlay's shake. */
+  private detonateFireball(impact: THREE.Vector3): void {
+    this.lights.flashAt(impact, this.clock.elapsedTime);
+    this.particles.burstEmbersAt(impact);
+    this.particles.puffSmoke(impact);
+    this.events.onFireballImpact?.();
+  }
+
+  /** Kill any in-flight fireball so a re-cast starts clean. */
+  private killFireball(): void {
+    this.fireballTween?.kill();
+    this.fireballTween = null;
+    if (this.fireball) this.fireball.group.visible = false;
+  }
+
   /** Snuff easter egg: 5 quick clicks put a candle out; one click relights. */
   private handleCandleClick(root: THREE.Group): void {
     const state = this.candleStates.get(root);
@@ -780,7 +930,7 @@ export class SceneManager implements ISceneManager {
     this.readingPages.right.visible = visible;
   }
 
-  /** Project both reading pages to screen space and hand the UI matrix3ds. */
+  /** Project both reading pages to screen space and hand the UI transforms. */
   private emitPageTransforms(): void {
     const pages = this.readingPages;
     const handler = this.events.onBookPageTransforms;
@@ -801,10 +951,25 @@ export class SceneManager implements ISceneManager {
           y: ((1 - this.cornerScratch.y) / 2) * height,
         };
       });
-      return computeMatrix3d(
-        pts[0]!, pts[1]!, pts[2]!, pts[3]!,
-        PAGE_CSS_W, PAGE_CSS_H,
-      );
+      // The reading camera looks (almost) straight down at the flat page,
+      // so its projection is affine to within ~1px: pin the ink with a flat
+      // 2D matrix least-squares-fit over the four projected corners. This
+      // follows the book's slight rotation exactly and never uses matrix3d —
+      // perspective-transformed text layers made Chromium blank the ink.
+      const tl = pts[0]!;
+      const tr = pts[1]!;
+      const bl = pts[2]!;
+      const br = pts[3]!;
+      const a = (tr.x - tl.x + (br.x - bl.x)) / (2 * PAGE_CSS_W);
+      const b = (tr.y - tl.y + (br.y - bl.y)) / (2 * PAGE_CSS_W);
+      const c = (bl.x - tl.x + (br.x - tr.x)) / (2 * PAGE_CSS_H);
+      const d = (bl.y - tl.y + (br.y - tr.y)) / (2 * PAGE_CSS_H);
+      // Anchor at the centroid so the residual splits evenly across corners.
+      const cx = (tl.x + tr.x + bl.x + br.x) / 4;
+      const cy = (tl.y + tr.y + bl.y + br.y) / 4;
+      const e = cx - (a * PAGE_CSS_W + c * PAGE_CSS_H) / 2;
+      const f = cy - (b * PAGE_CSS_W + d * PAGE_CSS_H) / 2;
+      return `matrix(${a.toFixed(6)}, ${b.toFixed(6)}, ${c.toFixed(6)}, ${d.toFixed(6)}, ${e.toFixed(2)}, ${f.toFixed(2)})`;
     };
 
     const left = projectPage(pages.left);
@@ -960,7 +1125,9 @@ export class SceneManager implements ISceneManager {
     this.rig.setSize(width, height);
     // Poses depend on aspect (portrait centers the table on the tome; the
     // reading distance is fit to the frustum) — re-apply for the new frame.
-    if (!this.transitioning) this.rig.snapToPose(this._focused);
+    // Mid-transition too: _focused is already the transition target, and a
+    // tween finishing on an old-aspect pose would leave the book mis-framed.
+    this.rig.snapToPose(this._focused);
   };
 
   private readonly onVisibilityChange = (): void => {

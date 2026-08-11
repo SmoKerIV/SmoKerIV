@@ -10,8 +10,8 @@ import { useSettings } from "../composables/useSettings";
  */
 const emit = defineEmits<{
   close: [];
-  /** Fireball — screen shake. */
-  shake: [];
+  /** Fireball — a real projectile in the 3D scene (CSS shake at impact). */
+  fireball: [];
   /** Divination spells open the tome at a section. */
   "open-section": [section: BookSection];
   /** Wish — the quest-offer toast. */
@@ -110,7 +110,7 @@ const SPELLS: Spell[] = [
     school: "Evocation · 3rd level",
     flavor: "a bead of flame; the rafters disapprove",
     cast: () => {
-      emit("shake");
+      emit("fireball");
       return "You trace the sigil of flame… FWOOOSH. The tankards rattle and the innkeeper glares.";
     },
   },

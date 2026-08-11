@@ -19,7 +19,6 @@ import {
   artifacts,
   contact,
   colophon,
-  credits,
 } from "../data/content";
 import { useAudio } from "../composables/useAudio";
 import { useSettings } from "../composables/useSettings";
@@ -262,9 +261,27 @@ function fitPages(): void {
   void fitPane("right");
 }
 
+/* ------------------------------------------------------------------ */
+/* Inscribe reveal: hold new ink until the 3D flip settles, then sweep  */
+/* ------------------------------------------------------------------ */
+const hasNavigated = ref(false);
+/**
+ * clip-path/opacity only — never display/visibility: the fit-to-page pass
+ * measures scrollHeight on the freshly keyed wrapper, and clip-path leaves
+ * layout (and thus those measurements) untouched.
+ */
+const inscribe = computed(
+  () => hasNavigated.value && !settings.reducedMotion,
+);
+
 watch(
   () => props.section,
-  () => void nextTick(fitPages),
+  () => {
+    // Only page turns get the inscribe reveal — the very first mount (book
+    // just opened) shows content immediately; the open animation covered it.
+    hasNavigated.value = true;
+    void nextTick(fitPages);
+  },
 );
 </script>
 
@@ -285,6 +302,7 @@ watch(
         :key="section"
         ref="leftPadEl"
         class="ink-pad book-page"
+        :class="{ 'ink-inscribe': inscribe }"
         aria-live="polite"
       >
         <div class="fit-wrap" :style="fitStyle('left')">
@@ -451,7 +469,12 @@ watch(
       class="ink-pane"
       :style="{ ...paneBase, transform: transforms?.right ?? 'none' }"
     >
-      <div :key="section" ref="rightPadEl" class="ink-pad book-page">
+      <div
+        :key="section"
+        ref="rightPadEl"
+        class="ink-pad book-page"
+        :class="{ 'ink-inscribe': inscribe }"
+      >
         <div class="fit-wrap" :style="fitStyle('right')">
           <!-- cover: table of contents -->
           <template v-if="section === 'cover'">
@@ -609,13 +632,17 @@ watch(
     </div>
 
     <!-- FLOATING CHROME (untransformed) -------------------------------- -->
-    <button
-      ref="closeBtn"
-      class="btn-leather pointer-events-auto fixed left-1/2 top-4 z-30 -translate-x-1/2 whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-[11px] opacity-90"
-      @click="emit('close')"
-    >
-      ⟨ Return to the Table
-    </button>
+    <!-- Flex-wrapper centering (not translate-x): transform-based
+         centering gets clobbered by any transition/hover transform. -->
+    <div class="pointer-events-none fixed inset-x-0 top-4 z-30 flex justify-center">
+      <button
+        ref="closeBtn"
+        class="btn-leather pointer-events-auto whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-[11px] opacity-90"
+        @click="emit('close')"
+      >
+        ⟨ Return to the Table
+      </button>
+    </div>
 
     <button
       v-if="canPrev"
@@ -659,23 +686,45 @@ watch(
   transform-origin: 0 0;
   pointer-events: none;
   color: var(--ink);
-  /* Own compositor layer: without it, Chromium re-rasterizes the pane on
-     transform changes and the text can flash away entirely. */
-  will-change: transform;
+  /* The scene supplies flat 2D matrices (top-down reading camera), never
+     matrix3d: perspective-transformed text layers made Chromium blank the
+     ink intermittently. Keep this pane free of will-change/3D hints. */
 }
 .ink-pad {
   pointer-events: auto;
   width: 100%;
   height: 100%;
   padding: 30px 42px 34px;
-  /* NEVER a scroll container: scrollable boxes inside a perspective
-     matrix3d layer break compositing (blank pages). Content must fit —
+  /* NEVER a scroll container: scrollable boxes inside a transformed
+     layer break compositing (blank pages). Content must fit —
      .fit-wrap shrinks anything that would overflow. */
   overflow: hidden;
 }
 .fit-wrap {
   height: 100%;
   transform-origin: 0 0;
+}
+/* Inscribe reveal: hold the fresh ink hidden for 0.45s (the 3D page flip
+   runs 0.5s), then sweep it in top-to-bottom as if being written. `both`
+   fill keeps the pre-delay state at the hidden first frame without JS
+   timers, and clip-path/opacity never disturb the fit measurements. */
+.ink-inscribe {
+  animation: inkInscribe 0.7s cubic-bezier(0.3, 0.1, 0.35, 1) 0.45s both;
+}
+@keyframes inkInscribe {
+  0% {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+    filter: sepia(0.7) contrast(0.85);
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    filter: none;
+  }
 }
 /* Slightly tighter than the global book-page scale — pages don't scroll. */
 .ink-pad.book-page,
@@ -713,7 +762,6 @@ watch(
 .corner:hover {
   color: var(--arcane);
   border-color: var(--arcane-dim);
-  transform: scale(1.08);
 }
 .corner-prev { left: 26px; }
 .corner-next { right: 26px; }
@@ -736,8 +784,8 @@ watch(
   transition: transform 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
 .bookmark:hover {
-  transform: translateX(-3px);
   color: #f3e6cb;
+  filter: brightness(1.15);
 }
 .bookmark-active {
   transform: translateX(-5px);

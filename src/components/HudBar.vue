@@ -109,6 +109,5 @@ const emit = defineEmits<{
 .hud-btn:hover {
   color: var(--arcane);
   border-color: rgba(53, 208, 186, 0.5);
-  transform: translateY(-1px);
 }
 </style>

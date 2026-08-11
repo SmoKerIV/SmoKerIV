@@ -2,6 +2,7 @@
  * All portfolio content, rethemed for the fantasy spellbook.
  * This is the single file to edit when facts change.
  */
+import type { ItemId } from "../three/types";
 
 export const identity = {
   name: "Baker Alazzawi",
@@ -113,7 +114,7 @@ export const artifacts: Artifact[] = [
     name: "Hook Menu",
     kind: "Merchant's Grimoire",
     description:
-      "HOOK.iq — a digital menu platform for Iraqi restaurants and cafés: browse, order.",
+      "HOOK.iq — a digital menu platform for the café Hook: browse, order.",
     url: "https://hookiraq.com",
     tech: ["Vue", "Vite", "Node.js"],
     },
@@ -174,3 +175,97 @@ export const credits: string[] = [
   "Typefaces: Cinzel, Cinzel Decorative & IM Fell English via Google Fonts (OFL).",
   "3D scene: procedural models, no external assets.",
 ];
+
+/* ------------------------------------------------------------------ */
+/* Focus cards — parchment scrap shown when zoomed on a table item     */
+/* (titles/flavor come from ITEM_LABELS in three/types.ts)             */
+/* ------------------------------------------------------------------ */
+
+/** Items that show a focus card: the tome opens instead, the die just rolls. */
+export type FocusCardItem = Exclude<ItemId, "spellbook" | "dice">;
+
+export interface CardEntry {
+  primary: string;
+  secondary?: string;
+  /** Marks the ongoing quest on the shield card. */
+  active?: boolean;
+}
+
+export interface CardLink {
+  label: string;
+  href: string;
+  /** Opens in a new tab (https links; mailto/tel stay in-page). */
+  external?: boolean;
+}
+
+export interface ItemCardContent {
+  /** Optional lead-in line above the list. */
+  lead?: string;
+  entries?: CardEntry[];
+  links?: CardLink[];
+}
+
+/** Elixir label stat lines (potion focus card). */
+export const potionStats: CardEntry[] = [
+  { primary: "Caffeine saturation", secondary: "98% — do not dilute" },
+  { primary: "Uptime granted", secondary: "99.9% (the 0.1% was a nap)" },
+  { primary: "Side-project mana", secondary: "regenerates after midnight" },
+  { primary: "Deadline resistance", secondary: "+5 to saving throws" },
+];
+
+export const itemCards: Record<FocusCardItem, ItemCardContent> = {
+  sword: {
+    lead: "Enchantments etched along the blade:",
+    entries: spellSchools.map((school) => ({
+      primary: school.school,
+      secondary: school.spells.join(" · "),
+    })),
+  },
+  shield: {
+    lead: "Marks of every guild served:",
+    entries: quests.map((quest) => ({
+      primary: quest.company,
+      secondary: quest.period,
+      active: quest.current,
+    })),
+  },
+  potion: {
+    lead: "The label, in a careful alchemist's hand:",
+    entries: potionStats,
+  },
+  scroll: {
+    lead: "The raven knows these roads:",
+    links: [
+      { label: contact.email, href: `mailto:${contact.email}` },
+      { label: contact.github.label, href: contact.github.url, external: true },
+      {
+        label: contact.linkedin.label,
+        href: contact.linkedin.url,
+        external: true,
+      },
+      { label: contact.phone.label, href: `tel:${contact.phone.tel}` },
+      {
+        label: contact.instagram.label,
+        href: contact.instagram.url,
+        external: true,
+      },
+    ],
+  },
+  tankard: {
+    entries: [
+      {
+        primary: "Refills itself between deploys.",
+        secondary: "No one has ever found the bottom.",
+      },
+    ],
+  },
+  candle: {
+    entries: [
+      { primary: "Keeps the night watch over long refactors." },
+      {
+        primary: "They say five quick taps invite the dark.",
+        secondary: "Surely just an innkeeper's tale.",
+      },
+    ],
+  },
+};

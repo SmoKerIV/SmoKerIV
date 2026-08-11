@@ -394,6 +394,154 @@ export function makeCrestTexture(): THREE.CanvasTexture {
   return toTexture(canvas);
 }
 
+/** Cream/ivory candle wax: vertical melt streaks + soft mottling. */
+export function makeWaxTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const [canvas, ctx] = createCanvas(size);
+  const rand = mulberry32(2718);
+
+  ctx.fillStyle = "#f1e7cd";
+  ctx.fillRect(0, 0, size, size);
+
+  // Soft warm/cool mottling
+  for (let i = 0; i < 26; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const r = 18 + rand() * 60;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(
+      0,
+      rand() > 0.5 ? "rgba(214, 188, 140, 0.10)" : "rgba(255, 252, 240, 0.12)",
+    );
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  // Vertical melt streaks (map v runs along the candle height)
+  for (let i = 0; i < 42; i++) {
+    const x = rand() * size;
+    const w = 2 + rand() * 7;
+    const a = 0.035 + rand() * 0.07;
+    ctx.fillStyle =
+      rand() > 0.45 ? `rgba(255, 250, 236, ${a})` : `rgba(190, 165, 118, ${a})`;
+    const y0 = rand() * size * 0.5;
+    ctx.fillRect(x, y0, w, size - y0);
+  }
+  // Fine speckle
+  for (let i = 0; i < 500; i++) {
+    ctx.fillStyle = `rgba(150, 125, 85, ${0.02 + rand() * 0.05})`;
+    ctx.fillRect(rand() * size, rand() * size, 1.2, 1.2);
+  }
+  return toTexture(canvas);
+}
+
+/**
+ * Scroll roll end cap: spiral of wound parchment around a wooden rod core.
+ * Meant for the flat circular caps of the roll cylinders.
+ */
+export function makeScrollEndTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const [canvas, ctx] = createCanvas(size);
+  const rand = mulberry32(6174);
+  const c = size / 2;
+
+  ctx.fillStyle = "#e4d6b6";
+  ctx.fillRect(0, 0, size, size);
+  // Subtle radial aging
+  const g = ctx.createRadialGradient(c, c, size * 0.1, c, c, size * 0.5);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(120, 90, 50, 0.25)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+
+  // Archimedean spiral: the wound layers of parchment
+  ctx.strokeStyle = "rgba(122, 96, 58, 0.85)";
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  const turns = 6.5;
+  const r0 = size * 0.15;
+  const r1 = size * 0.485;
+  const steps = 340;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = t * turns * Math.PI * 2;
+    const r = r0 + (r1 - r0) * t + Math.sin(a * 2.3) * 1.2;
+    const x = c + Math.cos(a) * r;
+    const y = c + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  // Highlight edge of each winding (offset lighter spiral)
+  ctx.strokeStyle = "rgba(255, 248, 226, 0.5)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = t * turns * Math.PI * 2;
+    const r = r0 + (r1 - r0) * t - 3;
+    const x = c + Math.cos(a) * r;
+    const y = c + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  // Wooden rod core
+  ctx.fillStyle = "#4a3524";
+  ctx.beginPath();
+  ctx.arc(c, c, size * 0.14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(20, 12, 6, 0.6)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  // Rod end grain rings
+  ctx.strokeStyle = "rgba(30, 20, 10, 0.45)";
+  for (let r = 6; r < size * 0.13; r += 8) {
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(c, c, r, r * (0.85 + rand() * 0.2), rand(), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Outermost sheet edge
+  ctx.strokeStyle = "rgba(90, 68, 38, 0.8)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(c, c, size * 0.49, 0, Math.PI * 2);
+  ctx.stroke();
+  return toTexture(canvas);
+}
+
+/**
+ * Faintly glowing teal rune etchings for the sword fuller.
+ * Transparent background; use as map + emissiveMap on a decal plane.
+ */
+export function makeBladeRuneTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 96;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not acquire 2d canvas context");
+  const rand = mulberry32(777);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "#35d0ba";
+  ctx.shadowColor = "#35d0ba";
+  ctx.shadowBlur = 6;
+  ctx.lineCap = "round";
+  ctx.lineWidth = 5;
+
+  let x = 34;
+  const y = canvas.height / 2;
+  while (x < canvas.width - 34) {
+    drawRune(ctx, x, y, 34 + rand() * 14, rand);
+    x += 52 + rand() * 26;
+  }
+  const tex = toTexture(canvas);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
 /**
  * Arcane rune circle: teal glyphs on transparent, for additive planes.
  */

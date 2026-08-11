@@ -1,12 +1,28 @@
 /**
- * Single candle ~0.18 high on a small brass holder dish. The flame mesh is
- * exposed via userData.parts (CandleParts) so the scene can attach its
- * flickering PointLight. Pivot at the dish bottom (y = 0).
+ * Squat melted pillar candle (~0.15 of wax) in a brass chamberstick:
+ * wobbly-profile lathe wax body with a sunken melt crater, dripping wax
+ * runs down the side (one pooling on the dish), rolled-rim holder dish
+ * with a finger ring, wick stub and a teardrop flame.
+ *
+ * The flame stays ONE mesh exposed via userData.parts (CandleParts):
+ * SceneManager attaches the flickering PointLight to it and toggles
+ * `flame.visible` for the snuff easter egg. Pivot at the dish bottom (y = 0).
  */
 import * as THREE from "three";
 import { ITEM_LABELS } from "../types";
 import type { CandleParts } from "../types";
 import { brassMaterial, waxMaterial } from "./materials";
+
+/** Tiny deterministic PRNG so both candles get an identical melt profile. */
+function mulberry32(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 export function buildCandle(): THREE.Group {
   const group = new THREE.Group();
@@ -14,79 +30,152 @@ export function buildCandle(): THREE.Group {
 
   const brass = brassMaterial();
   const wax = waxMaterial();
+  const rand = mulberry32(31415);
 
-  // --- Brass holder dish ------------------------------------------------------
+  // --- Brass chamberstick: dish with rolled rim --------------------------------
   const dish = new THREE.Mesh(
     new THREE.LatheGeometry(
       [
-        new THREE.Vector2(0.001, 0.002),
-        new THREE.Vector2(0.03, 0.004),
-        new THREE.Vector2(0.048, 0.006),
-        new THREE.Vector2(0.055, 0.016),
-        new THREE.Vector2(0.05, 0.018),
-        new THREE.Vector2(0.028, 0.012),
+        new THREE.Vector2(0.002, 0.0),
+        new THREE.Vector2(0.03, 0.001),
+        new THREE.Vector2(0.052, 0.003),
+        new THREE.Vector2(0.06, 0.006),
+        new THREE.Vector2(0.064, 0.014),
+        new THREE.Vector2(0.061, 0.02),
+        new THREE.Vector2(0.057, 0.019),
+        new THREE.Vector2(0.054, 0.012),
+        new THREE.Vector2(0.046, 0.008),
+        new THREE.Vector2(0.028, 0.006),
+        new THREE.Vector2(0.002, 0.005),
       ],
-      16,
+      20,
     ),
     brass,
   );
   dish.castShadow = true;
   dish.receiveShadow = true;
   group.add(dish);
-  // Little carry ring on the dish
+  // Finger ring handle on the rim
   const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(0.012, 0.003, 6, 10),
+    new THREE.TorusGeometry(0.015, 0.004, 7, 14),
     brass,
   );
   ring.rotation.y = Math.PI / 2;
-  ring.position.set(0.062, 0.014, 0);
+  ring.position.set(0.076, 0.018, 0);
+  ring.castShadow = true;
   group.add(ring);
+  // Small nub joining ring to dish
+  const nub = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.008, 0.01), brass);
+  nub.position.set(0.062, 0.016, 0);
+  group.add(nub);
 
-  // --- Wax body ----------------------------------------------------------------
-  const WAX_BASE = 0.01;
-  const WAX_H = 0.125;
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.02, 0.023, WAX_H, 12),
-    wax,
+  // --- Wax body: irregular melted pillar (wobbly lathe) --------------------------
+  const FLOOR_Y = 0.006; // dish floor the candle sits on
+  const R = 0.034;
+  const SHOULDER_Y = 0.135;
+  const RIM_Y = 0.147;
+  const POOL_Y = 0.1385; // sunken molten pool inside the crater
+  const profile: THREE.Vector2[] = [
+    new THREE.Vector2(0.0005, FLOOR_Y),
+    new THREE.Vector2(0.03, FLOOR_Y),
+    // Melted skirt where old wax pooled at the base
+    new THREE.Vector2(0.041, FLOOR_Y + 0.001),
+    new THREE.Vector2(0.043, FLOOR_Y + 0.005),
+    new THREE.Vector2(0.039, FLOOR_Y + 0.011),
+  ];
+  // Shaft with seeded wobble and a slight upward taper
+  const STEPS = 8;
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS;
+    const y = 0.022 + t * (SHOULDER_Y - 0.03 - 0.022);
+    const wobble = (rand() - 0.5) * 0.0042;
+    profile.push(new THREE.Vector2(R - t * 0.003 + wobble, y));
+  }
+  profile.push(
+    // Shoulder pulling in to the rim
+    new THREE.Vector2(0.0305, SHOULDER_Y),
+    new THREE.Vector2(0.0285, RIM_Y - 0.004),
+    new THREE.Vector2(0.027, RIM_Y),
+    // Crater: rim rolls inward and down into the molten pool
+    new THREE.Vector2(0.022, RIM_Y - 0.003),
+    new THREE.Vector2(0.012, POOL_Y + 0.001),
+    new THREE.Vector2(0.004, POOL_Y),
+    new THREE.Vector2(0.0005, POOL_Y),
   );
-  body.position.y = WAX_BASE + WAX_H / 2;
+  const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 20), wax);
   body.castShadow = true;
   group.add(body);
-  // Slightly melted, wider top lip
-  const lip = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.023, 0.019, 0.012, 12),
-    wax,
-  );
-  lip.position.y = WAX_BASE + WAX_H - 0.002;
-  group.add(lip);
-  // Wax drips hugging the side
-  const dripGeo = new THREE.SphereGeometry(0.006, 6, 5);
-  for (const [a, y, s] of [
-    [0.4, 0.105, 1.6],
-    [2.1, 0.085, 1.3],
-    [4.4, 0.115, 1.5],
-    [5.3, 0.06, 1.1],
-  ] as Array<[number, number, number]>) {
-    const drip = new THREE.Mesh(dripGeo, wax);
-    drip.scale.set(0.5, s, 0.5);
-    drip.position.set(Math.cos(a) * 0.0195, y, Math.sin(a) * 0.0195);
-    group.add(drip);
+
+  // Irregular rim blobs so the melted lip doesn't read as a perfect circle
+  for (const [a, s] of [
+    [0.9, 1.5],
+    [2.8, 1.2],
+    [5.1, 1.7],
+  ] as Array<[number, number]>) {
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 7, 5), wax);
+    blob.scale.set(s, 0.7, 1.1);
+    blob.position.set(Math.cos(a) * 0.0265, RIM_Y - 0.001, Math.sin(a) * 0.0265);
+    group.add(blob);
   }
 
-  // --- Wick ----------------------------------------------------------------------
-  const wickTop = WAX_BASE + WAX_H + 0.012;
+  // --- Drip runs down the side -----------------------------------------------------
+  // [angle, top y, bottom y, thickness]; the first run reaches the dish.
+  const runs: Array<[number, number, number, number]> = [
+    [0.6, RIM_Y - 0.004, 0.03, 0.0048],
+    [2.3, RIM_Y - 0.006, 0.082, 0.0042],
+    [4.6, RIM_Y - 0.002, 0.108, 0.0038],
+  ];
+  for (const [a, yTop, yBot, thick] of runs) {
+    const len = yTop - yBot;
+    const rr = R + 0.0015;
+    const cx = Math.cos(a) * rr;
+    const cz = Math.sin(a) * rr;
+    const run = new THREE.Mesh(
+      new THREE.CylinderGeometry(thick * 0.8, thick * 1.15, len, 6),
+      wax,
+    );
+    run.position.set(cx, yBot + len / 2, cz);
+    run.castShadow = true;
+    group.add(run);
+    // Hanging droplet at the bottom of the run
+    const droplet = new THREE.Mesh(new THREE.SphereGeometry(thick * 1.5, 7, 6), wax);
+    droplet.scale.set(0.9, 1.5, 0.9);
+    droplet.position.set(cx, yBot, cz);
+    group.add(droplet);
+  }
+  // The long run pools on the dish floor
+  const pool = new THREE.Mesh(new THREE.SphereGeometry(0.013, 8, 6), wax);
+  pool.scale.set(1.3, 0.28, 1.1);
+  pool.position.set(Math.cos(0.6) * 0.037, FLOOR_Y + 0.002, Math.sin(0.6) * 0.037);
+  group.add(pool);
+
+  // --- Wick stub ---------------------------------------------------------------------
   const wick = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.0016, 0.0022, 0.014, 5),
+    new THREE.CylinderGeometry(0.0016, 0.0022, 0.013, 5),
     new THREE.MeshStandardMaterial({ color: 0x151009, roughness: 1 }),
   );
-  wick.position.y = wickTop - 0.007;
+  wick.rotation.z = 0.18;
+  wick.rotation.x = 0.1;
+  wick.position.y = POOL_Y + 0.006;
   group.add(wick);
 
-  // --- Flame (scene attaches the flickering PointLight here) ----------------------
+  // --- Flame: ONE teardrop mesh (scene attaches the flickering light) -----------------
   const flame = new THREE.Mesh(
-    new THREE.ConeGeometry(0.011, 0.046, 8),
+    new THREE.LatheGeometry(
+      [
+        new THREE.Vector2(0.0005, 0.0),
+        new THREE.Vector2(0.005, 0.005),
+        new THREE.Vector2(0.0082, 0.013),
+        new THREE.Vector2(0.0088, 0.019),
+        new THREE.Vector2(0.0072, 0.027),
+        new THREE.Vector2(0.0045, 0.036),
+        new THREE.Vector2(0.002, 0.045),
+        new THREE.Vector2(0.0004, 0.053),
+      ],
+      10,
+    ),
     new THREE.MeshStandardMaterial({
-      color: 0xffc266,
+      color: 0xffd27a,
       emissive: 0xffa229,
       emissiveIntensity: 3.2,
       transparent: true,
@@ -96,23 +185,8 @@ export function buildCandle(): THREE.Group {
     }),
   );
   flame.name = "candleFlame";
-  flame.position.y = wickTop + 0.016;
+  flame.position.y = POOL_Y + 0.011;
   group.add(flame);
-  // Hot inner core
-  const core = new THREE.Mesh(
-    new THREE.SphereGeometry(0.005, 6, 5),
-    new THREE.MeshStandardMaterial({
-      color: 0xfff3c0,
-      emissive: 0xffe9a0,
-      emissiveIntensity: 2.5,
-      transparent: true,
-      opacity: 0.95,
-      depthWrite: false,
-      roughness: 1,
-    }),
-  );
-  core.position.y = wickTop + 0.004;
-  group.add(core);
 
   group.userData.itemId = "candle";
   group.userData.label = ITEM_LABELS.candle.name;

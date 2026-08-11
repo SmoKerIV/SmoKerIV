@@ -36,20 +36,16 @@ const RUNES = "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛈᛇᛉᛊᛏᛒᛖᛗᛚ�
 const lineIndex = ref(Math.floor(Math.random() * loadingLines.length));
 let lineTimer: ReturnType<typeof setInterval> | null = null;
 
-/* Button reveal: returning visitors see it the moment the scene is ready;
-   first-timers get a short beat so the circle completes. */
-const buttonVisible = ref(false);
-let revealTimer: ReturnType<typeof setTimeout> | null = null;
+/* Auto-enter: the inn opens itself once the scene is ready — returning
+   visitors step straight in, first-timers get a beat so the rune ring
+   finishes drawing. (Audio unlocks on the first click/keypress instead.) */
+let enterTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(
   () => props.ready,
   (ready) => {
     if (!ready) return;
-    if (visitedBefore) {
-      buttonVisible.value = true;
-    } else {
-      revealTimer = setTimeout(() => (buttonVisible.value = true), 700);
-    }
+    enterTimer = setTimeout(onEnter, visitedBefore ? 250 : 900);
   },
   { immediate: true },
 );
@@ -71,7 +67,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (lineTimer) clearInterval(lineTimer);
-  if (revealTimer) clearTimeout(revealTimer);
+  if (enterTimer) clearTimeout(enterTimer);
 });
 </script>
 
@@ -151,20 +147,13 @@ onUnmounted(() => {
       {{ loadingLines[lineIndex] }}
     </p>
 
-    <!-- Enter button (the audio user-gesture) -->
+    <!-- Status line (the inn opens itself once the table is ready) -->
     <div class="relative flex h-16 items-center justify-center">
-      <button
-        v-if="buttonVisible"
-        class="btn-wax fade-up px-10 py-4 text-sm"
-        @click="onEnter"
-      >
-        Enter the Inn
-      </button>
       <span
-        v-else
         class="font-heading text-xs uppercase tracking-[0.3em] text-parchment/30"
+        :class="{ 'fade-up': ready }"
       >
-        the innkeeper is preparing your table
+        {{ ready ? "the door swings open…" : "the innkeeper is preparing your table" }}
       </span>
     </div>
   </div>

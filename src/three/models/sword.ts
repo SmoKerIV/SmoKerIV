@@ -1,6 +1,11 @@
 /**
- * Longsword ~1.05 m, built lying flat along the X axis (blade tip toward +X),
- * resting on its side. Pivot at the underside (y = 0), centered lengthwise.
+ * Longsword ~0.93 m, built lying flat along the X axis (blade tip toward +X),
+ * resting on its side. The blade is a beveled extrusion (diamond-ish
+ * cross-section) with a recessed fuller strip and glowing rune etchings;
+ * swept crossguard quillons, ridged leather grip, weighted pommel.
+ * The whole sword tilts slightly nose-down so the crossguard supports it
+ * and the blade tip kisses the table. Pivot at the underside (y = 0),
+ * centered lengthwise.
  */
 import * as THREE from "three";
 import { ITEM_LABELS } from "../types";
@@ -10,6 +15,7 @@ import {
   ironMaterial,
   leatherDarkMaterial,
 } from "./materials";
+import { makeBladeRuneTexture } from "./textures";
 
 export function buildSword(): THREE.Group {
   const group = new THREE.Group();
@@ -20,94 +26,151 @@ export function buildSword(): THREE.Group {
   const brass = brassMaterial();
   const grip = leatherDarkMaterial();
 
-  // Assemble around x = 0 at the guard, then recenter the whole group.
+  // Assemble around x = 0 at the guard, blade axis at local y = 0,
+  // then lift + tilt + recenter the whole assembly.
   const parts = new THREE.Group();
 
-  const restY = 0.018; // mid-plane of the lying sword
-
-  // --- Blade: tapered silhouette extruded flat ------------------------------
-  const BLADE_LEN = 0.72;
+  // --- Blade: tapered silhouette, beveled extrusion --------------------------
+  const BLADE_LEN = 0.62;
   const shape = new THREE.Shape();
-  shape.moveTo(0, 0.027);
-  shape.lineTo(0.5, 0.019);
-  shape.lineTo(BLADE_LEN - 0.09, 0.013);
-  shape.lineTo(BLADE_LEN, 0);
-  shape.lineTo(BLADE_LEN - 0.09, -0.013);
-  shape.lineTo(0.5, -0.019);
-  shape.lineTo(0, -0.027);
+  shape.moveTo(0, 0.033);
+  shape.lineTo(0.2, 0.029);
+  shape.lineTo(0.4, 0.023);
+  shape.lineTo(0.51, 0.017);
+  shape.quadraticCurveTo(0.585, 0.009, BLADE_LEN, 0);
+  shape.quadraticCurveTo(0.585, -0.009, 0.51, -0.017);
+  shape.lineTo(0.4, -0.023);
+  shape.lineTo(0.2, -0.029);
+  shape.lineTo(0, -0.033);
   shape.closePath();
   const bladeGeo = new THREE.ExtrudeGeometry(shape, {
-    depth: 0.012,
-    bevelEnabled: false,
+    depth: 0.005,
+    bevelEnabled: true,
+    bevelThickness: 0.0035,
+    bevelSize: 0.0075,
+    bevelSegments: 2,
+    curveSegments: 6,
   });
-  bladeGeo.rotateX(-Math.PI / 2); // lie flat: width in Z, thickness in Y
+  // Extrusion spans z in [-0.0035, 0.0085]; center it before lying flat.
+  bladeGeo.translate(0, 0, -0.0025);
+  bladeGeo.rotateX(-Math.PI / 2); // length in X, width in Z, thickness in Y
   const blade = new THREE.Mesh(bladeGeo, iron);
-  // Extruded thickness spans local y [0, 0.012]; keep the underside on the table.
-  blade.position.set(0.015, 0.002, 0);
+  blade.position.set(0.018, 0, 0);
   blade.castShadow = true;
   parts.add(blade);
 
-  // Fuller groove (subtle darker strip flush with the blade's top face)
-  const fuller = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5, 0.0025, 0.0045),
-    ironDark,
-  );
-  fuller.position.set(0.28, 0.0148, 0);
+  // Fuller (blood groove): dark tapered strip set into the top face
+  const fullerShape = new THREE.Shape();
+  fullerShape.moveTo(0, 0.0055);
+  fullerShape.lineTo(0.28, 0.004);
+  fullerShape.lineTo(0.4, 0);
+  fullerShape.lineTo(0.28, -0.004);
+  fullerShape.lineTo(0, -0.0055);
+  fullerShape.closePath();
+  const fullerGeo = new THREE.ExtrudeGeometry(fullerShape, {
+    depth: 0.0012,
+    bevelEnabled: false,
+  });
+  fullerGeo.rotateX(-Math.PI / 2);
+  const fuller = new THREE.Mesh(fullerGeo, ironDark);
+  fuller.position.set(0.038, 0.0052, 0);
   parts.add(fuller);
 
-  // Emissive teal rune strip near the guard
-  const runeStrip = new THREE.Mesh(
-    new THREE.BoxGeometry(0.08, 0.0022, 0.006),
+  // Rune etchings glowing faintly inside the fuller (canvas decal)
+  const runeTex = makeBladeRuneTexture();
+  const runes = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.21, 0.02).rotateX(-Math.PI / 2),
     new THREE.MeshStandardMaterial({
-      color: 0x0c2a26,
-      emissive: 0x35d0ba,
-      emissiveIntensity: 0.35,
-      roughness: 0.4,
-      metalness: 0.2,
+      map: runeTex,
+      emissiveMap: runeTex,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.6,
+      transparent: true,
+      depthWrite: false,
+      roughness: 0.6,
+      metalness: 0.0,
     }),
   );
-  runeStrip.position.set(0.08, 0.015, 0);
-  parts.add(runeStrip);
+  runes.position.set(0.15, 0.0068, 0);
+  parts.add(runes);
 
-  // --- Crossguard ------------------------------------------------------------
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.03, 0.19), brass);
-  guard.position.set(0, restY, 0);
-  guard.castShadow = true;
-  parts.add(guard);
-  // Guard tips (small spheres for a finished look)
-  for (const sz of [-1, 1]) {
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), brass);
-    tip.position.set(0, restY, sz * 0.098);
+  // --- Crossguard: central block + swept quillons ------------------------------
+  const guardBlock = new THREE.Mesh(
+    new THREE.BoxGeometry(0.05, 0.046, 0.05),
+    brass,
+  );
+  guardBlock.castShadow = true;
+  parts.add(guardBlock);
+
+  const QUILLON_LEN = 0.115;
+  const SWEEP = 0.3; // radians, quillons angle toward the blade
+  const quillonGeo = new THREE.CylinderGeometry(0.0072, 0.0115, QUILLON_LEN, 8)
+    .rotateX(Math.PI / 2); // along Z, narrow end at +Z
+  for (const sz of [-1, 1] as const) {
+    const quillon = new THREE.Mesh(quillonGeo, brass);
+    quillon.rotation.y = sz === 1 ? SWEEP : Math.PI - SWEEP;
+    quillon.position.set(0.016, 0, sz * 0.072);
+    quillon.castShadow = true;
+    parts.add(quillon);
+    // Ball finial at each quillon tip
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 8, 6), brass);
+    tip.position.set(
+      0.016 + (QUILLON_LEN / 2) * Math.sin(SWEEP),
+      0,
+      sz * (0.072 + (QUILLON_LEN / 2) * Math.cos(SWEEP)),
+    );
     tip.castShadow = true;
     parts.add(tip);
   }
 
-  // --- Grip: leather-wrapped cylinder with rings ------------------------------
-  const GRIP_LEN = 0.24;
-  const gripMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.015, 0.017, GRIP_LEN, 10).rotateZ(Math.PI / 2),
-    grip,
-  );
-  gripMesh.position.set(-0.0175 - GRIP_LEN / 2, restY, 0);
+  // --- Grip: ridged leather wrap (lathe) with brass ferrules -------------------
+  const GRIP_LEN = 0.2;
+  const GRIP_START = -0.235; // grip runs from here toward the guard
+  const gripPoints: THREE.Vector2[] = [];
+  const N = 24;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const base = 0.0148 - t * 0.0016; // slight taper toward the pommel end
+    const ridge =
+      0.0024 *
+      Math.abs(Math.sin(t * Math.PI * 6)) *
+      Math.sin(t * Math.PI) ** 0.35;
+    gripPoints.push(new THREE.Vector2(base + ridge, t * GRIP_LEN));
+  }
+  const gripGeo = new THREE.LatheGeometry(gripPoints, 12).rotateZ(-Math.PI / 2);
+  const gripMesh = new THREE.Mesh(gripGeo, grip);
+  gripMesh.position.set(GRIP_START, 0, 0);
   gripMesh.castShadow = true;
   parts.add(gripMesh);
-  // Wrap rings
-  const ringGeo = new THREE.TorusGeometry(0.0165, 0.0028, 6, 12).rotateY(Math.PI / 2);
-  for (let i = 0; i < 4; i++) {
-    const ring = new THREE.Mesh(ringGeo, grip);
-    ring.position.set(-0.055 - i * 0.05, restY, 0);
-    parts.add(ring);
+  // Ferrule collars at both ends of the wrap
+  const ferruleGeo = new THREE.CylinderGeometry(0.0165, 0.0165, 0.012, 10)
+    .rotateZ(Math.PI / 2);
+  for (const fx of [-0.04, -0.228]) {
+    const ferrule = new THREE.Mesh(ferruleGeo, brass);
+    ferrule.position.set(fx, 0, 0);
+    ferrule.castShadow = true;
+    parts.add(ferrule);
   }
 
-  // --- Pommel -----------------------------------------------------------------
-  const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 8), brass);
-  pommel.scale.set(1.15, 1, 1);
-  pommel.position.set(-0.0175 - GRIP_LEN - 0.02, restY, 0);
+  // --- Pommel: weighted scent-stopper + button ---------------------------------
+  const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.029, 12, 9), brass);
+  pommel.scale.set(1.25, 0.88, 1.0);
+  pommel.position.set(-0.262, 0, 0);
   pommel.castShadow = true;
   parts.add(pommel);
+  const button = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 6), ironDark);
+  button.position.set(-0.297, 0, 0);
+  button.castShadow = true;
+  parts.add(button);
 
-  // Recenter: sword spans roughly [-0.30, +0.735] -> shift to center on origin
-  parts.position.x = -(0.735 - 0.3) / 2;
+  // --- Resting pose --------------------------------------------------------------
+  // Lift the axis so the guard's underside grazes the table, then tilt
+  // nose-down so the tip touches: two-point rest on guard + blade tip.
+  const AXIS_Y = 0.024;
+  parts.rotation.z = -0.028;
+  parts.position.y = AXIS_Y;
+  // Recenter lengthwise: sword spans x in [-0.308, +0.638] before the shift.
+  parts.position.x = -(0.638 - 0.308) / 2;
   group.add(parts);
 
   group.userData.itemId = "sword";

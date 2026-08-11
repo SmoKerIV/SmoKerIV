@@ -33,13 +33,15 @@ export type TimeOfDay = "auto" | "day" | "night";
 /**
  * Logical CSS size (px) of one book page pane. The UI lays text out in a
  * PAGE_CSS_W × PAGE_CSS_H div (position fixed at 0,0; transform-origin 0 0)
- * and the scene supplies a matrix3d that maps it onto the 3D page on screen.
+ * and the scene supplies a flat 2D `matrix(...)` transform that maps it
+ * onto the 3D page on screen (the reading camera is top-down, so the page
+ * projects to a rectangle — no matrix3d, which Chromium composits badly).
  * Landscape, matching the tome's page proportions (0.46 m × 0.33 m).
  */
 export const PAGE_CSS_W = 640;
 export const PAGE_CSS_H = 460;
 
-/** CSS `matrix3d(...)` transform strings for the open book's two pages. */
+/** CSS transform strings for the open book's two pages. */
 export interface BookPageScreenTransforms {
   left: string;
   right: string;
@@ -90,6 +92,11 @@ export interface SceneEvents {
    * bothOut is true when every candle on the table is snuffed.
    */
   onCandleSnuff?: (state: { snuffed: boolean; bothOut: boolean }) => void;
+  /**
+   * The console's fireball detonated (flash + ember burst just fired).
+   * The overlay uses this to time its CSS screen shake to the impact.
+   */
+  onFireballImpact?: () => void;
 }
 
 /**
@@ -111,6 +118,12 @@ export interface ISceneManager {
   activateHighlighted(): void;
   /** Roll the d20 (also triggered by clicking it). */
   rollDice(): void;
+  /**
+   * Console easter egg: hurl a glowing projectile across the current view
+   * that detonates (flash + embers + smoke), then fires onFireballImpact.
+   * Safe to re-cast immediately; reduced motion skips straight to impact.
+   */
+  castFireball(): void;
   setQuality(quality: Quality): void;
   setReducedMotion(reduced: boolean): void;
   /** Switch the inn's mood lighting; "auto" follows the visitor's clock. */

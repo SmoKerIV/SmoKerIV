@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type {
   BookPageScreenTransforms,
   BookSection,
@@ -7,11 +7,13 @@ import type {
   SceneEvents,
 } from "./three/types";
 import type { SceneManager as SceneManagerT } from "./three/SceneManager";
+import type { FocusCardItem } from "./data/content";
 import { useSettings } from "./composables/useSettings";
 import { useAudio } from "./composables/useAudio";
 import { track } from "./composables/useAnalytics";
 import LoaderScreen from "./components/LoaderScreen.vue";
 import ItemTooltip from "./components/ItemTooltip.vue";
+import ItemFocusCard from "./components/ItemFocusCard.vue";
 import BookOverlay from "./components/BookOverlay.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import HudBar from "./components/HudBar.vue";
@@ -52,6 +54,15 @@ const focusedItem = ref<ItemId | null>(null);
 const hoveredItem = ref<ItemId | null>(null);
 const hoverX = ref(0);
 const hoverY = ref(0);
+
+/** True only once the focus zoom has settled (cue for the payoff card). */
+const focusCardShown = ref(false);
+/** The tome opens its own overlay and the die never takes focus. */
+const focusCardItem = computed<FocusCardItem | null>(() => {
+  const item = focusedItem.value;
+  if (!item || item === "spellbook" || item === "dice") return null;
+  return item;
+});
 
 const bookOpen = ref(false);
 const bookSection = ref<BookSection>("cover");
@@ -162,6 +173,9 @@ const events: SceneEvents = {
     }
     if (item !== "spellbook") track("item_focus", { item });
     hoveredItem.value = null;
+    // Re-clicks on the already-focused item (candle snuffing) must not
+    // hide the card — focusItem is idempotent and won't settle again.
+    if (focusedItem.value !== item) focusCardShown.value = false;
     focusedItem.value = item;
     appPhase.value = "focused";
     scene?.focusItem(item);
@@ -171,14 +185,21 @@ const events: SceneEvents = {
     if (item === "spellbook") {
       bookOpen.value = true;
     } else if (item === null) {
+      focusCardShown.value = false;
       focusedItem.value = null;
       if (appPhase.value === "focused") appPhase.value = "table";
+    } else {
+      focusCardShown.value = true;
     }
   },
   onBookPageTransforms: (t) => {
     pageTransforms.value = t;
   },
   onDiceResult: handleDiceResult,
+  onFireballImpact: () => {
+    // The 3D detonation just fired — shake the DOM on the same beat.
+    screenShake();
+  },
   onCandleSnuff: ({ snuffed, bothOut }) => {
     if (!snuffed) {
       showToast("A match flares — light returns.");
@@ -224,6 +245,8 @@ function closeBook(): void {
 }
 
 function unfocus(): void {
+  // Hide the payoff card the instant the return flight starts.
+  focusCardShown.value = false;
   scene?.focusItem(null);
 }
 
@@ -233,7 +256,9 @@ function unfocus(): void {
 function enterInn(): void {
   if (appPhase.value !== "loading") return;
   track("enter_inn");
-  // This click is the audio user-gesture.
+  // Entering is automatic now (no button), so this is NOT a user gesture:
+  // the AudioContext is created suspended and resumes on the first real
+  // click/keypress (see the one-time listeners in onMounted).
   audio.unlock();
   audio.setSfxOn(settings.sfxOn);
   audio.setMusicVolume(settings.musicVolume);
@@ -246,6 +271,11 @@ function enterInn(): void {
       pendingBookSection = null;
     }
   }, 900);
+}
+
+/** First real user gesture: resume the (autoplay-blocked) AudioContext. */
+function unlockAudioOnGesture(): void {
+  audio.unlock();
 }
 
 /* ------------------------------------------------------------------ */
@@ -358,7 +388,7 @@ function onKeydown(event: KeyboardEvent): void {
 /* Console effects                                                      */
 /* ------------------------------------------------------------------ */
 let shakeTimer: ReturnType<typeof setTimeout> | null = null;
-function castFireball(): void {
+function screenShake(): void {
   const app = document.getElementById("app");
   if (!app) return;
   app.classList.remove("screen-shake");
@@ -367,6 +397,13 @@ function castFireball(): void {
   app.classList.add("screen-shake");
   if (shakeTimer) clearTimeout(shakeTimer);
   shakeTimer = setTimeout(() => app.classList.remove("screen-shake"), 700);
+}
+
+function castFireball(): void {
+  // The 3D cast fires onFireballImpact when it detonates, which triggers
+  // the CSS shake at the right beat; flat mode keeps the plain shake.
+  if (scene) scene.castFireball();
+  else screenShake();
 }
 
 /* ------------------------------------------------------------------ */
@@ -443,6 +480,8 @@ onMounted(async () => {
     settings.reducedMotion,
   );
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("pointerdown", unlockAudioOnGesture, { once: true });
+  window.addEventListener("keydown", unlockAudioOnGesture, { once: true });
   void probeCv();
 
   if (useFallback) {
@@ -462,6 +501,8 @@ onMounted(async () => {
 
 function teardown(): void {
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("pointerdown", unlockAudioOnGesture);
+  window.removeEventListener("keydown", unlockAudioOnGesture);
   document.removeEventListener("visibilitychange", onVisibilityChange);
   scene?.dispose();
   scene = null;
@@ -504,30 +545,54 @@ import.meta.hot?.dispose(() => teardown());
         @open-settings="settingsOpen = true"
       />
 
-      <!-- floating way back when zoomed on an item (book has its own strap) -->
+      <!-- floating way back when zoomed on an item (book has its own strap).
+           Centered by a full-width flex wrapper, NOT translate-x: the
+           book-fade transition animates `transform` and would replace a
+           translate-based centering, making the button jump mid-fade. -->
       <Transition name="book-fade">
-        <button
+        <div
           v-if="appPhase === 'focused' && !bookOpen"
-          class="btn-leather fixed left-1/2 top-4 z-30 -translate-x-1/2 whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-[11px] opacity-90"
-          @click="unfocus"
+          class="pointer-events-none fixed inset-x-0 top-4 z-30 flex justify-center"
         >
-          ⟨ View the whole table
-        </button>
+          <button
+            class="btn-leather pointer-events-auto whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-[11px] opacity-90"
+            @click="unfocus"
+          >
+            ⟨ View the whole table
+          </button>
+        </div>
       </Transition>
 
-      <!-- mobile: the tome is the site — make opening it obvious -->
+      <!-- item payoff card once the zoom settles (strap is top-center) -->
+      <Transition name="focus-card">
+        <ItemFocusCard
+          v-if="
+            appPhase === 'focused' && focusCardShown && focusCardItem && !bookOpen
+          "
+          :item="focusCardItem"
+        />
+      </Transition>
+
+      <!-- mobile: the tome is the site — make opening it obvious.
+           md:hidden keeps it off desktop even when a touchscreen makes the
+           pointer report as coarse. Flex-wrapper centering for the same
+           reason as the strap above. -->
       <Transition name="book-fade">
-        <button
+        <div
           v-if="appPhase === 'table' && isCoarseDevice && !flatBookOpen"
-          class="btn-wax fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2.5 whitespace-nowrap rounded-full px-6 py-3 text-[12px]"
-          @click="openBookAt('cover')"
+          class="pointer-events-none fixed bottom-6 inset-x-0 z-30 flex justify-center md:hidden"
         >
-          <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 6c-2-1.5-4.5-2-8-2v14c3.5 0 6 .5 8 2 2-1.5 4.5-2 8-2V4c-3.5 0-6 .5-8 2z" />
-            <path d="M12 6v14" />
-          </svg>
-          Open the Tome
-        </button>
+          <button
+            class="btn-wax pointer-events-auto flex items-center gap-2.5 whitespace-nowrap rounded-full px-6 py-3 text-[12px]"
+            @click="openBookAt('cover')"
+          >
+            <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 6c-2-1.5-4.5-2-8-2v14c3.5 0 6 .5 8 2 2-1.5 4.5-2 8-2V4c-3.5 0-6 .5-8 2z" />
+              <path d="M12 6v14" />
+            </svg>
+            Open the Tome
+          </button>
+        </div>
       </Transition>
 
       <!-- the tome: ink pinned onto the 3D pages -->
@@ -586,7 +651,7 @@ import.meta.hot?.dispose(() => teardown());
       <IncantationConsole
         v-if="consoleOpen"
         @close="consoleOpen = false"
-        @shake="castFireball"
+        @fireball="castFireball"
         @open-section="openBookAt"
         @wish="hireEgg"
         @roll="handleDiceResult"

@@ -17,20 +17,6 @@ const contactLines = [
   { kind: "LinkedIn", label: contact.linkedin.label, href: contact.linkedin.url },
   { kind: "Instagram", label: contact.instagram.label, href: contact.instagram.url },
 ];
-
-const canGo3d = ((): boolean => {
-  try {
-    return !!document.createElement("canvas").getContext("webgl2");
-  } catch {
-    return false;
-  }
-})();
-
-const backTo3dUrl = ((): string => {
-  const url = new URL(window.location.href);
-  url.searchParams.delete("flat");
-  return url.toString();
-})();
 </script>
 
 <template>
@@ -58,13 +44,6 @@ const backTo3dUrl = ((): string => {
           ✦ You hold the humble paper copy — visit on a bigger screen to sit
           at the candle-lit 3D table itself.
         </p>
-        <a
-          v-if="canGo3d"
-          :href="backTo3dUrl"
-          class="btn-leather mt-5 inline-block rounded px-5 py-2 text-[11px]"
-        >
-          Enter the 3D Inn Instead
-        </a>
       </header>
 
       <!-- Who am I -->

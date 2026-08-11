@@ -9,11 +9,15 @@ const SPARKLE_COUNT = 40;
 const BURST_COUNT = 6;
 /** Pool for a candle-snuff smoke wisp (6–10 used per puff, ~1.5 s life). */
 const SMOKE_COUNT = 10;
+/** Ring pool shared by the fireball's flight trail and its impact burst. */
+const FIREBALL_EMBER_COUNT = 48;
+/** Embers thrown radially by a fireball impact. */
+const FIREBALL_BURST_SIZE = 20;
 
 const BOOK_CENTER = new THREE.Vector3(0, TABLE_SURFACE_Y + 0.22, -0.05);
 
 /** Soft radial dot so points don't render as hard squares. */
-function makeDotTexture(): THREE.Texture {
+export function makeDotTexture(): THREE.Texture {
   const size = 64;
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -82,6 +86,16 @@ export class Particles {
   private readonly smokeDriftX = new Float32Array(SMOKE_COUNT);
   private readonly smokeDriftZ = new Float32Array(SMOKE_COUNT);
   private readonly smokePhase = new Float32Array(SMOKE_COUNT);
+
+  private readonly fireballMaterial: THREE.PointsMaterial;
+  private readonly fireballGeometry: THREE.BufferGeometry;
+  private readonly fireballPoints: THREE.Points;
+  private readonly fireballLife = new Float32Array(FIREBALL_EMBER_COUNT);
+  private readonly fireballMaxLife = new Float32Array(FIREBALL_EMBER_COUNT);
+  /** Per-particle world velocity, xyz-interleaved. */
+  private readonly fireballVel = new Float32Array(FIREBALL_EMBER_COUNT * 3);
+  /** Ring cursor so overlapping casts recycle the oldest particles. */
+  private fireballCursor = 0;
 
   private sparkleGeometry: THREE.BufferGeometry;
   private sparklePoints: THREE.Points;
@@ -185,6 +199,34 @@ export class Particles {
     this.smokePoints.visible = false;
     this.group.add(this.smokePoints);
 
+    // Fireball ember ring pool: trail sparks in flight, radial burst on hit.
+    this.fireballMaterial = new THREE.PointsMaterial({
+      size: 0.04,
+      map: this.dotTexture,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+    this.fireballGeometry = new THREE.BufferGeometry();
+    this.fireballGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(FIREBALL_EMBER_COUNT * 3), 3),
+    );
+    this.fireballGeometry.setAttribute(
+      "color",
+      new THREE.BufferAttribute(new Float32Array(FIREBALL_EMBER_COUNT * 3), 3),
+    );
+    this.fireballPoints = new THREE.Points(
+      this.fireballGeometry,
+      this.fireballMaterial,
+    );
+    this.fireballPoints.frustumCulled = false;
+    this.fireballPoints.visible = false;
+    this.group.add(this.fireballPoints);
+
     const sparkle = this.buildSparkles();
     this.sparkleGeometry = sparkle.geometry;
     this.sparklePoints = sparkle.points;
@@ -246,11 +288,41 @@ export class Particles {
     this.smokePoints.visible = true;
   }
 
+  /** One short-lived trail spark at the fireball's current position. */
+  emitEmberAt(origin: THREE.Vector3): void {
+    this.writeFireballEmber(
+      origin,
+      THREE.MathUtils.randFloat(-0.15, 0.15),
+      THREE.MathUtils.randFloat(-0.05, 0.25),
+      THREE.MathUtils.randFloat(-0.15, 0.15),
+      THREE.MathUtils.randFloat(0.3, 0.6),
+    );
+  }
+
+  /** Radial ember burst at a fireball impact point. */
+  burstEmbersAt(origin: THREE.Vector3, count = FIREBALL_BURST_SIZE): void {
+    for (let n = 0; n < count; n++) {
+      // Random direction with an upward bias so sparks fountain, not sink.
+      const theta = Math.random() * Math.PI * 2;
+      const y = THREE.MathUtils.randFloat(-0.2, 1);
+      const r = Math.sqrt(Math.max(1 - y * y, 0));
+      const speed = THREE.MathUtils.randFloat(0.6, 1.8);
+      this.writeFireballEmber(
+        origin,
+        Math.cos(theta) * r * speed,
+        y * speed,
+        Math.sin(theta) * r * speed,
+        THREE.MathUtils.randFloat(0.45, 0.95),
+      );
+    }
+  }
+
   update(delta: number, elapsed: number): void {
     this.updateDust(delta);
     this.updateEmbers(delta, elapsed);
     this.updateBurst(delta);
     this.updateSmoke(delta, elapsed);
+    this.updateFireballEmbers(delta);
     this.updateSparkles(delta, elapsed);
   }
 
@@ -274,11 +346,13 @@ export class Particles {
     this.emberGeometry.dispose();
     this.burstGeometry.dispose();
     this.smokeGeometry.dispose();
+    this.fireballGeometry.dispose();
     this.sparkleGeometry.dispose();
     this.dustMaterial.dispose();
     this.emberMaterial.dispose();
     this.burstMaterial.dispose();
     this.smokeMaterial.dispose();
+    this.fireballMaterial.dispose();
     this.sparkleMaterial.dispose();
     this.dotTexture.dispose();
   }
@@ -460,6 +534,67 @@ export class Particles {
     posAttr.needsUpdate = true;
     colorAttr.needsUpdate = true;
     if (!anyAlive) this.smokePoints.visible = false;
+  }
+
+  private writeFireballEmber(
+    origin: THREE.Vector3,
+    vx: number,
+    vy: number,
+    vz: number,
+    life: number,
+  ): void {
+    const i = this.fireballCursor;
+    this.fireballCursor = (i + 1) % FIREBALL_EMBER_COUNT;
+    this.fireballMaxLife[i] = life;
+    this.fireballLife[i] = life;
+    this.fireballVel[i * 3] = vx;
+    this.fireballVel[i * 3 + 1] = vy;
+    this.fireballVel[i * 3 + 2] = vz;
+    const posAttr = this.fireballGeometry.getAttribute(
+      "position",
+    ) as THREE.BufferAttribute;
+    const positions = posAttr.array as Float32Array;
+    positions[i * 3] = origin.x + THREE.MathUtils.randFloat(-0.01, 0.01);
+    positions[i * 3 + 1] = origin.y + THREE.MathUtils.randFloat(-0.01, 0.01);
+    positions[i * 3 + 2] = origin.z + THREE.MathUtils.randFloat(-0.01, 0.01);
+    posAttr.needsUpdate = true;
+    this.fireballPoints.visible = true;
+  }
+
+  private updateFireballEmbers(delta: number): void {
+    if (!this.fireballPoints.visible) return;
+    const posAttr = this.fireballGeometry.getAttribute(
+      "position",
+    ) as THREE.BufferAttribute;
+    const colorAttr = this.fireballGeometry.getAttribute(
+      "color",
+    ) as THREE.BufferAttribute;
+    const positions = posAttr.array as Float32Array;
+    const colors = colorAttr.array as Float32Array;
+    let anyAlive = false;
+    for (let i = 0; i < FIREBALL_EMBER_COUNT; i++) {
+      if (this.fireballLife[i] <= 0) {
+        colors[i * 3] = 0;
+        colors[i * 3 + 1] = 0;
+        colors[i * 3 + 2] = 0;
+        continue;
+      }
+      anyAlive = true;
+      this.fireballLife[i] -= delta;
+      // Light gravity so burst sparks arc down instead of drifting forever.
+      this.fireballVel[i * 3 + 1] -= 2.2 * delta;
+      positions[i * 3] += this.fireballVel[i * 3] * delta;
+      positions[i * 3 + 1] += this.fireballVel[i * 3 + 1] * delta;
+      positions[i * 3 + 2] += this.fireballVel[i * 3 + 2] * delta;
+      // White-hot core cooling to deep orange as it dies.
+      const t = Math.max(this.fireballLife[i] / this.fireballMaxLife[i], 0);
+      colors[i * 3] = Math.min(t * 1.8, 1);
+      colors[i * 3 + 1] = t * 0.6;
+      colors[i * 3 + 2] = t * 0.15;
+    }
+    posAttr.needsUpdate = true;
+    colorAttr.needsUpdate = true;
+    if (!anyAlive) this.fireballPoints.visible = false;
   }
 
   private buildSparkles(): {
