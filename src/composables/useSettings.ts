@@ -19,6 +19,11 @@ const TIMES_OF_DAY: TimeOfDay[] = ["auto", "day", "night"];
 
 function autoQuality(): Quality {
   if (typeof window === "undefined") return "medium";
+  // Touch devices: thermals and battery beat sparkle. Phones start low
+  // (the ledger lets anyone raise it); tablets can carry medium.
+  if (window.matchMedia?.("(pointer: coarse)").matches) {
+    return window.matchMedia("(max-width: 960px)").matches ? "low" : "medium";
+  }
   const dpr = window.devicePixelRatio ?? 1;
   const cores = navigator.hardwareConcurrency ?? 4;
   return dpr <= 1.5 && cores >= 8 ? "high" : "medium";

@@ -124,6 +124,23 @@ export interface ISceneManager {
    * Safe to re-cast immediately; reduced motion skips straight to impact.
    */
   castFireball(): void;
+  /**
+   * Console spell: lightning beyond the -Z window — the sky quad flares
+   * white-blue in a strobe pattern with a matching bolt light. Reduced
+   * motion gets a single soft flash instead of the strobe.
+   */
+  castLightning(): void;
+  /**
+   * Console spell: a gust snuffs every burning candle (smoke, fading
+   * lights, onCandleSnuff with bothOut), then a match relights the table
+   * a few seconds later.
+   */
+  castGustOfWind(): void;
+  /**
+   * Console spell: the loose tableware takes a small staggered hop and
+   * the d20 rolls for real. Reduced motion rolls the die only.
+   */
+  castAnimateObjects(): void;
   setQuality(quality: Quality): void;
   setReducedMotion(reduced: boolean): void;
   /** Switch the inn's mood lighting; "auto" follows the visitor's clock. */

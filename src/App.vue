@@ -73,12 +73,23 @@ const pageTransforms = ref<BookPageScreenTransforms | null>(null);
 /** Mobile / coarse pointer: the tome opens as a plain scrollable page. */
 const flatBookOpen = ref(false);
 
-/** Small screens & touch: aligned 3D text is unreadable — serve the boring CV. */
-function coarseDevice(): boolean {
-  return window.matchMedia("(max-width: 767px), (pointer: coarse)").matches;
+/**
+ * Small screens: the pinned 3D ink can't stay readable — serve the flat
+ * tome. Width-only, so a large touch screen (iPad in landscape) still gets
+ * the real 3D book; 960px covers every phone in landscape.
+ */
+const flatBookQuery = window.matchMedia("(max-width: 960px)");
+function flatBookDevice(): boolean {
+  return flatBookQuery.matches;
 }
-/** Evaluated once for template chrome (the button doesn't need live tracking). */
-const isCoarseDevice = coarseDevice();
+/** Coarse primary pointer: no hover discovery — show touch-first chrome.
+ * Live-tracked so rotating a tablet / docking a keyboard updates it. */
+const coarseQuery = window.matchMedia("(pointer: coarse)");
+const isCoarseDevice = ref(coarseQuery.matches);
+function onCoarseChange(event: MediaQueryListEvent): void {
+  isCoarseDevice.value = event.matches;
+}
+coarseQuery.addEventListener("change", onCoarseChange);
 
 /** URL of the downloadable CV, set only if /baker-cv.pdf actually exists. */
 const cvUrl = ref<string | null>(null);
@@ -165,7 +176,7 @@ const events: SceneEvents = {
       scene?.rollDice();
       return;
     }
-    if (item === "spellbook" && coarseDevice()) {
+    if (item === "spellbook" && flatBookDevice()) {
       hoveredItem.value = null;
       flatBookOpen.value = true;
       track("book_open", { mode: "flat" });
@@ -224,7 +235,7 @@ function openBookAt(section: BookSection): void {
   bookSection.value = section;
   consoleOpen.value = false;
   if (useFallback) return; // fallback shows everything already
-  if (coarseDevice()) {
+  if (flatBookDevice()) {
     flatBookOpen.value = true;
     track("book_open", { mode: "flat" });
     return;
@@ -269,6 +280,9 @@ function enterInn(): void {
     if (pendingBookSection) {
       openBookAt(pendingBookSection);
       pendingBookSection = null;
+    } else {
+      // Let the entrance settle before speaking up.
+      window.setTimeout(maybeShowTouchHint, 1400);
     }
   }, 900);
 }
@@ -276,6 +290,22 @@ function enterInn(): void {
 /** First real user gesture: resume the (autoplay-blocked) AudioContext. */
 function unlockAudioOnGesture(): void {
   audio.unlock();
+}
+
+/**
+ * One-time touch onboarding: without hover there is nothing hinting that
+ * the tabletop curios are interactive — say it once, then stay quiet.
+ */
+const TOUCH_HINT_KEY = "smokeriv-touch-hint-shown";
+function maybeShowTouchHint(): void {
+  if (!isCoarseDevice.value) return;
+  try {
+    if (localStorage.getItem(TOUCH_HINT_KEY)) return;
+    localStorage.setItem(TOUCH_HINT_KEY, "1");
+  } catch {
+    /* storage unavailable — the hint simply repeats; harmless */
+  }
+  showToast("Tap the curios on the table — every one of them answers.", "quest");
 }
 
 /* ------------------------------------------------------------------ */
@@ -406,6 +436,13 @@ function castFireball(): void {
   else screenShake();
 }
 
+function castDivination(): void {
+  // Roll the physical d20 (the result toast arrives via onDiceResult);
+  // flat mode falls back to a plain oracle roll.
+  if (scene) scene.rollDice();
+  else handleDiceResult(1 + Math.floor(Math.random() * 20));
+}
+
 /* ------------------------------------------------------------------ */
 /* Settings → scene/audio                                               */
 /* ------------------------------------------------------------------ */
@@ -455,6 +492,14 @@ watch(
   },
 );
 
+/* Flat tome (coarse pointers) shares the same #/book/<section> deep links. */
+watch([flatBookOpen, bookSection], ([open, section], [wasOpen]) => {
+  if (useFallback) return;
+  const base = window.location.pathname + window.location.search;
+  if (open) history.replaceState(null, "", `${base}#/book/${section}`);
+  else if (wasOpen) history.replaceState(null, "", base);
+});
+
 /* ------------------------------------------------------------------ */
 /* Lifecycle                                                            */
 /* ------------------------------------------------------------------ */
@@ -486,6 +531,11 @@ onMounted(async () => {
 
   if (useFallback) {
     appPhase.value = "table";
+    // Deep links still work on the plain page — hand it the section.
+    if (pendingBookSection) {
+      bookSection.value = pendingBookSection;
+      pendingBookSection = null;
+    }
     return;
   }
 
@@ -504,6 +554,7 @@ function teardown(): void {
   window.removeEventListener("pointerdown", unlockAudioOnGesture);
   window.removeEventListener("keydown", unlockAudioOnGesture);
   document.removeEventListener("visibilitychange", onVisibilityChange);
+  coarseQuery.removeEventListener("change", onCoarseChange);
   scene?.dispose();
   scene = null;
   audio.dispose();
@@ -516,7 +567,7 @@ import.meta.hot?.dispose(() => teardown());
 <template>
   <div class="relative h-full w-full overflow-hidden bg-night">
     <!-- No WebGL2 / ?flat=1 → plain parchment page -->
-    <FallbackView v-if="useFallback" />
+    <FallbackView v-if="useFallback" v-model:section="bookSection" />
 
     <template v-else>
       <canvas
@@ -543,6 +594,7 @@ import.meta.hot?.dispose(() => teardown());
         :cv-url="cvUrl"
         @toggle-music="settings.musicOn = !settings.musicOn"
         @open-settings="settingsOpen = true"
+        @open-console="consoleOpen = true"
       />
 
       <!-- floating way back when zoomed on an item (book has its own strap).
@@ -552,7 +604,8 @@ import.meta.hot?.dispose(() => teardown());
       <Transition name="book-fade">
         <div
           v-if="appPhase === 'focused' && !bookOpen"
-          class="pointer-events-none fixed inset-x-0 top-4 z-30 flex justify-center"
+          class="pointer-events-none fixed inset-x-0 z-30 flex justify-center"
+          style="top: calc(1rem + var(--safe-top))"
         >
           <button
             class="btn-leather pointer-events-auto whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-[11px] opacity-90"
@@ -573,14 +626,15 @@ import.meta.hot?.dispose(() => teardown());
         />
       </Transition>
 
-      <!-- mobile: the tome is the site — make opening it obvious.
-           md:hidden keeps it off desktop even when a touchscreen makes the
-           pointer report as coarse. Flex-wrapper centering for the same
-           reason as the strap above. -->
+      <!-- touch: no hover discovery — make opening the tome obvious.
+           pointer:coarse only matches when the PRIMARY input is a finger,
+           so mice/trackpad machines (even with touchscreens) never see it.
+           Flex-wrapper centering for the same reason as the strap above. -->
       <Transition name="book-fade">
         <div
           v-if="appPhase === 'table' && isCoarseDevice && !flatBookOpen"
-          class="pointer-events-none fixed bottom-6 inset-x-0 z-30 flex justify-center md:hidden"
+          class="pointer-events-none fixed inset-x-0 z-30 flex justify-center"
+          style="bottom: calc(1.5rem + var(--safe-bottom))"
         >
           <button
             class="btn-wax pointer-events-auto flex items-center gap-2.5 whitespace-nowrap rounded-full px-6 py-3 text-[12px]"
@@ -610,12 +664,16 @@ import.meta.hot?.dispose(() => teardown());
       <Transition name="book-fade">
         <div v-if="flatBookOpen" class="fixed inset-0 z-50 overflow-y-auto bg-night">
           <button
-            class="btn-leather fixed right-3 top-3 z-10 rounded px-4 py-2 text-[11px]"
+            class="btn-leather fixed z-10 rounded px-4 py-2 text-[11px]"
+            style="
+              top: calc(0.75rem + var(--safe-top));
+              right: calc(0.75rem + var(--safe-right));
+            "
             @click="flatBookOpen = false"
           >
             ⟨ Back to the table
           </button>
-          <FallbackView />
+          <FallbackView v-model:section="bookSection" />
         </div>
       </Transition>
 
@@ -652,9 +710,11 @@ import.meta.hot?.dispose(() => teardown());
         v-if="consoleOpen"
         @close="consoleOpen = false"
         @fireball="castFireball"
-        @open-section="openBookAt"
+        @lightning="scene?.castLightning()"
+        @gust="scene?.castGustOfWind()"
+        @animate="scene?.castAnimateObjects()"
+        @divination="castDivination"
         @wish="hireEgg"
-        @roll="handleDiceResult"
       />
     </Transition>
   </div>

@@ -1,22 +1,27 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from "vue";
-import type { BookSection } from "../three/types";
 import { useSettings } from "../composables/useSettings";
 
 /**
  * The wizard's prepared-spell page: a parchment sheet of proper D&D spells,
  * each cast with a click (no terminal, no typing). Opened by typing
- * sudo / magic / cast anywhere at the table.
+ * sudo / magic / cast anywhere at the table. Every spell does something
+ * REAL — scene effects, weather, physics — never just navigation.
  */
 const emit = defineEmits<{
   close: [];
   /** Fireball — a real projectile in the 3D scene (CSS shake at impact). */
   fireball: [];
-  /** Divination spells open the tome at a section. */
-  "open-section": [section: BookSection];
+  /** Call Lightning — the window sky strobes white-blue. */
+  lightning: [];
+  /** Gust of Wind — every candle gutters out; a match strikes later. */
+  gust: [];
+  /** Animate Objects — the tableware hops, the d20 rolls for real. */
+  animate: [];
+  /** Divination — physically rolls the d20 on the table. */
+  divination: [];
   /** Wish — the quest-offer toast. */
   wish: [];
-  roll: [value: number];
 }>();
 
 const settings = useSettings();
@@ -27,6 +32,8 @@ interface Spell {
   flavor: string;
   /** Casts the spell and returns the line for the casting log. */
   cast: () => string;
+  /** Scene-visible spells dismiss the page so the effect can be seen. */
+  closes?: boolean;
 }
 
 const lastCast = ref(
@@ -100,18 +107,45 @@ function startFallingRunes(): void {
   };
 }
 
-function openSectionSoon(section: BookSection): void {
-  setTimeout(() => emit("open-section", section), 650);
-}
-
 const SPELLS: Spell[] = [
   {
     name: "Fireball",
     school: "Evocation · 3rd level",
     flavor: "a bead of flame; the rafters disapprove",
+    closes: true,
     cast: () => {
       emit("fireball");
       return "You trace the sigil of flame… FWOOOSH. The tankards rattle and the innkeeper glares.";
+    },
+  },
+  {
+    name: "Call Lightning",
+    school: "Conjuration · 3rd level",
+    flavor: "split the sky beyond the shutters",
+    closes: true,
+    cast: () => {
+      emit("lightning");
+      return "You point skyward — thunder cracks and white fire splits the night outside the window.";
+    },
+  },
+  {
+    name: "Gust of Wind",
+    school: "Evocation · 2nd level",
+    flavor: "a sudden squall through the inn",
+    closes: true,
+    cast: () => {
+      emit("gust");
+      return "A cold squall tears through the common room — every candle gutters out. Somewhere, a match is already being struck.";
+    },
+  },
+  {
+    name: "Animate Objects",
+    school: "Transmutation · 5th level",
+    flavor: "the tableware remembers its legs",
+    closes: true,
+    cast: () => {
+      emit("animate");
+      return "The table stirs — sword, scroll and tankard take a small, alarming hop. The d20 bolts.";
     },
   },
   {
@@ -142,44 +176,13 @@ const SPELLS: Spell[] = [
     },
   },
   {
-    name: "Identify",
-    school: "Divination · 1st level",
-    flavor: "read the wizard's character sheet",
-    cast: () => {
-      openSectionSoon("whoami");
-      return "You pass a hand over the tome… it falls open at the character sheet.";
-    },
-  },
-  {
-    name: "Legend Lore",
-    school: "Divination · 5th level",
-    flavor: "recite the whole quest log",
-    cast: () => {
-      openSectionSoon("career");
-      return "Old campaigns unspool in the candle smoke… the quest log opens itself.";
-    },
-  },
-  {
-    name: "Sending",
-    school: "Evocation · 3rd level",
-    flavor: "twenty-five words, straight to Baghdad",
-    cast: () => {
-      openSectionSoon("contact");
-      return "You whisper to the wind… the tome opens at 'Send a Raven'.";
-    },
-  },
-  {
     name: "Divination",
     school: "Divination · 4th level",
-    flavor: "consult the d20 of fate",
+    flavor: "the d20 of fate rolls itself",
+    closes: true,
     cast: () => {
-      const n = 1 + Math.floor(Math.random() * 20);
-      emit("roll", n);
-      return n === 20
-        ? "The d20 of fate turns up a NATURAL TWENTY. The tavern erupts."
-        : n === 1
-          ? "The d20 of fate rolls a natural 1 and hides under the table in shame."
-          : `The d20 of fate turns up a ${n}.`;
+      emit("divination");
+      return "The d20 of fate stirs of its own accord and tumbles across the table…";
     },
   },
   {
@@ -228,6 +231,8 @@ const SPELLS: Spell[] = [
 
 function cast(spell: Spell): void {
   lastCast.value = spell.cast();
+  // Leave a beat to read the log line, then clear the stage for the show.
+  if (spell.closes) setTimeout(() => emit("close"), 500);
 }
 
 onMounted(() => {

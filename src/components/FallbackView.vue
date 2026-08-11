@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import type { BookSection } from "../three/types";
 import {
   identity,
   stats,
@@ -10,6 +12,128 @@ import {
   colophon,
 } from "../data/content";
 
+/** Deep-linked section (#/book/<section>) to scroll to on open. */
+const props = defineProps<{
+  section?: BookSection | null;
+}>();
+const emit = defineEmits<{
+  "update:section": [section: BookSection];
+}>();
+
+const rootEl = ref<HTMLElement | null>(null);
+
+/** The 3D tome's sections, mapped onto this page's anchors. */
+const SECTION_ANCHORS: Partial<Record<BookSection, string>> = {
+  whoami: "whoami",
+  skills: "skills",
+  career: "career",
+  projects: "projects",
+  runes: "contact", // no appendix here — land the reader on the nearest page
+  contact: "contact",
+};
+
+/** Bottom bookmark strip: the tome's tabs, laid flat for thumbs. */
+const NAV: { id: BookSection; label: string }[] = [
+  { id: "cover", label: "Cover" },
+  { id: "whoami", label: "Who Am I" },
+  { id: "skills", label: "Spells" },
+  { id: "career", label: "Quests" },
+  { id: "projects", label: "Artifacts" },
+  { id: "contact", label: "Raven" },
+];
+
+/** Section currently in view; drives the strip and the #/book/ hash. */
+const active = ref<BookSection>("cover");
+/** Programmatic smooth scrolls sweep past sections — mute tracking. */
+let muteTrackingUntil = 0;
+
+function scrollToSection(
+  section: BookSection | null | undefined,
+  behavior: ScrollBehavior = "auto",
+): void {
+  const root = rootEl.value;
+  if (!root || !section) return;
+  const anchor = SECTION_ANCHORS[section];
+  if (!anchor) {
+    root.scrollTo({ top: 0, behavior });
+    return;
+  }
+  root.querySelector(`#${anchor}`)?.scrollIntoView({ block: "start", behavior });
+}
+
+function go(id: BookSection): void {
+  muteTrackingUntil = performance.now() + 700;
+  active.value = id;
+  emit("update:section", id);
+  scrollToSection(id, "smooth");
+}
+
+/* Track the section under the reader (top third of the viewport). */
+let scrollRaf = 0;
+function onScroll(): void {
+  if (scrollRaf) return;
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = 0;
+    if (performance.now() < muteTrackingUntil) return;
+    const root = rootEl.value;
+    if (!root) return;
+    const probe = root.scrollTop + root.clientHeight * 0.33;
+    let current: BookSection = "cover";
+    for (const { id } of NAV) {
+      const anchor = SECTION_ANCHORS[id];
+      if (!anchor) continue;
+      const el = root.querySelector<HTMLElement>(`#${anchor}`);
+      if (el && el.offsetTop <= probe) current = id;
+    }
+    if (current !== active.value) {
+      active.value = current;
+      emit("update:section", current);
+    }
+  });
+}
+
+/* Touch: a horizontal flick hops to the neighbouring section. */
+const SWIPE_MIN_X = 60;
+const SWIPE_MAX_MS = 600;
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartAt = 0;
+
+function onTouchStart(event: TouchEvent): void {
+  if (event.touches.length !== 1) return;
+  const t = event.touches[0]!;
+  touchStartX = t.clientX;
+  touchStartY = t.clientY;
+  touchStartAt = performance.now();
+}
+
+function onTouchEnd(event: TouchEvent): void {
+  const t = event.changedTouches[0];
+  if (!t || performance.now() - touchStartAt > SWIPE_MAX_MS) return;
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+  // Deliberate horizontal flicks only — vertical scrolling stays sacred.
+  if (Math.abs(dx) < SWIPE_MIN_X || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  const index = NAV.findIndex((n) => n.id === active.value);
+  const target = NAV[index + (dx < 0 ? 1 : -1)];
+  if (target) go(target.id);
+}
+
+onMounted(() => {
+  scrollToSection(props.section);
+  onScroll();
+});
+watch(
+  () => props.section,
+  (section) => {
+    // Ignore the echo of our own update:section emits.
+    if (section && section !== active.value) scrollToSection(section);
+  },
+);
+onBeforeUnmount(() => {
+  if (scrollRaf) cancelAnimationFrame(scrollRaf);
+});
+
 const contactLines = [
   { kind: "Email", label: contact.email, href: `mailto:${contact.email}` },
   { kind: "Phone", label: contact.phone.label, href: `tel:${contact.phone.tel}` },
@@ -20,8 +144,21 @@ const contactLines = [
 </script>
 
 <template>
-  <div class="fixed inset-0 overflow-y-auto bg-night">
-    <main class="parchment book-page mx-auto my-6 max-w-3xl px-6 py-10 shadow-tome sm:px-12 sm:py-14" style="border: 1px solid rgba(176, 141, 60, 0.35); border-radius: 4px">
+  <div
+    ref="rootEl"
+    class="fixed inset-0 overflow-y-auto bg-night"
+    @scroll.passive="onScroll"
+    @touchstart.passive="onTouchStart"
+    @touchend.passive="onTouchEnd"
+  >
+    <main
+      class="parchment book-page mx-auto my-6 max-w-3xl px-6 py-10 shadow-tome sm:px-12 sm:py-14"
+      style="
+        border: 1px solid rgba(176, 141, 60, 0.35);
+        border-radius: 4px;
+        margin-bottom: calc(1.5rem + var(--safe-bottom));
+      "
+    >
       <!-- Header -->
       <header class="mb-10 text-center">
         <p class="m-0 font-body text-sm italic text-ink-faint">herein lies</p>
@@ -47,7 +184,7 @@ const contactLines = [
       </header>
 
       <!-- Who am I -->
-      <section class="mb-10">
+      <section id="whoami" class="mb-10 scroll-mt-16">
         <h2>The Character Sheet</h2>
         <p class="dropcap">{{ identity.bio }}</p>
         <dl class="m-0 mt-4">
@@ -68,7 +205,7 @@ const contactLines = [
       </section>
 
       <!-- Skills -->
-      <section class="mb-10">
+      <section id="skills" class="mb-10 scroll-mt-16">
         <h2>Spells Known</h2>
         <div v-for="school in spellSchools" :key="school.school" class="mb-5">
           <h3 class="m-0 mb-2 font-heading text-sm font-semibold text-leather">
@@ -81,7 +218,7 @@ const contactLines = [
       </section>
 
       <!-- Career -->
-      <section class="mb-10">
+      <section id="career" class="mb-10 scroll-mt-16">
         <h2>The Quest Log</h2>
         <article
           v-for="quest in quests"
@@ -103,7 +240,7 @@ const contactLines = [
       </section>
 
       <!-- Projects -->
-      <section class="mb-10">
+      <section id="projects" class="mb-10 scroll-mt-16">
         <h2>Artifacts Forged</h2>
         <div
           v-for="artifact in artifacts"
@@ -131,7 +268,7 @@ const contactLines = [
       </section>
 
       <!-- Contact -->
-      <section class="mb-8">
+      <section id="contact" class="mb-8 scroll-mt-16">
         <h2>Send a Raven</h2>
         <ul class="m-0 list-none p-0">
           <li
@@ -161,6 +298,20 @@ const contactLines = [
         {{ colophon }}
       </footer>
     </main>
+
+    <!-- Bookmark strip: sticky at the reader's thumb, scrolls to sections -->
+    <nav class="tab-strip" aria-label="Tome sections">
+      <button
+        v-for="n in NAV"
+        :key="n.id"
+        class="tab"
+        :class="{ 'tab-active': n.id === active }"
+        :aria-current="n.id === active ? 'page' : undefined"
+        @click="go(n.id)"
+      >
+        {{ n.label }}
+      </button>
+    </nav>
   </div>
 </template>
 
@@ -207,5 +358,65 @@ const contactLines = [
   border-radius: 3px;
   padding: 0.3em 0.6em;
   background: rgba(53, 208, 186, 0.08);
+}
+/* Legibility floor for fingers-and-arm's-length reading. */
+@media (pointer: coarse) {
+  .chip {
+    font-size: 11px;
+  }
+}
+
+/* ------------------------------------------------------------- */
+/* Bookmark strip — the tome's leather tabs, laid flat for thumbs  */
+/* ------------------------------------------------------------- */
+.tab-strip {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.9rem 0.75rem calc(0.5rem + var(--safe-bottom));
+  background: linear-gradient(180deg, transparent, rgba(13, 10, 8, 0.94) 42%);
+  scrollbar-width: none;
+}
+.tab-strip::-webkit-scrollbar {
+  display: none;
+}
+/* Auto margins center the tabs when they fit, without clipping the
+   start of the row when they overflow (justify-content: center would). */
+.tab:first-child {
+  margin-left: auto;
+}
+.tab:last-child {
+  margin-right: auto;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.85rem;
+  font-family: "Cinzel", serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(234, 217, 184, 0.75);
+  background: linear-gradient(180deg, var(--leather-light) 0%, var(--leather) 55%, var(--leather-dark) 100%);
+  border: 1px solid rgba(20, 8, 4, 0.85);
+  border-radius: 5px 5px 0 0;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.45);
+  transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+.tab:hover {
+  color: #f3e6cb;
+  filter: brightness(1.15);
+}
+.tab-active {
+  transform: translateY(-3px);
+  color: var(--arcane);
+  background: linear-gradient(180deg, #1c6f63 0%, var(--arcane-dim) 45%, #0f4d45 100%);
 }
 </style>

@@ -63,6 +63,12 @@ const MOTH_TRAVEL_DURATION = 3;
 const SNUFF_CLICKS = 5;
 const SNUFF_WINDOW_MS = 4000;
 
+// --- Console spell effects ---------------------------------------------------
+/** Gust of Wind: the match strikes back this long after the candles die. */
+const GUST_RELIGHT_MS = 4500;
+/** Call Lightning: the window sky flashes toward this white-blue. */
+const LIGHTNING_SKY = new THREE.Color(0xeaf4ff);
+
 // --- Fireball (console easter egg) -------------------------------------------
 const FIREBALL_FLIGHT_DURATION = 0.8;
 /** Trail embers spawn every time the flight advances this far (t units). */
@@ -175,6 +181,12 @@ export class SceneManager implements ISceneManager {
   /** 0 = night, 1 = day; tweened by setTimeOfDay. */
   private readonly moodProxy = { v: 0 };
   private windowSky: THREE.MeshStandardMaterial | null = null;
+
+  /** Call Lightning: strobe drive (0..1) + the bolt light by the window. */
+  private readonly lightningProxy = { v: 0 };
+  private lightningLight: THREE.PointLight | null = null;
+  /** Gust of Wind: pending "a match relights the table" beat. */
+  private gustRelightTimer: ReturnType<typeof setTimeout> | null = null;
 
   private moth: THREE.Group | null = null;
   private mothWingL: THREE.Mesh | null = null;
@@ -378,6 +390,111 @@ export class SceneManager implements ISceneManager {
     });
   }
 
+  castLightning(): void {
+    if (this.disposed) return;
+    if (!this.lightningLight) {
+      // Cool bolt light just inside the -Z window; dormant between casts.
+      this.lightningLight = new THREE.PointLight(0xbfd8ff, 0, 10, 1.8);
+      this.lightningLight.position.set(0.4, 2.2, -2.6);
+      this.scene.add(this.lightningLight);
+    }
+    gsap.killTweensOf(this.lightningProxy);
+    const tl = gsap.timeline({
+      onUpdate: this.applyLightning,
+      onComplete: () => {
+        this.lightningProxy.v = 0;
+        this.applyLightning();
+      },
+    });
+    if (this.settings.reducedMotion) {
+      // One soft flash — no strobing for motion/photosensitive visitors.
+      tl.to(this.lightningProxy, { v: 0.55, duration: 0.12, ease: "power2.out" })
+        .to(this.lightningProxy, { v: 0, duration: 0.6, ease: "power2.out" });
+      return;
+    }
+    // Classic double-strike strobe: hit, dim, re-strike, fade.
+    tl.to(this.lightningProxy, { v: 1, duration: 0.06, ease: "power3.out" })
+      .to(this.lightningProxy, { v: 0.12, duration: 0.09 })
+      .to(this.lightningProxy, { v: 0.85, duration: 0.05 })
+      .to(this.lightningProxy, { v: 0, duration: 0.5, ease: "power2.out" }, "+=0.05");
+  }
+
+  castGustOfWind(): void {
+    if (this.disposed) return;
+    let snuffedAny = false;
+    for (const [root, state] of this.candleStates) {
+      if (state.snuffed) continue;
+      const flame = (root.userData.parts as CandleParts | undefined)?.flame;
+      if (!flame) continue;
+      state.snuffed = true;
+      state.clicks.length = 0;
+      flame.visible = false;
+      this.lights.setCandleLit(flame, false);
+      this.particles.puffSmoke(flame.getWorldPosition(new THREE.Vector3()));
+      snuffedAny = true;
+    }
+    if (!snuffedAny) return;
+    this.events.onCandleSnuff?.({ snuffed: true, bothOut: true });
+
+    // A match flares once the darkness has had its moment — relights every
+    // snuffed candle (including ones the visitor clicked out earlier).
+    if (this.gustRelightTimer) clearTimeout(this.gustRelightTimer);
+    this.gustRelightTimer = setTimeout(() => {
+      this.gustRelightTimer = null;
+      if (this.disposed) return;
+      let relit = false;
+      for (const [root, state] of this.candleStates) {
+        if (!state.snuffed) continue;
+        const flame = (root.userData.parts as CandleParts | undefined)?.flame;
+        if (!flame) continue;
+        state.snuffed = false;
+        flame.visible = true;
+        this.lights.setCandleLit(flame, true);
+        relit = true;
+      }
+      if (relit) this.events.onCandleSnuff?.({ snuffed: false, bothOut: false });
+    }, GUST_RELIGHT_MS);
+  }
+
+  castAnimateObjects(): void {
+    if (this.disposed) return;
+    // The d20 does its own, physically real jump.
+    this.rollDice();
+    if (this.settings.reducedMotion) return;
+    const hoppers: ItemId[] = ["sword", "tankard", "potion", "scroll", "shield"];
+    hoppers.forEach((id, i) => {
+      const group = this.itemGroups.get(id);
+      if (!group) return;
+      gsap.killTweensOf(group.position);
+      gsap.killTweensOf(group.rotation);
+      // Always land back exactly on the layout pose so repeated casts
+      // never let items drift or sink.
+      const baseRot = LAYOUT[id].rotY;
+      gsap
+        .timeline({ delay: i * 0.09 })
+        .to(group.position, {
+          y: TABLE_SURFACE_Y + 0.05 + Math.random() * 0.03,
+          duration: 0.18,
+          ease: "power2.out",
+        })
+        .to(group.position, {
+          y: TABLE_SURFACE_Y,
+          duration: 0.32,
+          ease: "bounce.out",
+        })
+        .fromTo(
+          group.rotation,
+          { y: group.rotation.y },
+          {
+            y: baseRot + (Math.random() - 0.5) * 0.1,
+            duration: 0.4,
+            ease: "power1.out",
+          },
+          0,
+        );
+    });
+  }
+
   setQuality(quality: Quality): void {
     this.settings.quality = quality;
     this.renderer.setPixelRatio(
@@ -452,6 +569,16 @@ export class SceneManager implements ISceneManager {
     this.dicePhysics?.dispose();
     gsap.killTweensOf(this.runeProxy);
     gsap.killTweensOf(this.moodProxy);
+    gsap.killTweensOf(this.lightningProxy);
+    if (this.gustRelightTimer) {
+      clearTimeout(this.gustRelightTimer);
+      this.gustRelightTimer = null;
+    }
+    // Animate Objects hop tweens (position/rotation of item groups).
+    for (const group of this.itemGroups.values()) {
+      gsap.killTweensOf(group.position);
+      gsap.killTweensOf(group.rotation);
+    }
     this.interaction.dispose();
     this.rig.dispose();
     this.lights.dispose();
@@ -868,8 +995,21 @@ export class SceneManager implements ISceneManager {
     this.events.onCandleSnuff?.({ snuffed: true, bothOut });
   }
 
-  private readonly applyRune = (): void => {
-    const setIntensity = this.runeCircle?.userData.setIntensity as
+  /**
+   * Drive the lightning strobe: re-derive the mood baseline, then stack
+   * the flash on the window sky and the bolt light. Safe at tween rate.
+   */
+  private readonly applyLightning = (): void => {
+    const v = this.lightningProxy.v;
+    if (this.lightningLight) this.lightningLight.intensity = v * 26;
+    this.applyMood();
+    if (this.windowSky && v > 0) {
+      this.windowSky.emissive.lerp(LIGHTNING_SKY, Math.min(v * 0.85, 1));
+      this.windowSky.emissiveIntensity += v * 7;
+    }
+  };
+
+  private readonly applyRune = (): void => {    const setIntensity = this.runeCircle?.userData.setIntensity as
       | ((value: number) => void)
       | undefined;
     setIntensity?.(this.runeProxy.v);

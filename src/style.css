@@ -74,6 +74,15 @@ textarea {
   touch-action: manipulation;
 }
 
+/* Legibility floor on phones: the smallest button chrome (11px Cinzel
+   caps) is squint territory at arm's length — one notch up. */
+@media (pointer: coarse) and (max-width: 960px) {
+  .btn-leather,
+  .btn-wax {
+    font-size: 12px;
+  }
+}
+
 /* Thin leather-toned scrollbars (book pages, console, fallback) */
 * {
   scrollbar-width: thin;

@@ -12,13 +12,20 @@ defineProps<{
 const emit = defineEmits<{
   "toggle-music": [];
   "open-settings": [];
+  /** Touch devices can't type `sudo` — give them a door to the spells. */
+  "open-console": [];
 }>();
 </script>
 
 <template>
   <div
-    class="fixed inset-x-0 bottom-0 z-20 items-end justify-between px-4 pb-3 sm:px-6"
+    class="fixed inset-x-0 bottom-0 z-20 items-end justify-between"
     :class="bookOpen ? 'hidden md:flex' : 'flex'"
+    style="
+      padding-bottom: calc(0.75rem + var(--safe-bottom));
+      padding-left: calc(1rem + var(--safe-left));
+      padding-right: calc(1rem + var(--safe-right));
+    "
   >
     <!-- Identity -->
     <div class="pointer-events-none select-none leading-tight">
@@ -43,6 +50,20 @@ const emit = defineEmits<{
           <circle cx="6.5" cy="18" r="2.5" />
           <circle cx="16.5" cy="15" r="2.5" />
           <line v-if="!musicOn" x1="3" y1="3" x2="21" y2="21" stroke-width="1.8" />
+        </svg>
+      </button>
+
+      <button
+        class="hud-btn coarse-only"
+        aria-label="Open the wizard's prepared spells"
+        title="Prepared Spells"
+        @click="emit('open-console')"
+      >
+        <!-- sparkling wand -->
+        <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 19 14.5 9.5" />
+          <path d="m15.5 4 .8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z" />
+          <path d="m19.5 12.5.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" />
         </svg>
       </button>
 
@@ -109,5 +130,24 @@ const emit = defineEmits<{
 .hud-btn:hover {
   color: var(--arcane);
   border-color: rgba(53, 208, 186, 0.5);
+}
+
+/* Fingers need ≥44px targets. */
+@media (pointer: coarse) {
+  .hud-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}
+
+/* Keyboard users summon the console by typing `sudo`; only fingers
+   need the door. */
+.coarse-only {
+  display: none;
+}
+@media (pointer: coarse) {
+  .coarse-only {
+    display: flex;
+  }
 }
 </style>

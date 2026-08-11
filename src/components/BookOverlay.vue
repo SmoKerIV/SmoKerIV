@@ -131,9 +131,39 @@ function onKeydown(event: KeyboardEvent): void {
   else if (event.key === "ArrowLeft") prev();
 }
 
+/* ------------------------------------------------------------------ */
+/* Touch: a horizontal swipe turns the page (tablets reading the tome)  */
+/* ------------------------------------------------------------------ */
+const SWIPE_MIN_X = 60;
+const SWIPE_MAX_MS = 600;
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartAt = 0;
+
+function onTouchStart(event: TouchEvent): void {
+  if (event.touches.length !== 1) return;
+  const t = event.touches[0]!;
+  touchStartX = t.clientX;
+  touchStartY = t.clientY;
+  touchStartAt = performance.now();
+}
+
+function onTouchEnd(event: TouchEvent): void {
+  const t = event.changedTouches[0];
+  if (!t || performance.now() - touchStartAt > SWIPE_MAX_MS) return;
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+  // Deliberate horizontal flicks only — never hijack taps or scrolls.
+  if (Math.abs(dx) < SWIPE_MIN_X || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  if (dx < 0) next();
+  else prev();
+}
+
 onMounted(() => {
   previouslyFocused = document.activeElement as HTMLElement | null;
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("touchstart", onTouchStart, { passive: true });
+  window.addEventListener("touchend", onTouchEnd, { passive: true });
   void nextTick(() => {
     closeBtn.value?.focus();
     fitPages();
@@ -144,6 +174,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("touchstart", onTouchStart);
+  window.removeEventListener("touchend", onTouchEnd);
   previouslyFocused?.focus?.();
 });
 
@@ -634,7 +666,10 @@ watch(
     <!-- FLOATING CHROME (untransformed) -------------------------------- -->
     <!-- Flex-wrapper centering (not translate-x): transform-based
          centering gets clobbered by any transition/hover transform. -->
-    <div class="pointer-events-none fixed inset-x-0 top-4 z-30 flex justify-center">
+    <div
+      class="pointer-events-none fixed inset-x-0 z-30 flex justify-center"
+      style="top: calc(1rem + var(--safe-top))"
+    >
       <button
         ref="closeBtn"
         class="btn-leather pointer-events-auto whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-[11px] opacity-90"
@@ -742,7 +777,7 @@ watch(
 /* ------------------------------------------------------------- */
 .corner {
   position: fixed;
-  bottom: 22px;
+  bottom: calc(22px + var(--safe-bottom));
   z-index: 30;
   width: 2.6rem;
   height: 2.6rem;
@@ -763,8 +798,20 @@ watch(
   color: var(--arcane);
   border-color: var(--arcane-dim);
 }
-.corner-prev { left: 26px; }
-.corner-next { right: 26px; }
+.corner-prev { left: calc(26px + var(--safe-left)); }
+.corner-next { right: calc(26px + var(--safe-right)); }
+
+/* Fingers need ≥44px targets. */
+@media (pointer: coarse) {
+  .corner {
+    width: 3rem;
+    height: 3rem;
+  }
+  .bookmark {
+    padding: 0.85rem 0.55rem;
+    font-size: 11px;
+  }
+}
 
 .bookmark {
   writing-mode: vertical-rl;
