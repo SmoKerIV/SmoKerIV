@@ -1,160 +1,377 @@
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
+/* ------------------------------------------------------------------ */
+/* Palette + shared tokens                                             */
+/* ------------------------------------------------------------------ */
+:root {
+  --parchment: #e8dcc0;
+  --parchment-dark: #d9c7a0;
+  --parchment-deep: #c8b184;
+  --ink: #2a1f14;
+  --ink-soft: #4a3826;
+  --leather: #5a2e1d;
+  --leather-dark: #3a1d11;
+  --leather-light: #7a4630;
+  --gold: #b08d3c;
+  --gold-bright: #d4af5e;
+  --arcane: #35d0ba;
+  --arcane-dim: #1e8577;
+  --night: #0d0a08;
+  --wax: #8b2320;
+  --wax-dark: #5e130f;
+  /* tiny SVG turbulence noise, tiled — used to give parchment its tooth */
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+}
 
-  body {
-    font-family: "JetBrains Mono", monospace;
-    overflow: hidden;
-    width: 100%;
-    height: 100vh;
-    background-color: #1e1e1e;
-  }
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+html,
+body {
+  height: 100%;
+}
 
-  html {
-    scroll-behavior: smooth;
-  }
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--parchment);
+  font-family: "EB Garamond", Garamond, "Times New Roman", serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
 
-  ::selection {
-    background-color: #264f78;
+#app {
+  height: 100%;
+}
+
+::selection {
+  background: var(--arcane);
+  color: var(--night);
+}
+
+:focus-visible {
+  outline: 2px solid var(--arcane);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Thin leather-toned scrollbars (book pages, console, fallback) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--leather) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(var(--leather-light), var(--leather-dark));
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--leather-light);
+}
+
+/* ------------------------------------------------------------------ */
+/* Parchment surfaces                                                  */
+/* ------------------------------------------------------------------ */
+.parchment {
+  background-color: var(--parchment);
+  background-image:
+    var(--noise),
+    radial-gradient(ellipse at 18% 12%, rgba(255, 250, 230, 0.5), transparent 55%),
+    radial-gradient(ellipse at 85% 92%, rgba(120, 85, 40, 0.16), transparent 60%),
+    radial-gradient(ellipse at 50% 50%, transparent 62%, rgba(96, 66, 32, 0.22) 100%),
+    linear-gradient(160deg, #efe4ca 0%, #e8dcc0 45%, #dccba4 100%);
+  color: var(--ink);
+}
+
+.parchment-dark-surface {
+  background-color: var(--parchment-dark);
+  background-image:
+    var(--noise),
+    radial-gradient(ellipse at 50% 0%, rgba(255, 248, 226, 0.35), transparent 60%),
+    radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(90, 60, 28, 0.28) 100%),
+    linear-gradient(170deg, #e0d1ab 0%, #d9c7a0 55%, #c8b184 100%);
+  color: var(--ink);
+}
+
+/* Small torn-edge scrap (tooltips, toasts) */
+.parchment-scrap {
+  clip-path: polygon(
+    2% 8%, 6% 1%, 22% 4%, 38% 0%, 55% 3%, 72% 0%, 88% 4%, 97% 1%, 100% 12%,
+    98% 34%, 100% 55%, 97% 78%, 99% 92%, 90% 100%, 70% 97%, 52% 100%, 33% 97%,
+    14% 100%, 3% 96%, 0% 80%, 2% 58%, 0% 32%
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Buttons                                                             */
+/* ------------------------------------------------------------------ */
+.btn-wax {
+  font-family: "Cinzel", serif;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #f7e8d2;
+  background:
+    radial-gradient(circle at 32% 28%, #c85040 0%, var(--wax) 52%, var(--wax-dark) 100%);
+  border: 1px solid rgba(56, 8, 6, 0.85);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 2px 6px rgba(255, 200, 160, 0.35),
+    inset 0 -5px 12px rgba(0, 0, 0, 0.45),
+    0 6px 18px rgba(0, 0, 0, 0.55);
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-wax:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 2px 6px rgba(255, 200, 160, 0.4),
+    inset 0 -5px 12px rgba(0, 0, 0, 0.45),
+    0 10px 26px rgba(0, 0, 0, 0.6),
+    0 0 22px rgba(139, 35, 32, 0.35);
+}
+.btn-wax:active {
+  transform: translateY(1px);
+  filter: brightness(0.95);
+}
+
+.btn-leather {
+  font-family: "Cinzel", serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ead9b8;
+  background:
+    var(--noise),
+    linear-gradient(180deg, var(--leather-light) 0%, var(--leather) 45%, var(--leather-dark) 100%);
+  border: 1px solid rgba(20, 8, 4, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 220, 170, 0.22),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.5),
+    0 4px 14px rgba(0, 0, 0, 0.55);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.btn-leather:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+.btn-leather:active {
+  transform: translateY(1px);
+}
+
+/* ------------------------------------------------------------------ */
+/* Book typography                                                     */
+/* ------------------------------------------------------------------ */
+/* EB Garamond runs small — book contexts read at ~18px, generous leading. */
+.book-page {
+  font-size: 1.125rem;
+  line-height: 1.7;
+}
+
+.book-page h2 {
+  font-family: "Uncial Antiqua", "Cinzel", serif;
+  font-weight: 400;
+  font-size: 1.45rem;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0 0 0.9rem;
+}
+.book-page h2::before,
+.book-page h2::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  min-width: 1rem;
+  background: linear-gradient(90deg, transparent, var(--gold));
+}
+.book-page h2::after {
+  background: linear-gradient(90deg, var(--gold), transparent);
+}
+
+.book-page p {
+  font-size: 1.125rem;
+  line-height: 1.7;
+  margin: 0 0 0.85em;
+}
+
+.book-page em,
+.book-page i {
+  font-style: italic; /* EB Garamond ships true italics — use them */
+}
+
+.dropcap::first-letter {
+  font-family: "Uncial Antiqua", "Cinzel", serif;
+  font-weight: 400;
+  font-size: 3em;
+  float: left;
+  line-height: 0.9;
+  padding: 0.04em 0.12em 0 0;
+  color: var(--leather);
+}
+
+/* ------------------------------------------------------------------ */
+/* Keyframes / effects                                                 */
+/* ------------------------------------------------------------------ */
+@keyframes candleFlicker {
+  0%, 100% { opacity: 1; }
+  8%  { opacity: 0.86; }
+  16% { opacity: 0.98; }
+  27% { opacity: 0.9; }
+  38% { opacity: 1; }
+  52% { opacity: 0.84; }
+  63% { opacity: 0.97; }
+  78% { opacity: 0.9; }
+  91% { opacity: 1; }
+}
+.flicker {
+  animation: candleFlicker 3.4s ease-in-out infinite;
+}
+
+@keyframes screenShake {
+  0%   { transform: translate(0, 0) rotate(0); }
+  12%  { transform: translate(-8px, 4px) rotate(-0.4deg); }
+  25%  { transform: translate(7px, -5px) rotate(0.35deg); }
+  37%  { transform: translate(-6px, -3px) rotate(-0.25deg); }
+  50%  { transform: translate(5px, 4px) rotate(0.2deg); }
+  62%  { transform: translate(-4px, 2px) rotate(-0.15deg); }
+  75%  { transform: translate(3px, -2px) rotate(0.1deg); }
+  87%  { transform: translate(-1px, 1px) rotate(0); }
+  100% { transform: translate(0, 0) rotate(0); }
+}
+.screen-shake {
+  animation: screenShake 0.55s ease both;
+}
+
+@keyframes statFill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+  animation: fadeUp 0.6s ease both;
+}
+
+@keyframes slowSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes sparkRise {
+  0%   { opacity: 0; transform: translateY(12vh) scale(0.4) rotate(0deg); }
+  15%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-55vh) scale(1) rotate(200deg); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Easter eggs (scrying-glass incantations)                            */
+/* ------------------------------------------------------------------ */
+/* `flip` — the whole inn cartwheels once */
+@keyframes eggFlip {
+  from { transform: perspective(1200px) rotateY(0deg); }
+  to   { transform: perspective(1200px) rotateY(360deg); }
+}
+.egg-flip {
+  animation: eggFlip 0.72s ease-in-out both;
+  will-change: transform;
+}
+
+/* `dance` — a gentle bardic wobble */
+@keyframes eggWobble {
+  0%, 100% { transform: rotate(0deg) skewX(0deg); }
+  20%  { transform: rotate(0.8deg) skewX(0.4deg); }
+  40%  { transform: rotate(-0.7deg) skewX(-0.4deg); }
+  60%  { transform: rotate(0.5deg) skewX(0.25deg); }
+  80%  { transform: rotate(-0.3deg) skewX(-0.15deg); }
+}
+.egg-wobble {
+  animation: eggWobble 1s ease-in-out both;
+  transform-origin: 50% 60%;
+  will-change: transform;
+}
+
+/* `matrix` — the veil parts; runes rain down a fullscreen canvas */
+.egg-matrix-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  background: rgba(4, 10, 9, 0.45);
+  opacity: 1;
+  transition: opacity 0.6s ease;
+}
+.egg-matrix-overlay.egg-matrix-fade {
+  opacity: 0;
+}
+.egg-matrix-overlay canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ------------------------------------------------------------------ */
+/* Vue <Transition> classes                                            */
+/* ------------------------------------------------------------------ */
+.loader-fade-leave-active { transition: opacity 0.9s ease; }
+.loader-fade-leave-to { opacity: 0; }
+
+.book-fade-enter-active { transition: opacity 0.5s ease, transform 0.5s ease; }
+.book-fade-enter-from { opacity: 0; transform: scale(0.955); }
+.book-fade-leave-active { transition: opacity 0.28s ease, transform 0.28s ease; }
+.book-fade-leave-to { opacity: 0; transform: scale(0.97); }
+
+.tooltip-enter-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.tooltip-leave-active { transition: opacity 0.12s ease; }
+.tooltip-enter-from { opacity: 0; transform: translateY(6px); }
+.tooltip-leave-to { opacity: 0; }
+
+.toast-enter-active { transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.toast-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.toast-enter-from { opacity: 0; transform: translateY(24px); }
+.toast-leave-to { opacity: 0; transform: translateY(12px); }
+
+.panel-enter-active { transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.4s ease; }
+.panel-leave-active { transition: transform 0.3s ease, opacity 0.3s ease; }
+.panel-enter-from,
+.panel-leave-to { transform: translateX(105%); opacity: 0.4; }
+
+.console-enter-active { transition: opacity 0.25s ease, transform 0.25s ease; }
+.console-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.console-enter-from,
+.console-leave-to { opacity: 0; transform: scale(0.97) translateY(8px); }
+
+/* ------------------------------------------------------------------ */
+/* Reduced motion — media query AND settings-driven class              */
+/* ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-@layer components {
-  .fade-enter-active,
-  .fade-leave-active {
-    transition: opacity 0.2s ease;
-  }
-
-  .fade-enter-from,
-  .fade-leave-to {
-    opacity: 0;
-  }
-
-  /* VS Code syntax colors */
-  .syn-keyword {
-    color: #569cd6;
-  }
-  .syn-type {
-    color: #4ec9b0;
-  }
-  .syn-string {
-    color: #ce9178;
-  }
-  .syn-number {
-    color: #b5cea8;
-  }
-  .syn-comment {
-    color: #6a9955;
-  }
-  .syn-function {
-    color: #dcdcaa;
-  }
-  .syn-variable {
-    color: #9cdcfe;
-  }
-  .syn-property {
-    color: #9cdcfe;
-  }
-  .syn-bracket {
-    color: #ffd700;
-  }
-  .syn-bracket2 {
-    color: #da70d6;
-  }
-  .syn-bracket3 {
-    color: #179fff;
-  }
-  .syn-operator {
-    color: #d4d4d4;
-  }
-  .syn-punctuation {
-    color: #d4d4d4;
-  }
-  .syn-interface {
-    color: #4ec9b0;
-  }
-  .syn-enum {
-    color: #4fc1ff;
-  }
-  .syn-decorator {
-    color: #dcdcaa;
-  }
-  .syn-regex {
-    color: #d16969;
-  }
-  .syn-link {
-    color: #ce9178;
-    text-decoration: none;
-    transition: filter 0.15s;
-  }
-  .syn-link:hover {
-    filter: brightness(1.3);
-    text-decoration: underline;
-  }
-  .syn-const {
-    color: #4fc1ff;
-  }
-
-  .line-highlight {
-    background-color: rgba(255, 255, 255, 0.04);
-  }
-
-  .cursor-blink::after {
-    content: "▌";
-    animation: blink 1s step-end infinite;
-    color: #aeafad;
-  }
-
-  @keyframes blink {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0;
-    }
-  }
-
-  /* Scrollbar styling to match VS Code */
-  .editor-scroll::-webkit-scrollbar {
-    width: 14px;
-  }
-  .editor-scroll::-webkit-scrollbar-track {
-    background: #1e1e1e;
-  }
-  .editor-scroll::-webkit-scrollbar-thumb {
-    background: #424242;
-    border: 3px solid #1e1e1e;
-    border-radius: 7px;
-  }
-  .editor-scroll::-webkit-scrollbar-thumb:hover {
-    background: #4f4f4f;
-  }
-
-  /* Minimap effect */
-  .minimap {
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 60px;
-    background: linear-gradient(
-      to bottom,
-      rgba(86, 156, 214, 0.03) 0%,
-      rgba(78, 201, 176, 0.03) 30%,
-      rgba(206, 145, 120, 0.03) 60%,
-      rgba(86, 156, 214, 0.03) 100%
-    );
-    pointer-events: none;
-    opacity: 0.6;
-  }
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

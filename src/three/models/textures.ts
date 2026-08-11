@@ -1,0 +1,466 @@
+/**
+ * Canvas-generated textures for the procedural inn scene.
+ * All color textures use SRGBColorSpace + anisotropy 4.
+ * Deterministic (seeded) randomness so reloads look identical.
+ */
+import * as THREE from "three";
+
+/** Tiny deterministic PRNG (mulberry32). */
+function mulberry32(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function createCanvas(
+  size: number,
+): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not acquire 2d canvas context");
+  return [canvas, ctx];
+}
+
+function toTexture(canvas: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
+  const tex = new THREE.CanvasTexture(canvas);
+  if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+/** Draws a small angular rune glyph centered at (x, y), size s. */
+function drawRune(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  s: number,
+  rand: () => number,
+): void {
+  const strokes = 2 + Math.floor(rand() * 3);
+  ctx.beginPath();
+  // Main stave
+  ctx.moveTo(x, y - s / 2);
+  ctx.lineTo(x, y + s / 2);
+  for (let i = 0; i < strokes; i++) {
+    const y0 = y - s / 2 + rand() * s;
+    const dx = (rand() > 0.5 ? 1 : -1) * (s * (0.3 + rand() * 0.4));
+    const dy = (rand() - 0.5) * s * 0.8;
+    ctx.moveTo(x, y0);
+    ctx.lineTo(x + dx, y0 + dy);
+    if (rand() > 0.6) ctx.lineTo(x + dx * 0.4, y0 + dy + s * 0.3);
+  }
+  ctx.stroke();
+}
+
+/**
+ * Plank wood grain. tone: "dark" (#4a3524-ish) or "light" (#6b4a2f-ish).
+ * vertical=true rotates the grain 90° (tankard staves).
+ */
+export function makeWoodTexture(
+  tone: "dark" | "light" = "dark",
+  vertical = false,
+): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = createCanvas(size);
+  const rand = mulberry32(tone === "dark" ? 1337 : 7331);
+
+  const base = tone === "dark" ? "#4a3524" : "#6b4a2f";
+  const light = tone === "dark" ? "#5c422c" : "#7d583a";
+  const darkLine = tone === "dark" ? "#2e2015" : "#43301e";
+
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  const planks = 5;
+  const ph = size / planks;
+  for (let p = 0; p < planks; p++) {
+    const y0 = p * ph;
+    // Per-plank tint variation
+    const v = (rand() - 0.5) * 26;
+    ctx.fillStyle = `rgba(${v > 0 ? 255 : 0},${v > 0 ? 220 : 10},${v > 0 ? 160 : 0},${Math.abs(v) / 255})`;
+    ctx.fillRect(0, y0, size, ph);
+    // Grain streaks
+    for (let i = 0; i < 22; i++) {
+      const gy = y0 + rand() * ph;
+      const alpha = 0.05 + rand() * 0.12;
+      ctx.strokeStyle =
+        rand() > 0.5
+          ? `rgba(20, 12, 6, ${alpha})`
+          : `rgba(200, 160, 110, ${alpha * 0.7})`;
+      ctx.lineWidth = 1 + rand() * 2;
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      const wobble = 2 + rand() * 5;
+      for (let x = 0; x <= size; x += 32) {
+        ctx.lineTo(x, gy + Math.sin(x * 0.02 + rand() * 6) * wobble);
+      }
+      ctx.stroke();
+    }
+    // Occasional knot
+    if (rand() > 0.5) {
+      const kx = rand() * size;
+      const ky = y0 + ph * (0.3 + rand() * 0.4);
+      ctx.strokeStyle = "rgba(30, 18, 8, 0.5)";
+      for (let r = 3; r < 12; r += 3) {
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(kx, ky, r * 1.6, r, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    // Plank seam + highlight
+    ctx.fillStyle = darkLine;
+    ctx.fillRect(0, y0 + ph - 3, size, 3);
+    ctx.fillStyle = light;
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(0, y0, size, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  if (vertical) {
+    const [canvas2, ctx2] = createCanvas(size);
+    ctx2.translate(size, 0);
+    ctx2.rotate(Math.PI / 2);
+    ctx2.drawImage(canvas, 0, 0);
+    return toTexture(canvas2);
+  }
+  return toTexture(canvas);
+}
+
+/** Worn dark leather for the tome and grips. */
+export function makeLeatherTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = createCanvas(size);
+  const rand = mulberry32(4242);
+
+  ctx.fillStyle = "#5a2e1d";
+  ctx.fillRect(0, 0, size, size);
+
+  // Mottled patches
+  for (let i = 0; i < 40; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const r = 20 + rand() * 70;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const darker = rand() > 0.5;
+    g.addColorStop(0, darker ? "rgba(40, 18, 10, 0.20)" : "rgba(140, 84, 52, 0.14)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  // Fine speckle
+  for (let i = 0; i < 2600; i++) {
+    const a = 0.03 + rand() * 0.08;
+    ctx.fillStyle = rand() > 0.5 ? `rgba(0,0,0,${a})` : `rgba(220,160,110,${a * 0.6})`;
+    ctx.fillRect(rand() * size, rand() * size, 1.5, 1.5);
+  }
+  // Crease lines
+  ctx.strokeStyle = "rgba(28, 12, 6, 0.35)";
+  for (let i = 0; i < 26; i++) {
+    ctx.lineWidth = 0.8 + rand() * 1.4;
+    ctx.beginPath();
+    let x = rand() * size;
+    let y = rand() * size;
+    ctx.moveTo(x, y);
+    const segs = 2 + Math.floor(rand() * 3);
+    for (let sIdx = 0; sIdx < segs; sIdx++) {
+      x += (rand() - 0.5) * 90;
+      y += (rand() - 0.5) * 90;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  return toTexture(canvas);
+}
+
+/** Aged parchment; withRunes adds faded handwritten rune rows. */
+export function makeParchmentTexture(withRunes = false): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = createCanvas(size);
+  const rand = mulberry32(withRunes ? 9001 : 1009);
+
+  ctx.fillStyle = "#e8dcc0";
+  ctx.fillRect(0, 0, size, size);
+
+  // Blotches and aging
+  for (let i = 0; i < 30; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const r = 25 + rand() * 90;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, "rgba(190, 160, 110, 0.10)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  // Fibers
+  for (let i = 0; i < 500; i++) {
+    ctx.strokeStyle = `rgba(150, 120, 80, ${0.04 + rand() * 0.06})`;
+    ctx.lineWidth = 0.6;
+    const x = rand() * size;
+    const y = rand() * size;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (rand() - 0.5) * 14, y + (rand() - 0.5) * 4);
+    ctx.stroke();
+  }
+  // Darkened edges
+  const edge = ctx.createRadialGradient(
+    size / 2, size / 2, size * 0.42,
+    size / 2, size / 2, size * 0.72,
+  );
+  edge.addColorStop(0, "rgba(0,0,0,0)");
+  edge.addColorStop(1, "rgba(110, 80, 40, 0.30)");
+  ctx.fillStyle = edge;
+  ctx.fillRect(0, 0, size, size);
+
+  if (withRunes) {
+    ctx.strokeStyle = "rgba(70, 52, 34, 0.55)";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    const rows = 9;
+    for (let r = 0; r < rows; r++) {
+      const y = 50 + r * ((size - 100) / (rows - 1)) + (rand() - 0.5) * 6;
+      let x = 40 + rand() * 30;
+      while (x < size - 50) {
+        drawRune(ctx, x, y, 14 + rand() * 8, rand);
+        x += 18 + rand() * 16;
+        if (rand() > 0.85) x += 22; // word gap
+      }
+    }
+    // A small circled diagram
+    ctx.strokeStyle = "rgba(70, 52, 34, 0.4)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(size * 0.72, size * 0.74, 46, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(size * 0.72, size * 0.74, 34, 0, Math.PI * 2);
+    ctx.stroke();
+    drawRune(ctx, size * 0.72, size * 0.74, 30, rand);
+  }
+  return toTexture(canvas);
+}
+
+/** Warm plaster for inn walls. */
+export function makePlasterTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = createCanvas(size);
+  const rand = mulberry32(5150);
+
+  ctx.fillStyle = "#d6c9ae";
+  ctx.fillRect(0, 0, size, size);
+  // Trowel strokes
+  for (let i = 0; i < 60; i++) {
+    ctx.strokeStyle = `rgba(${rand() > 0.5 ? "255,244,220" : "150,130,100"}, ${0.04 + rand() * 0.05})`;
+    ctx.lineWidth = 8 + rand() * 22;
+    ctx.beginPath();
+    const x = rand() * size;
+    const y = rand() * size;
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(
+      x + (rand() - 0.5) * 160, y + (rand() - 0.5) * 60,
+      x + (rand() - 0.5) * 260, y + (rand() - 0.5) * 120,
+    );
+    ctx.stroke();
+  }
+  // Speckle
+  for (let i = 0; i < 1800; i++) {
+    const a = 0.03 + rand() * 0.05;
+    ctx.fillStyle = rand() > 0.5 ? `rgba(90,75,55,${a})` : `rgba(255,248,230,${a})`;
+    ctx.fillRect(rand() * size, rand() * size, 1.5, 1.5);
+  }
+  // Faint damp stains near bottom
+  for (let i = 0; i < 6; i++) {
+    const x = rand() * size;
+    const y = size * (0.75 + rand() * 0.2);
+    const r = 40 + rand() * 60;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, "rgba(120, 100, 70, 0.10)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  return toTexture(canvas);
+}
+
+/** Grey stone blocks for the fireplace. */
+export function makeStoneTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = createCanvas(size);
+  const rand = mulberry32(8080);
+
+  ctx.fillStyle = "#4c4a46";
+  ctx.fillRect(0, 0, size, size);
+
+  const rows = 6;
+  const rh = size / rows;
+  for (let r = 0; r < rows; r++) {
+    const offset = (r % 2) * rh * 0.9;
+    let x = -offset;
+    while (x < size) {
+      const w = rh * (1.3 + rand() * 0.9);
+      const g = 90 + rand() * 45;
+      ctx.fillStyle = `rgb(${g + 8}, ${g + 4}, ${g - 4})`;
+      ctx.fillRect(x + 3, r * rh + 3, w - 6, rh - 6);
+      // Bevel highlight
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(x + 3, r * rh + 3, w - 6, 4);
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.fillRect(x + 3, (r + 1) * rh - 7, w - 6, 4);
+      // Speckle inside block
+      for (let i = 0; i < 24; i++) {
+        ctx.fillStyle = `rgba(0,0,0,${0.05 + rand() * 0.1})`;
+        ctx.fillRect(x + 4 + rand() * (w - 8), r * rh + 4 + rand() * (rh - 8), 2, 2);
+      }
+      x += w;
+    }
+  }
+  return toTexture(canvas);
+}
+
+/**
+ * Painted shield face: quartered field + stylized tower crest.
+ * Meant for a top-down planar projection onto the shield dome.
+ */
+export function makeCrestTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = createCanvas(size);
+  const rand = mulberry32(2323);
+  const c = size / 2;
+
+  // Quartered field (alternating painted quarters, aged and muted)
+  const colA = "#5e211b"; // deep oxblood
+  const colB = "#b5a37e"; // aged parchment-cream
+  for (let q = 0; q < 4; q++) {
+    ctx.fillStyle = q % 2 === 0 ? colA : colB;
+    ctx.beginPath();
+    ctx.moveTo(c, c);
+    ctx.arc(c, c, size, (q * Math.PI) / 2 + Math.PI / 4, ((q + 1) * Math.PI) / 2 + Math.PI / 4);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Weathering scratches
+  for (let i = 0; i < 240; i++) {
+    ctx.strokeStyle = `rgba(40, 28, 16, ${0.04 + rand() * 0.1})`;
+    ctx.lineWidth = 1 + rand() * 2;
+    const x = rand() * size;
+    const y = rand() * size;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (rand() - 0.5) * 40, y + (rand() - 0.5) * 40);
+    ctx.stroke();
+  }
+  // Outer painted ring
+  ctx.strokeStyle = "#2c2620";
+  ctx.lineWidth = 26;
+  ctx.beginPath();
+  ctx.arc(c, c, size * 0.44, 0, Math.PI * 2);
+  ctx.stroke();
+  // Central disc behind emblem
+  ctx.fillStyle = "#2c2620";
+  ctx.beginPath();
+  ctx.arc(c, c, size * 0.185, 0, Math.PI * 2);
+  ctx.fill();
+  // Stylized tower emblem
+  ctx.fillStyle = "#d9c9a3";
+  const tw = size * 0.11;
+  const th = size * 0.20;
+  ctx.fillRect(c - tw / 2, c - th / 2 + size * 0.02, tw, th);
+  // Crenellations
+  const merlon = tw / 4.2;
+  for (let i = 0; i < 3; i++) {
+    ctx.fillRect(
+      c - tw / 2 + i * (merlon * 1.6),
+      c - th / 2 + size * 0.02 - merlon,
+      merlon,
+      merlon,
+    );
+  }
+  // Door
+  ctx.fillStyle = "#2c2620";
+  ctx.beginPath();
+  ctx.arc(c, c + th / 2 - size * 0.008, tw * 0.22, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(c - tw * 0.22, c + th / 2 - size * 0.008, tw * 0.44, size * 0.028);
+  return toTexture(canvas);
+}
+
+/**
+ * Arcane rune circle: teal glyphs on transparent, for additive planes.
+ */
+export function makeRuneCircleTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const [canvas, ctx] = createCanvas(size);
+  const rand = mulberry32(6060);
+  const c = size / 2;
+  const teal = "#35d0ba";
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.strokeStyle = teal;
+  ctx.shadowColor = teal;
+  ctx.shadowBlur = 10;
+  ctx.lineCap = "round";
+
+  // Concentric rings
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(c, c, 236, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.arc(c, c, 172, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Glyph band between the rings
+  ctx.lineWidth = 3;
+  const glyphs = 26;
+  for (let i = 0; i < glyphs; i++) {
+    ctx.save();
+    ctx.translate(c, c);
+    ctx.rotate((i / glyphs) * Math.PI * 2);
+    drawRune(ctx, 0, -204, 20 + rand() * 8, rand);
+    ctx.restore();
+  }
+
+  // Inner star polygon (every 3rd point of 8)
+  const starR = 160;
+  const points = 8;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  let idx = 0;
+  for (let i = 0; i <= points; i++) {
+    const a = (idx / points) * Math.PI * 2 - Math.PI / 2;
+    const x = c + Math.cos(a) * starR;
+    const y = c + Math.sin(a) * starR;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+    idx = (idx + 3) % points;
+  }
+  ctx.stroke();
+
+  // Small center circle + node dots at star points
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(c, c, 34, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = teal;
+  for (let i = 0; i < points; i++) {
+    const a = (i / points) * Math.PI * 2 - Math.PI / 2;
+    ctx.beginPath();
+    ctx.arc(c + Math.cos(a) * starR, c + Math.sin(a) * starR, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = toTexture(canvas);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}

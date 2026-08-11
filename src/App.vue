@@ -1,237 +1,280 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick, watch } from "vue";
-import { gsap } from "gsap";
-import LoaderComponent from "./components/LoaderComponent.vue";
-import HomeView from "./components/HomeView.vue";
-import ExperienceView from "./components/ExperienceView.vue";
-import ContactView from "./components/ContactView.vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import type {
+  BookPageScreenTransforms,
+  BookSection,
+  ItemId,
+  SceneEvents,
+} from "./three/types";
+import type { SceneManager as SceneManagerT } from "./three/SceneManager";
+import { useSettings } from "./composables/useSettings";
+import { useAudio } from "./composables/useAudio";
+import { track } from "./composables/useAnalytics";
+import LoaderScreen from "./components/LoaderScreen.vue";
+import ItemTooltip from "./components/ItemTooltip.vue";
+import BookOverlay from "./components/BookOverlay.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
+import HudBar from "./components/HudBar.vue";
+import DiceToast from "./components/DiceToast.vue";
+import type { ToastPayload } from "./components/DiceToast.vue";
+import IncantationConsole from "./components/IncantationConsole.vue";
+import FallbackView from "./components/FallbackView.vue";
 
-const isLoading = ref(true);
-const activeTab = ref<"hero" | "experience" | "contact">("hero");
-const showIde = ref(false);
-const easterEggTriggered = ref(false);
-const ideRef = ref<HTMLDivElement | null>(null);
-const konami = ref<string[]>([]);
-const isLight = ref(false);
-let keyBuffer = "";
-let bufferTimeout: ReturnType<typeof setTimeout>;
-const hireToast = ref(false);
-const saveFlash = ref(false);
-const showGitLog = ref(false);
-const showSudoModal = ref(false);
-const sudoInput = ref("");
-const sudoHistory = ref<
-  { cmd: string; output: string; type: "output" | "error" }[]
->([]);
-const sudoInputEl = ref<HTMLInputElement | null>(null);
-const terminalBodyRef = ref<HTMLElement | null>(null);
-const matrixActive = ref(false);
-const matrixText = ref("");
-const rainbowActive = ref(false);
-let matrixInterval: ReturnType<typeof setInterval> | null = null;
+const settings = useSettings();
+const audio = useAudio();
 
-const tabs = [
-  { id: "hero" as const, label: "Hero.tsx", icon: "TS" },
-  { id: "experience" as const, label: "Experience.tsx", icon: "TS" },
-  { id: "contact" as const, label: "Contact.tsx", icon: "TS" },
+/* ------------------------------------------------------------------ */
+/* WebGL detection / flat mode                                          */
+/* ------------------------------------------------------------------ */
+function webgl2Available(): boolean {
+  try {
+    return !!document.createElement("canvas").getContext("webgl2");
+  } catch {
+    return false;
+  }
+}
+
+const flatRequested =
+  new URLSearchParams(window.location.search).get("flat") === "1";
+const useFallback = flatRequested || !webgl2Available();
+
+/* ------------------------------------------------------------------ */
+/* App state                                                            */
+/* ------------------------------------------------------------------ */
+type AppPhase = "loading" | "entering" | "table" | "focused";
+
+const canvasEl = ref<HTMLCanvasElement | null>(null);
+const appPhase = ref<AppPhase>("loading");
+const progress = ref(0);
+const sceneReady = ref(false);
+
+const focusedItem = ref<ItemId | null>(null);
+const hoveredItem = ref<ItemId | null>(null);
+const hoverX = ref(0);
+const hoverY = ref(0);
+
+const bookOpen = ref(false);
+const bookSection = ref<BookSection>("cover");
+const settingsOpen = ref(false);
+const consoleOpen = ref(false);
+/** matrix3d transforms pinning the DOM ink onto the 3D pages. */
+const pageTransforms = ref<BookPageScreenTransforms | null>(null);
+/** Mobile / coarse pointer: the tome opens as a plain scrollable page. */
+const flatBookOpen = ref(false);
+
+/** Small screens & touch: aligned 3D text is unreadable — serve the boring CV. */
+function coarseDevice(): boolean {
+  return window.matchMedia("(max-width: 767px), (pointer: coarse)").matches;
+}
+/** Evaluated once for template chrome (the button doesn't need live tracking). */
+const isCoarseDevice = coarseDevice();
+
+/** URL of the downloadable CV, set only if /baker-cv.pdf actually exists. */
+const cvUrl = ref<string | null>(null);
+
+const toast = ref<ToastPayload | null>(null);
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+let toastId = 0;
+let toastAction: (() => void) | null = null;
+
+let scene: SceneManagerT | null = null;
+
+/** Book section requested via #/book/<section> before the scene was ready. */
+const BOOK_SECTIONS: BookSection[] = [
+  "cover",
+  "whoami",
+  "skills",
+  "career",
+  "projects",
+  "runes",
+  "contact",
 ];
+let pendingBookSection: BookSection | null = ((): BookSection | null => {
+  const match = window.location.hash.match(/^#\/book\/([a-z]+)$/);
+  const candidate = match?.[1] as BookSection | undefined;
+  return candidate && BOOK_SECTIONS.includes(candidate) ? candidate : null;
+})();
 
-const switchTab = (id: "hero" | "experience" | "contact") => {
-  activeTab.value = id;
-};
+/* ------------------------------------------------------------------ */
+/* Toasts                                                               */
+/* ------------------------------------------------------------------ */
+function showToast(
+  text: string,
+  tone: ToastPayload["tone"] = "normal",
+  actionLabel?: string,
+  onAction?: () => void,
+): void {
+  toast.value = { id: ++toastId, text, tone, actionLabel };
+  toastAction = onAction ?? null;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toast.value = null), 4000);
+}
 
-const closeTab = (id: string, e: Event) => {
-  e.stopPropagation();
-  const remaining = tabs.filter((t) => t.id !== id);
-  if (remaining.length > 0 && activeTab.value === id) {
-    activeTab.value = remaining[0].id;
-  }
-};
+function onToastAction(): void {
+  toastAction?.();
+  toast.value = null;
+}
 
-const closeWindow = () => window.close();
-
-const openSudoModal = () => {
-  showSudoModal.value = true;
-  sudoHistory.value = [];
-  sudoInput.value = "";
-  nextTick(() => sudoInputEl.value?.focus());
-};
-
-const closeSudoModal = () => {
-  showSudoModal.value = false;
-  sudoInput.value = "";
-};
-
-const runCheatCode = () => {
-  const cmd = sudoInput.value.trim();
-  sudoInput.value = "";
-  if (!cmd) return;
-  const cmdLower = cmd.toLowerCase();
-  const CODES: Record<
-    string,
-    { output: string; type: "output" | "error"; effect?: () => void }
-  > = {
-    help: {
-      output:
-        "Available cheat codes:\n  whoami           who are you?\n  ls               list project files\n  cat baker.json   inspect the developer\n  git status       check repo health\n  npm install      install the universe\n  uname -a         system info\n  hack             initiate hacking sequence\n  dance            make it groove\n  matrix           go deeper\n  flip             table flip mode\n  rainbow          taste the rainbow\n  coffee           ☕\n  rm -rf /         don't\n  42               the answer\n  exit             close terminal",
-      type: "output",
-    },
-    whoami: {
-      output:
-        "baker\nUID=1337(baker) GID=1337(developers)\ngroups=1337(developers),0(caffeine),42(late-nights)",
-      type: "output",
-    },
-    ls: {
-      output:
-        "Hero.tsx  Experience.tsx  Contact.tsx\neaster-eggs/  .secrets  node_modules/ (227,342 items)\nbaker-cv.pdf  coffee.ts  TODO.md (1,847 unresolved items)",
-      type: "output",
-    },
-    "cat baker.json": {
-      output:
-        '{\n  "name": "Baker Alazzawi",\n  "version": "25.0.0",\n  "type": "human",\n  "bugs": [],\n  "features": ["ships fast", "fixes faster", "coffee-dependent"],\n  "uptime": "24/7 (excluding coffee breaks)"\n}',
-      type: "output",
-    },
-    "git status": {
-      output:
-        "On branch main\nYour branch is ahead of 'origin/main' by \u221e commits.\n\nChanges not staged:\n  modified:  life.ts\n  deleted:   free-time.ts\n  added:     more-side-projects.ts\n\nnothing to commit (but plenty to ship)",
-      type: "output",
-    },
-    "npm install": {
-      output:
-        "added 847,291 packages in 0.3s\n\n\u26a0  found 0 vulnerabilities (suspicious)\n\u2713 node_modules now weighs more than the observable universe",
-      type: "output",
-    },
-    "uname -a": {
-      output:
-        "BakerOS 25.0.0-coffee #1 SMP PREEMPT x86_64 GNU/Linux\nKernel: caffeine-powered  Uptime: too long  Load avg: maximum",
-      type: "output",
-    },
-    "42": {
-      output:
-        "The answer to life, the universe, and everything.\n(also: the number of npm packages needed to center a div)",
-      type: "output",
-    },
-    "rm -rf /": {
-      output:
-        "rm: it is dangerous to operate recursively on '/'\nrm: use --no-preserve-root to override this failsafe\nbash: permission denied \u2014 nice try though \ud83d\ude04",
-      type: "error",
-    },
-    coffee: {
-      output:
-        "\u2615 Brewing...\n\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588 100%\nCaffeine level: MAXIMUM\nProductivity: 9000x\nWarning: may cause 3am coding sessions",
-      type: "output",
-    },
-    hack: {
-      output:
-        "Initializing hack sequence...\nAccessing mainframe... \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588 100%\nFirewall: bypassed\nTarget acquired: your attention\nStatus: you've been rickrolled\n\n> never gonna give you up...",
-      type: "output",
-    },
-    dance: {
-      output:
-        "( \u2022_\u2022)\n( \u2022_\u2022)>\u2310\u25a0-\u25a0\n(\u2310\u25a0-\u25a0)  yeahhh",
-      type: "output",
-      effect: () => {
-        setTimeout(() => closeSudoModal(), 600);
-        if (ideRef.value) {
-          gsap.to(ideRef.value, {
-            x: -8,
-            duration: 0.08,
-            repeat: 11,
-            yoyo: true,
-            ease: "power1.inOut",
-            onComplete: () => { gsap.set(ideRef.value!, { x: 0 }); },
-          });
-        }
-      },
-    },
-    matrix: {
-      output:
-        "Wake up, Baker...\nThe Matrix has you...\nFollow the white rabbit. \ud83d\udc07\n\n[launching in 1s]",
-      type: "output",
-      effect: () => {
-        setTimeout(() => {
-          closeSudoModal();
-          matrixActive.value = true;
-          setTimeout(() => {
-            matrixActive.value = false;
-          }, 6000);
-        }, 800);
-      },
-    },
-    flip: {
-      output:
-        "( \u256f\u00b0\u25a1\u00b0\uff09\u256f \ufe35  \u253b\u2501\u253b",
-      type: "output",
-      effect: () => {
-        setTimeout(() => closeSudoModal(), 400);
-        if (ideRef.value) {
-          gsap.to(ideRef.value, {
-            rotationY: 360,
-            duration: 0.8,
-            ease: "power2.inOut",
-            onComplete: () => { gsap.set(ideRef.value!, { rotationY: 0 }); },
-          });
-        }
-      },
-    },
-    rainbow: {
-      output: "\ud83c\udf08 Rainbow mode activated for 5 seconds...",
-      type: "output",
-      effect: () => {
-        rainbowActive.value = true;
-        setTimeout(() => {
-          rainbowActive.value = false;
-        }, 5000);
-      },
-    },
-    exit: {
-      output: "logout\nConnection to baker-portfolio closed.",
-      type: "output",
-      effect: () => {
-        setTimeout(() => closeSudoModal(), 500);
-      },
-    },
-  };
-  const result = CODES[cmdLower];
-  if (result) {
-    sudoHistory.value.push({ cmd, output: result.output, type: result.type });
-    result.effect?.();
+function handleDiceResult(value: number): void {
+  track("dice_roll", { value });
+  if (value === 20) {
+    audio.playChime();
+    showToast("NATURAL 20! The whole tavern erupts in cheers!", "nat20");
+  } else if (value === 1) {
+    showToast("Natural 1… the die rolls under the table in shame.", "nat1");
   } else {
-    sudoHistory.value.push({
-      cmd,
-      output: `bash: ${cmd}: command not found\nType 'help' for available commands.`,
-      type: "error",
-    });
+    showToast(`You rolled a ${value}!`, "normal");
   }
-  nextTick(() => {
-    if (terminalBodyRef.value)
-      terminalBodyRef.value.scrollTop = terminalBodyRef.value.scrollHeight;
-    sudoInputEl.value?.focus();
-  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Scene wiring                                                         */
+/* ------------------------------------------------------------------ */
+const events: SceneEvents = {
+  onProgress: (p) => {
+    progress.value = p;
+  },
+  onReady: () => {
+    sceneReady.value = true;
+  },
+  onHover: (item, screen) => {
+    if (appPhase.value !== "table") {
+      hoveredItem.value = null;
+      return;
+    }
+    hoveredItem.value = item;
+    if (item && screen) {
+      hoverX.value = screen.x;
+      hoverY.value = screen.y;
+    }
+  },
+  onSelect: (item) => {
+    if (item === "dice") {
+      // The die never takes camera focus — it just rolls.
+      scene?.rollDice();
+      return;
+    }
+    if (item === "spellbook" && coarseDevice()) {
+      hoveredItem.value = null;
+      flatBookOpen.value = true;
+      track("book_open", { mode: "flat" });
+      return;
+    }
+    if (item !== "spellbook") track("item_focus", { item });
+    hoveredItem.value = null;
+    focusedItem.value = item;
+    appPhase.value = "focused";
+    scene?.focusItem(item);
+    if (item === "spellbook") audio.playThump();
+  },
+  onFocusSettled: (item) => {
+    if (item === "spellbook") {
+      bookOpen.value = true;
+    } else if (item === null) {
+      focusedItem.value = null;
+      if (appPhase.value === "focused") appPhase.value = "table";
+    }
+  },
+  onBookPageTransforms: (t) => {
+    pageTransforms.value = t;
+  },
+  onDiceResult: handleDiceResult,
+  onCandleSnuff: ({ snuffed, bothOut }) => {
+    if (!snuffed) {
+      showToast("A match flares — light returns.");
+    } else if (bothOut) {
+      showToast("Both candles out. The darkness is grateful.");
+    } else {
+      showToast("The candle hisses out. The shadows lean closer.");
+    }
+  },
+  onAutoQuality: (quality) => {
+    // Keep the ledger honest: sync the setting to what the scene actually runs.
+    if (settings.quality !== quality) settings.quality = quality;
+    showToast(
+      "The innkeeper dims the lanterns — smoother magic on this device.",
+      "normal",
+    );
+    track("quality_autodrop", { quality });
+  },
 };
 
-watch(matrixActive, (val) => {
-  if (val) {
-    const chars =
-      "\u30a2\u30a4\u30a6\u30a8\u30aa\u30ab\u30ad\u30af\u30b1\u30b3\u30b5\u30b7\u30b9\u30bb\u30bd0123456789ABCDEF<>{}[]/\\|?!@#$%";
-    matrixInterval = setInterval(() => {
-      const cols = Math.floor(window.innerWidth / 10);
-      const rows = Math.floor(window.innerHeight / 16);
-      matrixText.value = Array.from({ length: rows }, () =>
-        Array.from({ length: cols }, () =>
-          Math.random() > 0.65
-            ? chars[Math.floor(Math.random() * chars.length)]
-            : " ",
-        ).join(""),
-      ).join("\n");
-    }, 80);
-  } else {
-    if (matrixInterval) clearInterval(matrixInterval);
-    matrixText.value = "";
+function openBookAt(section: BookSection): void {
+  bookSection.value = section;
+  consoleOpen.value = false;
+  if (useFallback) return; // fallback shows everything already
+  if (coarseDevice()) {
+    flatBookOpen.value = true;
+    track("book_open", { mode: "flat" });
+    return;
   }
-});
+  if (bookOpen.value) return;
+  if (!scene || appPhase.value === "loading" || appPhase.value === "entering") {
+    pendingBookSection = section;
+    return;
+  }
+  events.onSelect?.("spellbook");
+}
 
-// Easter egg: Konami code → shows a fun console message
+function closeBook(): void {
+  if (!bookOpen.value) return;
+  bookOpen.value = false; // hide immediately (fade handled by <Transition>)
+  audio.playThump();
+  scene?.focusItem(null);
+}
+
+function unfocus(): void {
+  scene?.focusItem(null);
+}
+
+/* ------------------------------------------------------------------ */
+/* Loader → table                                                       */
+/* ------------------------------------------------------------------ */
+function enterInn(): void {
+  if (appPhase.value !== "loading") return;
+  track("enter_inn");
+  // This click is the audio user-gesture.
+  audio.unlock();
+  audio.setSfxOn(settings.sfxOn);
+  audio.setMusicVolume(settings.musicVolume);
+  audio.setMusicOn(settings.musicOn);
+  appPhase.value = "entering";
+  window.setTimeout(() => {
+    appPhase.value = "table";
+    if (pendingBookSection) {
+      openBookAt(pendingBookSection);
+      pendingBookSection = null;
+    }
+  }, 900);
+}
+
+/* ------------------------------------------------------------------ */
+/* Keyboard + typing-buffer easter eggs                                 */
+/* ------------------------------------------------------------------ */
+let typeBuffer = "";
+
+function hireEgg(): void {
+  showToast(
+    "A raven lands with a quest offer: “Seeking one Computer Wizard…”",
+    "quest",
+    "Read the contract",
+    () => openBookAt("contact"),
+  );
+}
+
+function bufferKey(key: string): void {
+  if (key.length !== 1 || !/[a-z]/i.test(key)) return;
+  typeBuffer = (typeBuffer + key.toLowerCase()).slice(-10);
+  if (typeBuffer.endsWith("sudo") || typeBuffer.endsWith("magic") || typeBuffer.endsWith("cast")) {
+    typeBuffer = "";
+    consoleOpen.value = true;
+  } else if (typeBuffer.endsWith("hire")) {
+    typeBuffer = "";
+    hireEgg();
+  }
+}
+
+/* ↑↑↓↓←→←→BA — the hidden path from the old site. */
 const KONAMI = [
   "ArrowUp",
   "ArrowUp",
@@ -244,375 +287,310 @@ const KONAMI = [
   "b",
   "a",
 ];
+let konamiIndex = 0;
 
-// Easter egg: Shift+B opens "command palette" alert
-const handleKeyDown = (e: KeyboardEvent) => {
-  if (
-    e.target instanceof HTMLInputElement ||
-    e.target instanceof HTMLTextAreaElement
-  )
+function trackKonami(key: string): void {
+  const k = key.length === 1 ? key.toLowerCase() : key;
+  if (k !== KONAMI[konamiIndex]) {
+    konamiIndex = k === KONAMI[0] ? 1 : 0;
     return;
+  }
+  konamiIndex++;
+  if (konamiIndex < KONAMI.length) return;
+  konamiIndex = 0;
+  track("konami");
+  // Same celebration as a natural 20: chime + screen sparkles.
+  audio.playChime();
+  showToast("🎮 +30 XP — a hidden path reveals itself", "nat20");
+}
 
-  // Konami code
-  konami.value.push(e.key);
-  if (konami.value.length > KONAMI.length) konami.value.shift();
-  if (
-    konami.value.length === KONAMI.length &&
-    konami.value.every((k, i) => k === KONAMI[i])
-  ) {
-    easterEggTriggered.value = true;
-    konami.value = [];
-    setTimeout(() => {
-      easterEggTriggered.value = false;
-    }, 3000);
+function onKeydown(event: KeyboardEvent): void {
+  const target = event.target as HTMLElement | null;
+  const typingInField =
+    !!target &&
+    (target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable);
+
+  if (!typingInField) {
+    bufferKey(event.key);
+    trackKonami(event.key);
   }
 
-  // Shift+B  "command palette"
-  if (e.shiftKey && e.key === "b") {
-    e.preventDefault();
-    console.log(
-      "%c> Baker Alazzawi: Thanks for checking out my portfolio! 🎮",
-      "color: #dcdcaa; background: #1e1e1e; font-size: 16px; padding: 8px; font-family: 'JetBrains Mono', monospace;",
-    );
+  if (consoleOpen.value) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      consoleOpen.value = false;
+    }
+    return;
+  }
+  if (settingsOpen.value && event.key === "Escape") {
+    event.preventDefault();
+    settingsOpen.value = false;
+    return;
+  }
+  if (flatBookOpen.value && event.key === "Escape") {
+    event.preventDefault();
+    flatBookOpen.value = false;
+    return;
+  }
+  // While the book is open, BookOverlay owns Escape/Tab/arrows.
+  if (bookOpen.value || typingInField || useFallback) return;
+
+  if (event.key === "Tab") {
+    if (scene && appPhase.value === "table") {
+      event.preventDefault();
+      scene.highlightNext(event.shiftKey ? -1 : 1);
+    }
+    return;
+  }
+  if (event.key === "Enter") {
+    if (scene && appPhase.value === "table") scene.activateHighlighted();
+    return;
+  }
+  if (event.key === "Escape" && focusedItem.value) {
+    event.preventDefault();
+    unfocus();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Console effects                                                      */
+/* ------------------------------------------------------------------ */
+let shakeTimer: ReturnType<typeof setTimeout> | null = null;
+function castFireball(): void {
+  const app = document.getElementById("app");
+  if (!app) return;
+  app.classList.remove("screen-shake");
+  // restart the animation if it's already running
+  void app.offsetWidth;
+  app.classList.add("screen-shake");
+  if (shakeTimer) clearTimeout(shakeTimer);
+  shakeTimer = setTimeout(() => app.classList.remove("screen-shake"), 700);
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings → scene/audio                                               */
+/* ------------------------------------------------------------------ */
+watch(() => settings.quality, (quality) => scene?.setQuality(quality));
+watch(() => settings.timeOfDay, (mode) => scene?.setTimeOfDay(mode));
+watch(
+  () => settings.reducedMotion,
+  (reduced) => {
+    scene?.setReducedMotion(reduced);
+    document.documentElement.classList.toggle("reduce-motion", reduced);
+  },
+);
+watch(() => settings.musicOn, (on) => {
+  audio.setMusicOn(on);
+  track(on ? "music_on" : "music_off");
+});
+watch(() => settings.musicVolume, (volume) => audio.setMusicVolume(volume));
+watch(() => settings.sfxOn, (on) => audio.setSfxOn(on));
+watch(consoleOpen, (open) => {
+  if (open) track("console_open");
+});
+
+/* Hash sync (#/book/<section> while the tome is open) + book analytics */
+watch(
+  [bookOpen, bookSection],
+  ([open, section], [wasOpen, prevSection]) => {
+    const base = window.location.pathname + window.location.search;
+    // Only strip the hash if the book was actually open, so a deep link
+    // (#/book/<section>) present before "Enter the Inn" is not clobbered.
+    if (open) history.replaceState(null, "", `${base}#/book/${section}`);
+    else if (wasOpen) history.replaceState(null, "", base);
+
+    if (open && !wasOpen) {
+      track("book_open");
+      track("book_section", { section });
+    } else if (open && section !== prevSection) {
+      track("book_section", { section });
+      // Cosmetic 3D page turn under the crossfading ink.
+      const dir =
+        BOOK_SECTIONS.indexOf(section) >= BOOK_SECTIONS.indexOf(prevSection)
+          ? 1
+          : -1;
+      scene?.flipBookPage(dir as 1 | -1);
+    } else if (!open && wasOpen) {
+      track("book_close");
+    }
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Lifecycle                                                            */
+/* ------------------------------------------------------------------ */
+function onVisibilityChange(): void {
+  scene?.setPaused(document.hidden);
+}
+
+/** Only offer the CV if the file is actually deployed — no dead links. */
+async function probeCv(): Promise<void> {
+  try {
+    const res = await fetch("/baker-cv.pdf", { method: "HEAD" });
+    const type = res.headers.get("content-type") ?? "";
+    // Dev/SPA servers answer missing files with the index page — reject those.
+    if (res.ok && !type.includes("text/html")) cvUrl.value = "/baker-cv.pdf";
+  } catch {
+    /* offline or blocked — simply don't show the button */
+  }
+}
+
+onMounted(async () => {
+  document.documentElement.classList.toggle(
+    "reduce-motion",
+    settings.reducedMotion,
+  );
+  window.addEventListener("keydown", onKeydown);
+  void probeCv();
+
+  if (useFallback) {
+    appPhase.value = "table";
+    return;
   }
 
-  // Ctrl+S → fake save feedback in status bar
-  if (e.ctrlKey && e.key === "s") {
-    e.preventDefault();
-    saveFlash.value = true;
-    setTimeout(() => {
-      saveFlash.value = false;
-    }, 2000);
-  }
-
-  // Light/dark/hire easter egg key buffer
-  keyBuffer += e.key.toLowerCase();
-  clearTimeout(bufferTimeout);
-  bufferTimeout = setTimeout(() => {
-    keyBuffer = "";
-  }, 2000);
-  if (keyBuffer.includes("light")) {
-    isLight.value = true;
-    keyBuffer = "";
-  } else if (keyBuffer.includes("dark")) {
-    isLight.value = false;
-    keyBuffer = "";
-  } else if (keyBuffer.includes("hire")) {
-    hireToast.value = true;
-    keyBuffer = "";
-  } else if (keyBuffer.includes("sudo")) {
-    openSudoModal();
-    keyBuffer = "";
-  }
-};
-
-const currentTime = ref("");
-const updateTime = () => {
-  const now = new Date();
-  currentTime.value = now.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  const { SceneManager } = await import("./three/SceneManager");
+  if (!canvasEl.value) return;
+  scene = new SceneManager(canvasEl.value, events, {
+    quality: settings.quality,
+    reducedMotion: settings.reducedMotion,
   });
-};
-
-const branchName = computed(() => "main");
-const fileSize = computed(() => {
-  const sizes: Record<string, string> = {
-    hero: "2.4 KB",
-    experience: "3.1 KB",
-    contact: "1.8 KB",
-  };
-  return sizes[activeTab.value];
+  scene.setTimeOfDay(settings.timeOfDay);
 });
 
-let timeInterval: ReturnType<typeof setInterval>;
+function teardown(): void {
+  window.removeEventListener("keydown", onKeydown);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
+  scene?.dispose();
+  scene = null;
+  audio.dispose();
+}
 
-onMounted(() => {
-  setTimeout(() => {
-    isLoading.value = false;
-    showIde.value = true;
-    nextTick(() => {
-      if (ideRef.value) {
-        gsap.fromTo(
-          ideRef.value,
-          { opacity: 0, scale: 0.98 },
-          { opacity: 1, scale: 1, duration: 0.4, ease: "power2.out" },
-        );
-      }
-    });
-  }, 1500);
-
-  window.addEventListener("keydown", handleKeyDown);
-  updateTime();
-  timeInterval = setInterval(updateTime, 30000);
-
-  console.log(
-    "%c🎮 Easter eggs hidden in this portfolio. Can you find them all?",
-    "color: #569cd6; font-size: 13px; font-family: 'JetBrains Mono', monospace;",
-  );
-  console.log(
-    '%c   hint: try Shift+B, Konami code, Ctrl+S, type "light" or "hire"...',
-    "color: #6a9955; font-size: 12px; font-family: 'JetBrains Mono', monospace;",
-  );
-});
-
-onUnmounted(() => {
-  window.removeEventListener("keydown", handleKeyDown);
-  clearInterval(timeInterval);
-  clearTimeout(bufferTimeout);
-  if (matrixInterval) clearInterval(matrixInterval);
-});
+onBeforeUnmount(teardown);
+import.meta.hot?.dispose(() => teardown());
 </script>
 
 <template>
-  <LoaderComponent v-if="isLoading" />
-  <div v-else-if="showIde" ref="ideRef"
-    class="ide-shell h-screen flex flex-col text-sm overflow-hidden transition-colors duration-500"
-    :class="isLight ? 'bg-[#ffffff]' : 'bg-[#1e1e1e]'" style="opacity: 0">
-    <!-- Title Bar -->
-    <div class="flex items-center justify-between h-8 px-3 text-xs select-none shrink-0 transition-colors duration-500"
-      :class="isLight ? 'bg-[#dddddd] text-[#333333]' : 'bg-[#323233] text-[#cccccc]'
-        ">
-      <div class="flex items-center gap-2">
-        <span class="hidden sm:inline">Baker Alazzawi — Portfolio</span>
-        <span class="sm:hidden">Portfolio</span>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <div class="w-3 h-3 rounded-full bg-[#ffbd2e] opacity-70"></div>
-        <div class="w-3 h-3 rounded-full bg-[#28c840] opacity-70"></div>
-        <button @click="closeWindow"
-          class="w-3 h-3 rounded-full bg-[#ff5f57] opacity-70 hover:opacity-100 transition-opacity cursor-pointer"></button>
-      </div>
-    </div>
+  <div class="relative h-full w-full overflow-hidden bg-night">
+    <!-- No WebGL2 / ?flat=1 → plain parchment page -->
+    <FallbackView v-if="useFallback" />
 
-    <!-- Tab Bar -->
-    <div class="flex items-end overflow-x-auto shrink-0 transition-colors duration-500" :class="isLight
-        ? 'bg-[#ececec] border-b border-[#ffffff]'
-        : 'bg-[#252526] border-b border-[#1e1e1e]'
-      ">
-      <button v-for="tab in tabs" :key="tab.id" @click="switchTab(tab.id)"
-        class="group flex items-center gap-2 px-4 py-2 text-xs transition-colors whitespace-nowrap" :class="[
-          isLight ? 'border-r border-[#ffffff]' : 'border-r border-[#1e1e1e]',
-          activeTab === tab.id
-            ? isLight
-              ? 'bg-[#ffffff] text-[#333333] border-t-2 border-t-[#007acc]'
-              : 'bg-[#1e1e1e] text-[#ffffff] border-t-2 border-t-[#007acc]'
-            : isLight
-              ? 'bg-[#ececec] text-[#888888] hover:bg-[#e0e0e0] border-t-2 border-t-transparent'
-              : 'bg-[#2d2d2d] text-[#969696] hover:bg-[#2d2d2d]/80 border-t-2 border-t-transparent',
-        ]">
-        <span class="text-[10px] font-bold px-1 py-0.5 rounded"
-          :class="activeTab === tab.id ? 'text-[#519aba]' : 'text-[#519aba]/60'">TS</span>
-        <span>{{ tab.label }}</span>
-        <span @click="closeTab(tab.id, $event)"
-          class="ml-1 opacity-0 group-hover:opacity-100 hover:bg-[#3c3c3c] rounded px-1 transition-opacity">×</span>
-      </button>
-    </div>
+    <template v-else>
+      <canvas
+        ref="canvasEl"
+        class="absolute inset-0 block h-full w-full"
+        aria-hidden="true"
+      />
 
-    <!-- Breadcrumb -->
-    <div class="flex items-center gap-1 px-4 py-1 text-[11px] border-b shrink-0 transition-colors duration-500" :class="isLight
-        ? 'bg-[#ffffff] text-[#888888] border-[#e0e0e0]'
-        : 'bg-[#1e1e1e] text-[#969696] border-[#2d2d2d]'
-      ">
-      <span>src</span>
-      <span class="text-[#555]">&gt;</span>
-      <span>components</span>
-      <span class="text-[#555]">&gt;</span>
-      <span :class="isLight ? 'text-[#333333]' : 'text-[#cccccc]'">{{
-        tabs.find((t) => t.id === activeTab)?.label
-        }}</span>
-    </div>
+      <!-- hover nameplate -->
+      <Transition name="tooltip">
+        <ItemTooltip
+          v-if="hoveredItem && appPhase === 'table'"
+          :item="hoveredItem"
+          :x="hoverX"
+          :y="hoverY"
+        />
+      </Transition>
 
-    <!-- Editor Area -->
-    <div class="flex-1 flex overflow-hidden relative">
-      <!-- Line gutters + code -->
-      <div class="flex-1 overflow-y-auto editor-scroll relative">
-        <HomeView v-if="activeTab === 'hero'" />
-        <ExperienceView v-else-if="activeTab === 'experience'" />
-        <ContactView v-else-if="activeTab === 'contact'" />
+      <!-- corner chrome (hidden while reading — the table should be bare) -->
+      <HudBar
+        v-if="(appPhase === 'table' || appPhase === 'focused') && !bookOpen && !flatBookOpen"
+        :music-on="settings.musicOn"
+        :book-open="bookOpen"
+        :cv-url="cvUrl"
+        @toggle-music="settings.musicOn = !settings.musicOn"
+        @open-settings="settingsOpen = true"
+      />
 
-        <!-- Minimap -->
-        <div class="minimap hidden md:block"></div>
-      </div>
-    </div>
+      <!-- floating way back when zoomed on an item (book has its own strap) -->
+      <Transition name="book-fade">
+        <button
+          v-if="appPhase === 'focused' && !bookOpen"
+          class="btn-leather fixed left-1/2 top-4 z-30 -translate-x-1/2 whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-[11px] opacity-90"
+          @click="unfocus"
+        >
+          ⟨ View the whole table
+        </button>
+      </Transition>
 
-    <!-- Matrix overlay -->
-    <Transition name="fade">
-      <div v-if="matrixActive"
-        class="fixed inset-0 z-40 pointer-events-none bg-black/90 overflow-hidden font-mono text-[#00ff41] text-[11px] leading-4 select-none">
-        <pre class="p-1 opacity-80">{{ matrixText }}</pre>
-      </div>
+      <!-- mobile: the tome is the site — make opening it obvious -->
+      <Transition name="book-fade">
+        <button
+          v-if="appPhase === 'table' && isCoarseDevice && !flatBookOpen"
+          class="btn-wax fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2.5 whitespace-nowrap rounded-full px-6 py-3 text-[12px]"
+          @click="openBookAt('cover')"
+        >
+          <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 6c-2-1.5-4.5-2-8-2v14c3.5 0 6 .5 8 2 2-1.5 4.5-2 8-2V4c-3.5 0-6 .5-8 2z" />
+            <path d="M12 6v14" />
+          </svg>
+          Open the Tome
+        </button>
+      </Transition>
+
+      <!-- the tome: ink pinned onto the 3D pages -->
+      <Transition name="book-fade">
+        <BookOverlay
+          v-if="bookOpen"
+          v-model:section="bookSection"
+          :transforms="pageTransforms"
+          :cv-url="cvUrl"
+          @close="closeBook"
+        />
+      </Transition>
+
+      <!-- the boring version (mobile / coarse pointers) -->
+      <Transition name="book-fade">
+        <div v-if="flatBookOpen" class="fixed inset-0 z-50 overflow-y-auto bg-night">
+          <button
+            class="btn-leather fixed right-3 top-3 z-10 rounded px-4 py-2 text-[11px]"
+            @click="flatBookOpen = false"
+          >
+            ⟨ Back to the table
+          </button>
+          <FallbackView />
+        </div>
+      </Transition>
+
+      <!-- the innkeeper's ledger -->
+      <Transition name="panel">
+        <SettingsPanel
+          v-if="settingsOpen"
+          @close="settingsOpen = false"
+          @return-to-table="
+            settingsOpen = false;
+            bookOpen ? closeBook() : unfocus();
+          "
+        />
+      </Transition>
+
+      <!-- loading screen -->
+      <LoaderScreen
+        v-if="appPhase === 'loading' || appPhase === 'entering'"
+        :progress="progress"
+        :ready="sceneReady"
+        :leaving="appPhase === 'entering'"
+        @enter="enterInn"
+      />
+    </template>
+
+    <!-- toasts (dice, easter eggs) -->
+    <Transition name="toast">
+      <DiceToast v-if="toast" :toast="toast" @action="onToastAction" />
     </Transition>
 
-    <!-- Sudo terminal modal -->
-    <Transition name="fade">
-      <div v-if="showSudoModal" class="fixed inset-0 z-50 flex items-end justify-center" @click.self="closeSudoModal">
-        <div
-          class="w-full max-w-3xl bg-[#1e1e1e] border border-[#3c3c3c] border-b-0 h-64 flex flex-col font-mono text-[12px] shadow-2xl">
-          <div
-            class="flex items-center justify-between px-3 py-1.5 bg-[#252526] border-b border-[#3c3c3c] shrink-0 select-none">
-            <div class="flex items-center gap-2 text-[#cccccc]">
-              <span class="text-[#4ec9b0]">⚡</span>
-              <span class="text-[11px] uppercase tracking-wider">Terminal — bash (sudo)</span>
-            </div>
-            <button @click="closeSudoModal"
-              class="text-[#969696] hover:text-white transition-colors text-base leading-none">
-              ×
-            </button>
-          </div>
-          <div ref="terminalBodyRef" class="flex-1 overflow-y-auto p-3 editor-scroll">
-            <div class="text-[#6a9955] mb-0.5">bash-5.2# sudo -s</div>
-            <div class="text-[#569cd6] mb-2">
-              Welcome, root. Type <span class="text-[#ce9178]">'help'</span> for
-              cheat codes.
-            </div>
-            <template v-for="(entry, i) in sudoHistory" :key="i">
-              <div class="text-[#569cd6]">root@baker:~# {{ entry.cmd }}</div>
-              <div :class="entry.type === 'error' ? 'text-[#f44747]' : 'text-[#cccccc]'
-                " class="whitespace-pre pl-2 mb-1.5 leading-5">
-                {{ entry.output }}
-              </div>
-            </template>
-            <div class="flex items-center gap-1 mt-1">
-              <span class="text-[#569cd6] shrink-0">root@baker:~#</span>
-              <input ref="sudoInputEl" v-model="sudoInput" @keydown.enter.prevent="runCheatCode"
-                @keydown.escape.prevent="closeSudoModal"
-                class="bg-transparent outline-none text-[#cccccc] flex-1 caret-[#cccccc] ml-1" autocomplete="off"
-                spellcheck="false" placeholder="enter cheat code..." />
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- the wizard's prepared-spell page -->
+    <Transition name="console">
+      <IncantationConsole
+        v-if="consoleOpen"
+        @close="consoleOpen = false"
+        @shake="castFireball"
+        @open-section="openBookAt"
+        @wish="hireEgg"
+        @roll="handleDiceResult"
+      />
     </Transition>
-
-    <!-- Hire notification toast -->
-    <Transition name="fade">
-      <div v-if="hireToast"
-        class="fixed bottom-8 right-3 z-50 bg-[#252526] border border-[#3c3c3c] text-[#cccccc] text-[12px] p-4 w-72 shadow-2xl">
-        <div class="flex justify-between items-start mb-2">
-          <span class="text-[#4ec9b0] text-[11px] uppercase tracking-wider font-bold">● Notification</span>
-          <button @click="hireToast = false" class="text-[#969696] hover:text-white leading-none ml-4">
-            ×
-          </button>
-        </div>
-        <p class="text-[#cccccc] mb-3 font-mono text-[11px] leading-5">
-          An employer() wants to<br />hire baker. Accept?
-        </p>
-        <div class="flex gap-2">
-          <button @click="
-            activeTab = 'contact';
-          hireToast = false;
-          " class="px-3 py-1 bg-[#007acc] text-white text-[11px] hover:bg-[#006bb3] transition-colors">
-            Yes
-          </button>
-          <button @click="hireToast = false"
-            class="px-3 py-1 bg-[#3c3c3c] text-[#cccccc] text-[11px] hover:bg-[#4a4a4a] transition-colors">
-            I need coffee first
-          </button>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- Easter egg overlay -->
-    <Transition name="fade">
-      <div v-if="easterEggTriggered" class="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-        <div class="text-4xl md:text-6xl animate-bounce">🎮 +30 XP</div>
-      </div>
-    </Transition>
-
-    <!-- Status Bar -->
-    <div
-      class="flex items-center justify-between h-6 text-white text-[11px] px-3 select-none shrink-0 transition-colors"
-      :class="rainbowActive ? 'rainbow-status' : 'bg-[#007acc]'">
-      <div class="flex items-center gap-3">
-        <div class="relative">
-          <button @click="showGitLog = !showGitLog"
-            class="flex items-center gap-1 hover:bg-white/10 px-1 rounded transition-colors">
-            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
-              <path d="M14.5 3.5L5 13 1.5 9.5l1-1L5 11l8.5-8.5 1 1z" />
-            </svg>
-            {{ branchName }}
-          </button>
-          <div v-if="showGitLog"
-            class="absolute bottom-full left-0 mb-2 bg-[#1e1e1e] border border-[#3c3c3c] text-[11px] py-2 min-w-[320px] z-50 shadow-2xl">
-            <div class="px-3 py-1 text-[#569cd6] border-b border-[#3c3c3c] mb-1 flex justify-between items-center">
-              <span class="font-mono">git log --oneline main</span>
-              <button @click.stop="showGitLog = false" class="text-[#969696] hover:text-white ml-4">
-                ×
-              </button>
-            </div>
-            <div class="px-3 font-mono space-y-0.5 text-[#cccccc] py-1">
-              <div>
-                <span class="text-[#f0ad4e]">a3f9c21</span> feat: rewrote
-                everything from scratch (again)
-              </div>
-              <div>
-                <span class="text-[#f0ad4e]">7e2b4d8</span> fix: it works, don't
-                ask why
-              </div>
-              <div>
-                <span class="text-[#f0ad4e]">1c6e9f3</span> chore: commented out
-                the broken parts
-              </div>
-              <div>
-                <span class="text-[#f0ad4e]">3d8a1b5</span> perf: removed 47
-                console.logs, kept 3
-              </div>
-              <div>
-                <span class="text-[#f0ad4e]">9f4c2e7</span> init: added the
-                whole internet as a dep
-              </div>
-            </div>
-          </div>
-        </div>
-        <span class="hidden sm:inline">0 errors · 0 warnings</span>
-      </div>
-      <div class="flex items-center gap-3">
-        <span class="hidden sm:inline">
-          <span v-if="saveFlash" class="text-[#4ec9b0]">✓ baker.ts saved</span>
-          <span v-else>{{ fileSize }}</span>
-        </span>
-        <span>TypeScript</span>
-        <span>UTF-8</span>
-        <span>{{ currentTime }}</span>
-      </div>
-    </div>
   </div>
 </template>
-
-<style scoped>
-.rainbow-status {
-  animation: rainbow-bg 1s linear infinite;
-}
-
-@keyframes rainbow-bg {
-  0% {
-    background-color: #e74c3c;
-  }
-
-  17% {
-    background-color: #e67e22;
-  }
-
-  33% {
-    background-color: #f1c40f;
-  }
-
-  50% {
-    background-color: #2ecc71;
-  }
-
-  67% {
-    background-color: #3498db;
-  }
-
-  83% {
-    background-color: #9b59b6;
-  }
-
-  100% {
-    background-color: #e74c3c;
-  }
-}
-</style>
