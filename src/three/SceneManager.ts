@@ -233,6 +233,10 @@ export class SceneManager implements ISceneManager {
     document.addEventListener("visibilitychange", this.onVisibilityChange);
     this.handleResize();
     this.updateRunning();
+    // Dev-only escape hatch for debugging camera/scene state in the console.
+    if (import.meta.env.DEV) {
+      (window as unknown as { __scene?: SceneManager }).__scene = this;
+    }
   }
 
   get focusedItem(): ItemId | null {
