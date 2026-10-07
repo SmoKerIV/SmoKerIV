@@ -94,10 +94,10 @@ export class CameraRig {
 
   private reducedMotion: boolean;
   /**
-   * 0 while reading — a fully static camera means the page matrix3d
+   * 0 while reading — a fully static camera means the page 2D matrix
    * transforms stop changing, so the browser never re-rasterizes the ink
-   * layer mid-read (per-frame matrix updates made the text flicker/vanish
-   * on some GPUs); 1 otherwise.
+   * layer mid-read (per-frame updates made the text flicker on some GPUs);
+   * 1 otherwise.
    */
   private swayScale = 1;
   private tween: gsap.core.Timeline | null = null;

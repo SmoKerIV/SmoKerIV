@@ -141,6 +141,11 @@ export interface ISceneManager {
    * the d20 rolls for real. Reduced motion rolls the die only.
    */
   castAnimateObjects(): void;
+  /**
+   * Cosmetic 3D page turn while the tome is open (the DOM ink crossfades
+   * separately). 1 = forward, -1 = back. No-op unless reading.
+   */
+  flipBookPage(direction: 1 | -1): void;
   setQuality(quality: Quality): void;
   setReducedMotion(reduced: boolean): void;
   /** Switch the inn's mood lighting; "auto" follows the visitor's clock. */

@@ -559,10 +559,6 @@ watch(
 /* ------------------------------------------------------------------ */
 /* Lifecycle                                                            */
 /* ------------------------------------------------------------------ */
-function onVisibilityChange(): void {
-  scene?.setPaused(document.hidden);
-}
-
 /** Only offer the CV if the file is actually deployed — no dead links. */
 async function probeCv(): Promise<void> {
   try {
@@ -598,7 +594,6 @@ onMounted(async () => {
     return;
   }
 
-  document.addEventListener("visibilitychange", onVisibilityChange);
   const { SceneManager } = await import("./three/SceneManager");
   if (!canvasEl.value) return;
   scene = new SceneManager(canvasEl.value, events, {
@@ -615,7 +610,6 @@ function teardown(): void {
   window.removeEventListener("popstate", applyHash);
   window.removeEventListener("pointerdown", unlockAudioOnGesture);
   window.removeEventListener("keydown", unlockAudioOnGesture);
-  document.removeEventListener("visibilitychange", onVisibilityChange);
   coarseQuery.removeEventListener("change", onCoarseChange);
   scene?.dispose();
   scene = null;
