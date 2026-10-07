@@ -11,6 +11,7 @@ import {
 import type { BookPageScreenTransforms, BookSection } from "../three/types";
 import type { Artifact, Quest } from "../data/content";
 import { PAGE_CSS_W, PAGE_CSS_H } from "../three/types";
+import { bookReading, type BookPage } from "../three/bookReading";
 import {
   identity,
   stats,
@@ -91,9 +92,33 @@ function spreadCountFor(section: BookSection): number {
 }
 const spreadCount = computed(() => spreadCountFor(props.section));
 
+/**
+ * One-page-at-a-time reading (small viewports): the scene frames a single
+ * page and `page` says which; otherwise both pages are on screen.
+ */
+const single = computed(() => props.transforms?.single === true);
+const page = ref<BookPage>("left");
+/** Page to land on after the next section change (set when paging back). */
+let pendingPage: BookPage = "left";
+
+/** Pages before this section / in the whole tome (two per spread). */
+function pagesBefore(index: number): number {
+  let n = 0;
+  for (let i = 0; i < index; i++) n += spreadCountFor(SECTIONS[i]!.id) * 2;
+  return n;
+}
+const totalPages = computed(() => pagesBefore(SECTIONS.length));
+
 const pageAnnouncement = computed(() => {
   const current = SECTIONS[sectionIndex.value];
   if (!current) return "";
+  if (single.value) {
+    const n =
+      pagesBefore(sectionIndex.value) +
+      spread.value * 2 +
+      (page.value === "right" ? 2 : 1);
+    return `${current.title}. Page ${n} of ${totalPages.value}.`;
+  }
   const folio =
     spreadCount.value > 1
       ? `, spread ${spread.value + 1} of ${spreadCount.value}`
@@ -101,11 +126,17 @@ const pageAnnouncement = computed(() => {
   return `${current.title}. Section ${sectionIndex.value + 1} of ${SECTIONS.length}${folio}.`;
 });
 
-const canPrev = computed(() => sectionIndex.value > 0 || spread.value > 0);
+const canPrev = computed(
+  () =>
+    sectionIndex.value > 0 ||
+    spread.value > 0 ||
+    (single.value && page.value === "right"),
+);
 const canNext = computed(
   () =>
     sectionIndex.value < SECTIONS.length - 1 ||
-    spread.value < spreadCount.value - 1,
+    spread.value < spreadCount.value - 1 ||
+    (single.value && page.value === "left"),
 );
 
 const paneBase = {
@@ -137,6 +168,15 @@ const tabsStyle = computed<Record<string, string> | null>(() => {
   const L = parseMatrix(t.left);
   const R = parseMatrix(t.right);
   if (!L || !R) return null;
+  if (single.value) {
+    // Sit on the page being read; follows the glide between pages.
+    const P = page.value === "left" ? L : R;
+    return {
+      left: `${P.e + (P.a * PAGE_CSS_W) / 2}px`,
+      top: `${Math.min(P.f, P.b * PAGE_CSS_W + P.f)}px`,
+      transform: "translate(-50%, -100%)",
+    };
+  }
   // Top corners of each pane: (0,0) → (e, f), (W,0) → (aW+e, bW+f).
   const top = Math.min(
     L.f,
@@ -153,33 +193,60 @@ const tabsStyle = computed<Record<string, string> | null>(() => {
   };
 });
 
-function navigate(to: BookSection): void {
+/** Jump to a section; `landing` picks the spread/page (default: first left). */
+function goSection(
+  to: BookSection,
+  landing: { spread: number; page: BookPage } = { spread: 0, page: "left" },
+): void {
   if (to === props.section) return;
-  if (pendingSpread !== 0 && SECTIONS[sectionIndex.value - 1]?.id !== to) {
-    pendingSpread = 0; // only prev() pages back onto a last spread
-  }
+  pendingSpread = landing.spread;
+  pendingPage = landing.page;
   audio.playFlip();
   emit("update:section", to);
 }
+/** Tabs / TOC: land on the section's first (left) page. */
+function navigate(to: BookSection): void {
+  goSection(to);
+}
+
+/** Move to another spread of this section (cosmetic 3D flip included). */
+function turnSpread(delta: 1 | -1, landOn: BookPage): void {
+  audio.playFlip();
+  spread.value += delta;
+  page.value = landOn;
+  bookReading.flip(delta);
+}
 
 function next(): void {
-  if (spread.value < spreadCount.value - 1) {
+  if (single.value && page.value === "left") {
     audio.playFlip();
-    spread.value += 1;
+    page.value = "right";
+  } else if (spread.value < spreadCount.value - 1) {
+    turnSpread(1, "left");
   } else if (sectionIndex.value < SECTIONS.length - 1) {
-    navigate(SECTIONS[sectionIndex.value + 1]!.id);
+    goSection(SECTIONS[sectionIndex.value + 1]!.id);
   }
 }
 function prev(): void {
-  if (spread.value > 0) {
+  if (single.value && page.value === "right") {
     audio.playFlip();
-    spread.value -= 1;
+    page.value = "left";
+  } else if (spread.value > 0) {
+    turnSpread(-1, single.value ? "right" : "left");
   } else if (sectionIndex.value > 0) {
     const target = SECTIONS[sectionIndex.value - 1]!.id;
-    pendingSpread = spreadCountFor(target) - 1;
-    navigate(target);
+    goSection(target, {
+      spread: spreadCountFor(target) - 1,
+      page: single.value ? "right" : "left",
+    });
   }
 }
+
+/* Camera follows the page being read; two-page mode always rests on left. */
+watch(page, (p) => bookReading.setPage(p));
+watch(single, (on) => {
+  if (!on && page.value !== "left") page.value = "left";
+});
 
 /* ------------------------------------------------------------------ */
 /* Keyboard, focus trap, focus restore                                  */
@@ -342,7 +409,11 @@ function smallestFontPx(wrap: HTMLElement): number {
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     if (!n.nodeValue?.trim()) continue;
     const el = n.parentElement;
-    if (!el || el.closest("svg, [aria-hidden='true']")) continue;
+    if (!el) continue;
+    // Decorative text inside the page only — the off-screen pane itself is
+    // aria-hidden in one-page mode, which must not blank the measurement.
+    const hidden = el.closest("svg, [aria-hidden='true']");
+    if (hidden && wrap.contains(hidden)) continue;
     const fs = parseFloat(getComputedStyle(el).fontSize);
     if (fs > 0 && fs < min) min = fs;
   }
@@ -408,7 +479,9 @@ watch(
     // just opened) shows content immediately; the open animation covered it.
     hasNavigated.value = true;
     spread.value = pendingSpread;
+    page.value = pendingPage;
     pendingSpread = 0;
+    pendingPage = "left";
     void nextTick(fitPages);
   },
 );
@@ -442,7 +515,10 @@ watch(spread, () => {
     <div
       v-show="transforms"
       class="ink-pane"
+      :class="{ 'ink-off': single && page !== 'left' }"
       :style="{ ...paneBase, transform: transforms?.left ?? 'none' }"
+      :aria-hidden="single && page !== 'left' ? 'true' : undefined"
+      :inert="single && page !== 'left'"
     >
       <div
         :key="`${section}-${spread}`"
@@ -615,7 +691,10 @@ watch(spread, () => {
     <div
       v-show="transforms"
       class="ink-pane"
+      :class="{ 'ink-off': single && page !== 'right' }"
       :style="{ ...paneBase, transform: transforms?.right ?? 'none' }"
+      :aria-hidden="single && page !== 'right' ? 'true' : undefined"
+      :inert="single && page !== 'right'"
     >
       <div
         :key="`${section}-${spread}`"
@@ -857,6 +936,13 @@ watch(spread, () => {
   /* The scene supplies flat 2D matrices (top-down reading camera), never
      matrix3d: perspective-transformed text layers made Chromium blank the
      ink intermittently. Keep this pane free of will-change/3D hints. */
+}
+/* The page beside the one being read: once the camera has glided away it
+   * is only a sliver at the screen edge — drop its ink (not announced,
+   * not focusable) after the glide, show it again at once when it's next. */
+.ink-pane.ink-off {
+  visibility: hidden;
+  transition: visibility 0s 0.7s;
 }
 .ink-pad {
   pointer-events: auto;
