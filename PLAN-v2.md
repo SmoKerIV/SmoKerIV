@@ -39,7 +39,23 @@ Difficulty → model: low = haiku, medium = sonnet, high = opus.
 | 3.4 | **Post-processing & lighting.** Bloom on flames/runes, vignette, subtle film grain, tone-mapping tune, soft shadows on high; all gated by the quality setting. | medium | sonnet |
 | 3.5 | **UI polish.** "Enter the Inn" button on the loader (PLAN §7) with skip for returning visitors; book typography/ornaments; project cards with badges; focus card styling. | medium | sonnet |
 
-## Phase 4 — Verify & ship
+## Phase 4 — Sound
+
+Real recorded audio replaces the noise synth (the fire currently sounds like a
+train). Sources: **CC0 only** (no attribution, safe to commit to the public
+repo) plus sounds we synthesize ourselves; the WebAudio synth stays as fallback
+when a file is missing. Ambience only — music comes later.
+
+| # | Segment | Diff. | Model |
+|---|---|---|---|
+| 4.1 | **Sourcing.** Find CC0 candidates (Freesound CC0 filter, Kenney, OpenGameArt CC0, Sonniss-style CC0 packs) for every slot below; verify each licence on its page; list in `docs/sounds.md`. | low | sonnet |
+| 4.2 | **Prep.** Trim, loudness-normalise (ffmpeg loudnorm), seamless loops for ambience, encode to Opus/WebM + AAC fallback, keep total < ~3 MB; into `public/audio/`. | medium | sonnet |
+| 4.3 | **Audio engine.** Rework `useAudio.ts`: buffer cache + lazy loading after enter, buses (ambience / SFX / UI) with their own volumes, per-sound variations + random pitch/gain so repeats don't sound robotic, spatial panning for table items and the fireplace, ducking ambience under spell sounds, settings for each bus. | high | opus |
+| 4.4 | **Ambience.** Fireplace crackle loop (layered with occasional pops synced to the ember particles), quiet room tone, wind/rain at the window, lantern creak. | medium | sonnet |
+| 4.5 | **Spells.** Fireball (whoosh → ignite → impact), Call Lightning (crackle → thunder), Gust of Wind (rushing whoosh + candle gutter), Animate Objects (arcane shimmer + wooden clatter) — layered sample + synth. | medium | sonnet |
+| 4.6 | **Interactions.** Book open/close thump, page turns (3+ variants), sword ring on focus, shield wood knock, potion cork pop + slosh, scroll unroll, tankard clink, candle snuff puff + match strike relight, dice on wood (variants), nat-20 chime, Konami fanfare, quest toast parchment rustle, soft UI hover ticks. | medium | sonnet |
+
+## Phase 5 — Verify & ship
 
 - `pnpm build` clean (vue-tsc + vite), no console errors.
 - Screenshots at 1440, 1024, 390×844 (light + dark mood), every book spread, every focus card, die rolls showing correct numbers.
