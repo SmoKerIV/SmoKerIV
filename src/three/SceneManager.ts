@@ -37,6 +37,7 @@ import {
   makeBladeRuneTexture,
   makeCrestTexture,
   makeDotTexture,
+  makeMothWingTexture,
   makeRuneCircleTexture,
 } from "./models/textures";
 import {
@@ -1430,22 +1431,33 @@ export class SceneManager implements ISceneManager {
   private buildMoth(): void {
     // Built after buildStage's shadow traverse so the moth casts nothing.
     const moth = new THREE.Group();
+    // Cut-out wings (alphaTest, opaque pass): a soft dusty moth lit by the
+    // flame it circles. Unlit-bright or alpha-less quads read as a grey
+    // card next to the flame in the candle close-up.
     const material = new THREE.MeshStandardMaterial({
-      color: 0xcfc4a6,
-      emissive: 0x5c5340,
-      emissiveIntensity: 0.7,
+      map: makeMothWingTexture(),
+      alphaTest: 0.5,
       side: THREE.DoubleSide,
       roughness: 1,
     });
-    // Wing quads hinged at the body (geometry offset along +/-X).
-    const wingL = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.03, 0.018).translate(-0.017, 0, 0),
-      material,
+    const wingGeo = (side: 1 | -1): THREE.PlaneGeometry => {
+      const geo = new THREE.PlaneGeometry(0.03, 0.019);
+      if (side < 0) {
+        // Mirror U so both wings hinge at the body.
+        const uv = geo.getAttribute("uv");
+        for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));
+      }
+      // Lie flat (wings spread horizontally), hinge on the body axis.
+      // Forewing (texture top) points forward (+Z, the flight heading).
+      return geo.rotateX(Math.PI / 2).translate(side * 0.016, 0, 0);
+    };
+    const wingL = new THREE.Mesh(wingGeo(-1), material);
+    const wingR = new THREE.Mesh(wingGeo(1), material);
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.0025, 0.012, 2, 6).rotateX(Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0x4a3c2c, roughness: 1 }),
     );
-    const wingR = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.03, 0.018).translate(0.017, 0, 0),
-      material,
-    );
+    moth.add(body);
     moth.add(wingL, wingR);
     moth.position.copy(this.mothAnchor);
     this.scene.add(moth);
@@ -1504,8 +1516,9 @@ export class SceneManager implements ISceneManager {
     // Fast flap (~25 Hz; aliased sin reads as flutter) with amplitude drift.
     const flap =
       Math.sin(elapsed * 157) * (0.75 + 0.2 * Math.sin(elapsed * 1.7));
-    if (this.mothWingL) this.mothWingL.rotation.y = -flap;
-    if (this.mothWingR) this.mothWingR.rotation.y = flap;
+    // Flat wings hinge about the body's long (Z) axis.
+    if (this.mothWingL) this.mothWingL.rotation.z = flap;
+    if (this.mothWingR) this.mothWingR.rotation.z = -flap;
     moth.rotation.z = Math.sin(elapsed * 0.8) * 0.25;
   }
 

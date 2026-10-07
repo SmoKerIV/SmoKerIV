@@ -712,3 +712,55 @@ export function makeDotTexture(): THREE.Texture {
     return texture;
   });
 }
+
+/**
+ * One moth wing (fore + hind lobe) on transparent, hinge at the left edge:
+ * dusty brown with darker veins and an eye spot. Used with alphaTest so
+ * the wing stays an opaque cut-out (no sorting, no grey quad).
+ */
+export function makeMothWingTexture(): THREE.CanvasTexture {
+  return cachedTexture("mothWing", () => {
+    const w = 64;
+    const h = 40;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not acquire 2d canvas context");
+    const wing = new Path2D();
+    // Forewing sweeping up-out, hindwing rounder below; hinge at x = 0.
+    wing.moveTo(1, h * 0.5);
+    wing.bezierCurveTo(w * 0.35, h * 0.02, w * 0.85, -h * 0.02, w - 2, h * 0.22);
+    wing.bezierCurveTo(w * 0.92, h * 0.45, w * 0.7, h * 0.52, w * 0.55, h * 0.55);
+    wing.bezierCurveTo(w * 0.62, h * 0.8, w * 0.38, h - 2, w * 0.18, h * 0.86);
+    wing.bezierCurveTo(w * 0.08, h * 0.75, w * 0.03, h * 0.62, 1, h * 0.5);
+    const fill = ctx.createLinearGradient(0, 0, w, 0);
+    fill.addColorStop(0, "#5a4a38");
+    fill.addColorStop(0.6, "#8a7656");
+    fill.addColorStop(1, "#a08a66");
+    ctx.fillStyle = fill;
+    ctx.fill(wing);
+    ctx.save();
+    ctx.clip(wing);
+    ctx.strokeStyle = "rgba(40,30,20,0.55)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.moveTo(2, h * 0.5);
+      ctx.quadraticCurveTo(w * 0.4, h * (0.2 + i * 0.12), w, h * (0.05 + i * 0.2));
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(35,25,15,0.7)";
+    ctx.beginPath();
+    ctx.arc(w * 0.62, h * 0.3, 3, 0, Math.PI * 2);
+    ctx.fill();
+    // Pale fringe along the outer edge.
+    ctx.strokeStyle = "rgba(210,190,150,0.5)";
+    ctx.lineWidth = 2;
+    ctx.stroke(wing);
+    ctx.restore();
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  });
+}
