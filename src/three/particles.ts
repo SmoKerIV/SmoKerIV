@@ -89,8 +89,10 @@ export class Particles {
   /** 0..1 fade driven toward bookActive each frame. */
   private sparkleAmount = 0;
   private bookActive = false;
+  private quality: Quality;
 
   constructor(quality: Quality) {
+    this.quality = quality;
     this.dustMaterial = new THREE.PointsMaterial({
       color: 0xffe9c9,
       size: 0.022,
@@ -309,6 +311,9 @@ export class Particles {
   }
 
   setQuality(quality: Quality): void {
+    // Rebuilding reseeds every mote; only do it when the counts change.
+    if (quality === this.quality) return;
+    this.quality = quality;
     this.group.remove(this.dust.points);
     this.dust.geometry.dispose();
     this.dust = this.buildDust(DUST_COUNT[quality]);
