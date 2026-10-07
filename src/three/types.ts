@@ -58,6 +58,25 @@ export interface SceneSettings {
   reducedMotion: boolean;
 }
 
+/** Plain world-space point (the 3D layer hands these out without audio types). */
+export interface ScenePoint {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** World positions of things that make sound, reported once the stage is built. */
+export interface SceneSources {
+  fire: ScenePoint;
+  window: ScenePoint;
+  lantern: ScenePoint;
+  book: ScenePoint;
+  /** Resting position of each tabletop item (candle = the primary one). */
+  items: Partial<Record<ItemId, ScenePoint>>;
+  /** Every candle flame. */
+  candles: ScenePoint[];
+}
+
 /**
  * Events emitted by the 3D layer toward the Vue overlay.
  * All callbacks are optional; SceneManager must guard each call.
@@ -102,12 +121,49 @@ export interface SceneEvents {
    * A candle was snuffed (5 quick clicks) or relit (1 click while out).
    * bothOut is true when every candle on the table is snuffed.
    */
-  onCandleSnuff?: (state: { snuffed: boolean; bothOut: boolean }) => void;
+  onCandleSnuff?: (state: {
+    snuffed: boolean;
+    bothOut: boolean;
+    /** The candles whose state just changed (flame world positions). */
+    positions: ScenePoint[];
+    /** Candles still burning after this change, of `total`. */
+    litCount: number;
+    total: number;
+    /** Click (5 quick clicks / relight click) or the Gust of Wind spell. */
+    cause: "click" | "gust";
+  }) => void;
   /**
    * The console's fireball detonated (flash + ember burst just fired).
    * The overlay uses this to time its CSS screen shake to the impact.
    */
-  onFireballImpact?: () => void;
+  onFireballImpact?: (position: ScenePoint) => void;
+  /**
+   * A fireball was cast. durationMs is the flight time (0 = reduced motion:
+   * no flight, the impact follows immediately). from/to are world points.
+   */
+  onFireballCast?: (flight: { from: ScenePoint; to: ScenePoint; durationMs: number }) => void;
+  /** Call Lightning started; position is the window the bolt lands behind. */
+  onLightning?: (position: ScenePoint) => void;
+  /** Gust of Wind started (before any candle is snuffed). */
+  onGust?: () => void;
+  /**
+   * One of the Animate Objects hops begins (index 0..total-1, staggered
+   * 90 ms apart). Not emitted under reduced motion (nothing moves).
+   */
+  onObjectHop?: (hop: { item: ItemId; position: ScenePoint; index: number; total: number }) => void;
+  /** A hearth ember pop burst just fired (idle flare-up). */
+  onEmberPop?: () => void;
+  /** The hanging lantern reached the end of a swing (every ~4.5 s). */
+  onLanternSway?: () => void;
+  /** The mood lighting settled on a target ("auto" already resolved). */
+  onTimeOfDay?: (resolved: "day" | "night") => void;
+  /** Stage built: where the fire, window, lantern, book and items sit. */
+  onSources?: (sources: SceneSources) => void;
+  /**
+   * Camera position + forward direction, ~10 Hz, only while it moves (and
+   * once when the stage appears). For spatial audio.
+   */
+  onListener?: (position: ScenePoint, forward: ScenePoint) => void;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   type ItemId,
   type Quality,
   type SceneEvents,
+  type ScenePoint,
   type SceneSettings,
   type SpellbookParts,
   type TimeOfDay,
@@ -58,6 +59,7 @@ import { Interaction, type InteractionEvents } from "./interaction";
 import { loadModels, ModelLibrary, type ModelKey } from "./assets";
 import { PostFX } from "./postprocessing";
 import { bookReading } from "./bookReading";
+import { FIRE_POS, WINDOW_POS, LANTERN_ANCHOR, LANTERN_DROP } from "./roomLayout";
 import type { RoomRig } from "./models/room";
 import {
   clearRoomTextures,
@@ -96,6 +98,11 @@ const MOOD_TWEEN_DURATION = 1.2;
 
 // --- Idle-life moth ---------------------------------------------------------
 const MOTH_TRAVEL_DURATION = 3;
+
+/** THREE vector -> plain point for events (the overlay never sees THREE). */
+function toPoint(v: THREE.Vector3): ScenePoint {
+  return { x: v.x, y: v.y, z: v.z };
+}
 
 // --- Candle snuff easter egg -------------------------------------------------
 /** 5 clicks on the same candle within a rolling 4 s window snuff it. */
@@ -470,6 +477,13 @@ export class SceneManager implements ISceneManager {
   private nextMothTravelAt = 20 + Math.random() * 20;
 
   private nextEmberPopAt = 30 + Math.random() * 30;
+  /** Lantern swing: sign of its sway, to report each end-of-swing. */
+  private lanternSwingSign = 0;
+  /** Last camera pose reported to onListener (+ when, for the 10 Hz throttle). */
+  private readonly listenerPos = new THREE.Vector3(Infinity, 0, 0);
+  private readonly listenerFwd = new THREE.Vector3();
+  private readonly listenerTmp = new THREE.Vector3();
+  private listenerAt = 0;
 
   private autoQualityDowngrades = 0;
   private frameWindowCount = 0;
@@ -677,6 +691,11 @@ export class SceneManager implements ISceneManager {
 
     if (this.settings.reducedMotion) {
       // No projectile flight — straight to the impact beat.
+      this.events.onFireballCast?.({
+        from: toPoint(camera.position),
+        to: toPoint(impact),
+        durationMs: 0,
+      });
       this.detonateFireball(impact);
       return;
     }
@@ -690,6 +709,11 @@ export class SceneManager implements ISceneManager {
     // Arc scales with the throw so close-up casts don't loop overhead.
     const arc = Math.min(spawn.distanceTo(impact) * 0.22, 0.4);
 
+    this.events.onFireballCast?.({
+      from: toPoint(spawn),
+      to: toPoint(impact),
+      durationMs: FIREBALL_FLIGHT_DURATION * 1000,
+    });
     const fb = this.ensureFireball();
     fb.group.position.copy(spawn);
     fb.group.visible = true;
@@ -725,6 +749,7 @@ export class SceneManager implements ISceneManager {
 
   castLightning(): void {
     if (this.disposed) return;
+    this.events.onLightning?.(toPoint(WINDOW_POS));
     gsap.killTweensOf(this.lightningProxy);
     const tl = gsap.timeline({
       onUpdate: this.applyLightning,
@@ -748,7 +773,9 @@ export class SceneManager implements ISceneManager {
 
   castGustOfWind(): void {
     if (this.disposed) return;
+    this.events.onGust?.();
     let snuffedAny = false;
+    const snuffedAt: ScenePoint[] = [];
     for (const [root, state] of this.candleStates) {
       if (state.snuffed) continue;
       const flame = (root.userData.parts as CandleParts | undefined)?.flame;
@@ -758,11 +785,20 @@ export class SceneManager implements ISceneManager {
       flame.visible = false;
       this.lights.setCandleLit(flame, false);
       this.markShadowsDirty();
-      this.particles.puffSmoke(flame.getWorldPosition(new THREE.Vector3()));
+      const at = flame.getWorldPosition(new THREE.Vector3());
+      this.particles.puffSmoke(at);
+      snuffedAt.push(toPoint(at));
       snuffedAny = true;
     }
     if (!snuffedAny) return;
-    this.events.onCandleSnuff?.({ snuffed: true, bothOut: true });
+    this.events.onCandleSnuff?.({
+      snuffed: true,
+      bothOut: true,
+      positions: snuffedAt,
+      litCount: 0,
+      total: this.candleStates.size,
+      cause: "gust",
+    });
 
     // A match flares once the darkness has had its moment — relights every
     // snuffed candle (including ones the visitor clicked out earlier).
@@ -770,7 +806,7 @@ export class SceneManager implements ISceneManager {
     this.gustRelightTimer = setTimeout(() => {
       this.gustRelightTimer = null;
       if (this.disposed) return;
-      let relit = false;
+      const relitAt: ScenePoint[] = [];
       for (const [root, state] of this.candleStates) {
         if (!state.snuffed) continue;
         const flame = (root.userData.parts as CandleParts | undefined)?.flame;
@@ -779,9 +815,18 @@ export class SceneManager implements ISceneManager {
         flame.visible = true;
         this.lights.setCandleLit(flame, true);
         this.markShadowsDirty();
-        relit = true;
+        relitAt.push(toPoint(flame.getWorldPosition(new THREE.Vector3())));
       }
-      if (relit) this.events.onCandleSnuff?.({ snuffed: false, bothOut: false });
+      if (relitAt.length) {
+        this.events.onCandleSnuff?.({
+          snuffed: false,
+          bothOut: false,
+          positions: relitAt,
+          litCount: this.litCandles(),
+          total: this.candleStates.size,
+          cause: "gust",
+        });
+      }
     }, GUST_RELIGHT_MS);
   }
 
@@ -802,7 +847,16 @@ export class SceneManager implements ISceneManager {
       // never let items drift or sink.
       const baseRot = LAYOUT[id].rotY;
       gsap
-        .timeline({ delay: i * 0.09 })
+        .timeline({
+          delay: i * 0.09,
+          onStart: () =>
+            this.events.onObjectHop?.({
+              item: id,
+              position: toPoint(group.position),
+              index: i,
+              total: hoppers.length,
+            }),
+        })
         .to(group.position, {
           y: TABLE_SURFACE_Y + 0.05 + Math.random() * 0.03,
           duration: 0.18,
@@ -895,7 +949,9 @@ export class SceneManager implements ISceneManager {
   }
 
   setTimeOfDay(mode: TimeOfDay): void {
-    const target = this.resolveTimeOfDay(mode) === "day" ? 1 : 0;
+    const resolved = this.resolveTimeOfDay(mode);
+    const target = resolved === "day" ? 1 : 0;
+    this.events.onTimeOfDay?.(resolved);
     gsap.killTweensOf(this.moodProxy);
     this.markShadowsDirty(
       2,
@@ -1098,6 +1154,7 @@ export class SceneManager implements ISceneManager {
     report(PROGRESS.shaders);
 
     this.stageReady = true;
+    this.emitSources();
     this.updateRunning();
 
     // Fetch the dice engine once the first frames are out of the way.
@@ -1586,6 +1643,15 @@ export class SceneManager implements ISceneManager {
       this.nextEmberPopAt = elapsed + 30 + Math.random() * 30;
       this.lights.igniteFlare(elapsed);
       this.particles.burstEmbers();
+      this.events.onEmberPop?.();
+    }
+    if (!this.settings.reducedMotion) {
+      // The lantern's sway is sin(0.7 t): report each end of the swing.
+      const sign = Math.sin(elapsed * 0.7) >= 0 ? 1 : -1;
+      if (this.lanternSwingSign !== 0 && sign !== this.lanternSwingSign) {
+        this.events.onLanternSway?.();
+      }
+      this.lanternSwingSign = sign;
     }
   }
 
@@ -1683,7 +1749,7 @@ export class SceneManager implements ISceneManager {
     this.markShadowsDirty();
     this.particles.burstEmbersAt(impact);
     this.particles.puffSmoke(impact);
-    this.events.onFireballImpact?.();
+    this.events.onFireballImpact?.(toPoint(impact));
   }
 
   /** Kill any in-flight fireball so a re-cast starts clean. */
@@ -1709,7 +1775,14 @@ export class SceneManager implements ISceneManager {
       flame.visible = true;
       this.lights.setCandleLit(flame, true);
       this.markShadowsDirty();
-      this.events.onCandleSnuff?.({ snuffed: false, bothOut: false });
+      this.events.onCandleSnuff?.({
+        snuffed: false,
+        bothOut: false,
+        positions: [toPoint(flame.getWorldPosition(new THREE.Vector3()))],
+        litCount: this.litCandles(),
+        total: this.candleStates.size,
+        cause: "click",
+      });
       return;
     }
 
@@ -1725,12 +1798,65 @@ export class SceneManager implements ISceneManager {
     flame.visible = false;
     this.lights.setCandleLit(flame, false);
     this.markShadowsDirty();
-    this.particles.puffSmoke(flame.getWorldPosition(new THREE.Vector3()));
-    let bothOut = true;
-    for (const other of this.candleStates.values()) {
-      if (!other.snuffed) bothOut = false;
+    const at = flame.getWorldPosition(new THREE.Vector3());
+    this.particles.puffSmoke(at);
+    const litCount = this.litCandles();
+    this.events.onCandleSnuff?.({
+      snuffed: true,
+      bothOut: litCount === 0,
+      positions: [toPoint(at)],
+      litCount,
+      total: this.candleStates.size,
+      cause: "click",
+    });
+  }
+
+  private litCandles(): number {
+    let lit = 0;
+    for (const other of this.candleStates.values()) if (!other.snuffed) lit++;
+    return lit;
+  }
+
+  /** Tell the overlay where the sound emitters sit (once the stage exists). */
+  private emitSources(): void {
+    const onSources = this.events.onSources;
+    if (!onSources) return;
+    const items: Partial<Record<ItemId, ScenePoint>> = {};
+    for (const [id, group] of this.itemGroups) {
+      items[id] = toPoint(group.getWorldPosition(new THREE.Vector3()));
     }
-    this.events.onCandleSnuff?.({ snuffed: true, bothOut });
+    const candles: ScenePoint[] = [];
+    for (const root of this.candleStates.keys()) {
+      const flame = (root.userData.parts as CandleParts | undefined)?.flame;
+      if (flame) candles.push(toPoint(flame.getWorldPosition(new THREE.Vector3())));
+    }
+    const book = items.spellbook ?? { x: 0, y: TABLE_SURFACE_Y, z: 0 };
+    onSources({
+      fire: toPoint(FIRE_POS),
+      window: toPoint(WINDOW_POS),
+      lantern: { x: LANTERN_ANCHOR.x, y: LANTERN_ANCHOR.y - LANTERN_DROP - 0.15, z: LANTERN_ANCHOR.z },
+      book,
+      items,
+      candles,
+    });
+  }
+
+  /** ~10 Hz while the camera moves: position + forward for spatial audio. */
+  private emitListener(now: number): void {
+    const onListener = this.events.onListener;
+    if (!onListener || now - this.listenerAt < 100) return;
+    const camera = this.rig.camera;
+    const dir = camera.getWorldDirection(this.listenerTmp);
+    if (
+      camera.position.distanceToSquared(this.listenerPos) < 1e-6 &&
+      dir.distanceToSquared(this.listenerFwd) < 1e-6
+    ) {
+      return;
+    }
+    this.listenerAt = now;
+    this.listenerPos.copy(camera.position);
+    this.listenerFwd.copy(dir);
+    onListener(toPoint(camera.position), toPoint(dir));
   }
 
   /**
@@ -2107,6 +2233,7 @@ export class SceneManager implements ISceneManager {
     if (this.post) this.post.render(elapsed, delta);
     else this.renderer.render(this.scene, this.rig.camera);
     this.renderedFrames++;
+    this.emitListener(now);
     // After render so the camera's world/projection matrices are fresh.
     if (this.reading) {
       // Belt-and-suspenders: no scribbled flip sheet may rest over the ink.
