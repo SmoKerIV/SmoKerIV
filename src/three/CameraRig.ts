@@ -35,7 +35,7 @@ const ASPECT_WIDE = 1.25;
 const ASPECT_NARROW = 0.5;
 /** Camera pitch (degrees above horizontal, seen from the table target). */
 const PITCH_BASE = 21;
-const PITCH_NARROW = 31;
+const PITCH_NARROW = 40;
 /**
  * Screen-space safe area for the table fit (NDC). The layout's lowest
  * point is pinned to the bottom of the safe area (so the frame holds
@@ -43,16 +43,16 @@ const PITCH_NARROW = 31;
  * width; whatever is left above shows the room behind. Phones keep the
  * bottom clear for the overlay's hint and buttons.
  */
-const FIT_X_WIDE = 0.93;
+const FIT_X_WIDE = 0.82;
 const FIT_X_NARROW = 0.96;
 const FIT_TOP_WIDE = 0.55;
-const FIT_TOP_NARROW = 0.5;
+const FIT_TOP_NARROW = 0.8;
 const FIT_BOTTOM_WIDE = 0.84;
-const FIT_BOTTOM_NARROW = 0.36;
+const FIT_BOTTOM_NARROW = 0.3;
 /** Closest the overview may come (m from the target). */
 const MIN_TABLE_DISTANCE = 1.1;
 /** The camera never rises above the ceiling beams (≈3.03 m). */
-const MAX_CAMERA_Y = 2.95;
+const MAX_CAMERA_Y = 2.75;
 const MAX_CAMERA_Z = 3.2;
 
 const FOCUS_PRESETS: Record<ItemId, FocusPreset> = {
@@ -186,16 +186,14 @@ export class CameraRig {
     if (halfWidth !== undefined) this.halfWidths.set(item, halfWidth);
   }
 
-  /** World bounds of everything on the table (items, candles with flames). */
-  setTableBounds(box: THREE.Box3): void {
-    this.tableCorners = [];
-    for (const x of [box.min.x, box.max.x]) {
-      for (const y of [box.min.y, box.max.y]) {
-        for (const z of [box.min.z, box.max.z]) {
-          this.tableCorners.push(new THREE.Vector3(x, y, z));
-        }
-      }
-    }
+  /**
+   * Silhouette points of everything on the table (items, candles with
+   * flames): the overview fits these. Real outline points, not bounding-box
+   * corners — a rotated shield's or sword's box corners sit well outside
+   * the object and pushed a tall phone view far back.
+   */
+  setTablePoints(points: THREE.Vector3[]): void {
+    this.tableCorners = points.map((p) => p.clone());
   }
 
   /** Tween the base pose toward an item (or the table when null). */

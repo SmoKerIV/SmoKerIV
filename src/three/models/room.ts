@@ -140,13 +140,29 @@ export function buildRoom(models: ModelLibrary, quality: Quality): RoomRig {
     group.add(wallMesh);
   }
 
-  // --- Ceiling: dark boards ----------------------------------------------------
-  const ceilMap = floorTex.map.clone();
-  ceilMap.repeat.set(floorRepeat, floorRepeat);
+  // --- Ceiling: lime-washed boards between dark joists -------------------------
+  // Pale enough to catch the fire and lantern, so a phone's tall view (which
+  // looks up into it) shows a ceiling, not a black band.
+  const ceilMap = wallTex.map.clone();
+  ceilMap.repeat.set(2, 2);
+  const ceilNormal = wallTex.normalMap.clone();
+  ceilNormal.repeat.copy(ceilMap.repeat);
   const ceiling = new THREE.Mesh(
     new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE).rotateX(Math.PI / 2),
-    new THREE.MeshStandardMaterial({ map: ceilMap, color: 0x4a3c30, roughness: 0.95 }),
+    new THREE.MeshStandardMaterial({
+      map: ceilMap,
+      normalMap: ceilNormal,
+      normalScale: new THREE.Vector2(0.6, 0.6),
+      color: 0x9a8670,
+      // Stand-in for the firelight bounced off the floor: the one face of
+      // the room no lamp points at would otherwise render pure black.
+      emissive: 0x8a5a3a,
+      emissiveMap: ceilMap,
+      emissiveIntensity: 1,
+      roughness: 0.95,
+    }),
   );
+  ceiling.name = "ceiling";
   ceiling.position.y = ROOM_HEIGHT;
   ceiling.userData.noShadow = true;
   group.add(ceiling);
@@ -167,9 +183,24 @@ export function buildRoom(models: ModelLibrary, quality: Quality): RoomRig {
   timber.add(box(ROOM_SIZE, 0.16, 0.14), 0, ROOM_HEIGHT - 0.14, inset);
   timber.add(box(0.14, 0.16, ROOM_SIZE), -inset, ROOM_HEIGHT - 0.14, 0);
   timber.add(box(0.14, 0.16, ROOM_SIZE), inset, ROOM_HEIGHT - 0.14, 0);
-  // Ceiling beams spanning X
-  for (const z of [-2.1, 0, 2.1]) {
-    timber.add(box(ROOM_SIZE, 0.16, 0.2), 0, ROOM_HEIGHT - 0.09, z);
+  // Ceiling beams spanning X, joists across them (front to back): their own
+  // mesh, with the ceiling's firelight bounce so they read as timber.
+  const ceilingTimber = new GeometryBatch();
+  // The front beam sits back over the door wall: at z ≈ 2 it filled the
+  // top of a phone's (high, close) overview with a beam end-on.
+  for (const z of [-2.1, 0.45, 3.0]) {
+    ceilingTimber.add(box(ROOM_SIZE, 0.16, 0.2), 0, ROOM_HEIGHT - 0.09, z);
+  }
+  for (let x = -2.565; x <= 2.6; x += 0.57) {
+    ceilingTimber.add(box(0.09, 0.08, ROOM_SIZE - 0.3), x, ROOM_HEIGHT - 0.04, 0);
+  }
+  const beamMaterial = woodDarkMaterial().clone();
+  beamMaterial.emissive.setHex(0x6a4630);
+  beamMaterial.emissiveMap = beamMaterial.map;
+  const beamMesh = ceilingTimber.build(beamMaterial, "ceilingTimber");
+  if (beamMesh) {
+    beamMesh.userData.noShadow = true;
+    group.add(beamMesh);
   }
   // Back wall half-timbering: posts between the features + a high rail.
   const back = BACK_WALL_Z + 0.035;

@@ -249,6 +249,62 @@ function yieldToBrowser(): Promise<void> {
   });
 }
 
+/** Horizontal directions sampled for an item's silhouette (see below). */
+const SILHOUETTE_DIRS = 16;
+/** Vertices visited per mesh at most (subsampled beyond that). */
+const SILHOUETTE_MAX_VERTS = 4000;
+
+/**
+ * A small set of world points that hugs an object: its extreme vertex in
+ * each of SILHOUETTE_DIRS horizontal directions, plus its highest and lowest
+ * vertex. Visible meshes only (hidden reading pages don't count).
+ */
+function silhouettePoints(root: THREE.Object3D): THREE.Vector3[] {
+  const best: { d: number; p: THREE.Vector3 }[] = [];
+  const dirs: [number, number][] = [];
+  for (let i = 0; i < SILHOUETTE_DIRS; i++) {
+    const a = (i / SILHOUETTE_DIRS) * Math.PI * 2;
+    dirs.push([Math.cos(a), Math.sin(a)]);
+    best.push({ d: -Infinity, p: new THREE.Vector3() });
+  }
+  const top = { d: -Infinity, p: new THREE.Vector3() };
+  const bottom = { d: Infinity, p: new THREE.Vector3() };
+  const v = new THREE.Vector3();
+  root.updateWorldMatrix(true, true);
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.visible) return;
+    let shown = true;
+    mesh.traverseAncestors((a) => {
+      if (!a.visible) shown = false;
+    });
+    if (!shown) return;
+    const pos = mesh.geometry.getAttribute("position");
+    if (!pos) return;
+    const step = Math.max(1, Math.ceil(pos.count / SILHOUETTE_MAX_VERTS));
+    for (let i = 0; i < pos.count; i += step) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      for (let k = 0; k < SILHOUETTE_DIRS; k++) {
+        const d = v.x * dirs[k]![0] + v.z * dirs[k]![1];
+        if (d > best[k]!.d) {
+          best[k]!.d = d;
+          best[k]!.p.copy(v);
+        }
+      }
+      if (v.y > top.d) {
+        top.d = v.y;
+        top.p.copy(v);
+      }
+      if (v.y < bottom.d) {
+        bottom.d = v.y;
+        bottom.p.copy(v);
+      }
+    }
+  });
+  if (top.d === -Infinity) return [];
+  return [...best.map((b) => b.p), top.p, bottom.p];
+}
+
 interface Placement {
   x: number;
   z: number;
@@ -1115,16 +1171,10 @@ export class SceneManager implements ISceneManager {
     this.placeOnTable(candleB, LAYOUT.candleB);
     this.interactableRoots.push(candleB);
 
-    // The overview pose is fitted to this: every item + both candles.
-    const layoutBox = new THREE.Box3();
-    for (const root of this.interactableRoots) {
-      root.updateWorldMatrix(true, true);
-      root.traverse((object) => {
-        const mesh = object as THREE.Mesh;
-        if (mesh.isMesh && mesh.visible) layoutBox.expandByObject(mesh);
-      });
-    }
-    this.rig.setTableBounds(layoutBox);
+    // The overview pose is fitted to these: every item + both candles.
+    const outline: THREE.Vector3[] = [];
+    for (const root of this.interactableRoots) outline.push(...silhouettePoints(root));
+    this.rig.setTablePoints(outline);
 
     const spellbook = this.itemGroups.get("spellbook");
     this.spellbookParts =
