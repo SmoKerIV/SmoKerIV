@@ -165,7 +165,7 @@ const contactLines = [
     >
       <!-- Title page -->
       <header class="mb-12 text-center">
-        <p class="m-0 font-heading text-[10px] font-semibold uppercase tracking-[0.35em] text-ink-faint">
+        <p class="m-0 font-heading text-xs font-semibold uppercase tracking-[0.35em] text-ink-faint">
           Herein Lies
         </p>
         <h1 class="m-0 mt-3 font-decorative text-3xl text-ink sm:text-4xl">
@@ -179,7 +179,7 @@ const contactLines = [
           {{ identity.profession }} · {{ identity.origin }}
         </p>
         <p
-          class="m-0 mt-4 font-heading text-[11px] font-semibold uppercase tracking-widest"
+          class="m-0 mt-4 font-heading text-xs font-semibold uppercase tracking-widest"
           :class="identity.status === 'available' ? 'text-arcane-dim' : 'text-wax'"
         >
           ⟡ {{ identity.statusFlavor }}
@@ -203,7 +203,7 @@ const contactLines = [
         <div class="mt-7">
           <div v-for="stat in stats" :key="stat.short" class="mb-3.5">
             <div class="mb-1.5 flex items-baseline justify-between">
-              <span class="font-heading text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+              <span class="font-heading text-xs font-semibold uppercase tracking-wider text-ink-soft">
                 {{ stat.short }} · {{ stat.label }}
               </span>
               <span class="font-heading text-xs font-semibold text-ink">
@@ -241,7 +241,7 @@ const contactLines = [
             <span class="font-heading text-sm font-semibold text-leather">{{ quest.company }}</span>
             <span v-if="quest.current" class="badge">Active Quest</span>
           </div>
-          <p class="m-0 mt-1 font-heading text-[10px] uppercase tracking-[0.18em] text-ink-faint">
+          <p class="m-0 mt-1 font-heading text-xs uppercase tracking-[0.18em] text-ink-faint">
             {{ quest.period }}
           </p>
           <p class="m-0 mt-1.5 italic text-ink-soft">{{ quest.summary }}</p>
@@ -256,7 +256,7 @@ const contactLines = [
           :key="artifact.name"
           class="mb-5 rounded border border-leather/25 bg-[rgba(255,252,240,0.35)] px-5 py-4"
         >
-          <p class="m-0 font-heading text-[10px] font-semibold uppercase tracking-[0.24em] text-gold">
+          <p class="m-0 font-heading text-xs font-semibold uppercase tracking-[0.24em] text-[#7a5c1a]">
             {{ artifact.kind }}
             <span v-if="artifact.badge" class="badge ml-2 align-middle">{{ artifact.badge }}</span>
           </p>
@@ -270,7 +270,7 @@ const contactLines = [
             :href="artifact.url"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn-leather mt-3.5 inline-block rounded px-4 py-1.5 text-[10px]"
+            class="btn-leather mt-3.5 inline-block rounded px-4 py-1.5 text-xs"
           >
             Inspect Artifact ↗
           </a>
@@ -286,7 +286,7 @@ const contactLines = [
             :key="line.href"
             class="flex flex-wrap items-baseline gap-x-3 border-b border-dotted border-ink-soft/35 py-2.5"
           >
-            <span class="w-24 font-heading text-[11px] font-semibold uppercase tracking-widest text-ink-faint">
+            <span class="w-24 font-heading text-xs font-semibold uppercase tracking-widest text-ink-faint">
               {{ line.kind }}
             </span>
             <a
@@ -313,7 +313,7 @@ const contactLines = [
 
       <footer class="border-t border-gold/40 pt-5 text-center font-body text-xs italic text-ink-faint">
         {{ colophon }}
-        <ul class="m-0 mt-3 list-none space-y-1 p-0 text-[11px] not-italic opacity-80">
+        <ul class="m-0 mt-3 list-none space-y-1 p-0 text-xs not-italic">
           <li v-for="credit in credits" :key="credit">{{ credit }}</li>
         </ul>
       </footer>
@@ -375,7 +375,7 @@ const contactLines = [
   width: 6rem;
   flex-shrink: 0;
   font-family: "Cinzel", serif;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -419,7 +419,7 @@ const contactLines = [
 /* Ink-on-parchment chips; the arcane teal stays reserved for accents. */
 .chip {
   font-family: "Cinzel", serif;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -432,13 +432,13 @@ const contactLines = [
 /* Legibility floor for fingers-and-arm's-length reading. */
 @media (pointer: coarse) {
   .chip {
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 
 .badge {
   font-family: "Cinzel", serif;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -480,7 +480,7 @@ const contactLines = [
   min-height: 2.75rem;
   padding: 0.4rem 0.85rem;
   font-family: "Cinzel", serif;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;

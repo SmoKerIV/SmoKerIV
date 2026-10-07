@@ -458,7 +458,7 @@ watch(spread, () => {
                 {{ identity.profession }} · {{ identity.origin }}
               </p>
               <span
-                class="mt-1 inline-flex items-center gap-2 font-heading text-[11px] uppercase tracking-widest"
+                class="mt-1 inline-flex items-center gap-2 font-heading text-xs uppercase tracking-widest"
                 :class="identity.status === 'available' ? 'text-arcane-dark' : 'text-wax'"
               >
                 <span class="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
@@ -638,7 +638,7 @@ watch(spread, () => {
           <template v-else-if="section === 'whoami'">
             <h2>Attributes</h2>
             <div v-for="(stat, i) in stats" :key="stat.short" class="mb-2.5">
-              <div class="mb-1 flex items-baseline justify-between font-heading text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+              <div class="mb-1 flex items-baseline justify-between font-heading text-xs font-semibold uppercase tracking-wider text-ink-soft">
                 <span>{{ stat.short }} · {{ stat.label }}</span>
                 <span class="text-ink">{{ stat.value }} <span class="text-ink-faint">({{ statMod(stat.value) }})</span></span>
               </div>
@@ -761,22 +761,22 @@ watch(spread, () => {
                 <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M4 8l8 5 8-5M4 8v9h16V8M4 8l8-4 8 4" />
                 </svg>
-                <span class="text-[10px] leading-tight">Send<br />the Raven</span>
+                <span class="text-xs leading-tight">Send<br />the Raven</span>
               </a>
               <a
                 v-if="cvUrl"
                 :href="cvUrl"
                 download
-                class="btn-leather inline-flex items-center gap-2 rounded px-4 py-1.5 text-[10px]"
+                class="btn-leather inline-flex items-center gap-2 rounded px-4 py-1.5 text-xs"
                 aria-label="Download the CV"
                 @click="track('cv_download')"
               >
                 Take the Adventurer's Contract (CV)
               </a>
-              <p class="m-0 max-w-[40ch] border-t border-gold/50 pt-2 font-body text-[11px] italic leading-relaxed text-ink-faint">
+              <p class="m-0 max-w-[40ch] border-t border-gold/50 pt-2 font-body text-xs italic leading-relaxed text-ink-faint">
                 {{ colophon }}
               </p>
-              <ul class="m-0 max-w-[44ch] list-none p-0 font-body text-[11px] leading-snug text-ink-faint opacity-80">
+              <ul class="m-0 max-w-[44ch] list-none p-0 font-body text-xs leading-snug text-ink-faint">
                 <li v-for="credit in credits" :key="credit">{{ credit }}</li>
               </ul>
             </div>
@@ -794,7 +794,7 @@ watch(spread, () => {
     >
       <button
         ref="closeBtn"
-        class="btn-leather pointer-events-auto whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-[11px] opacity-90"
+        class="btn-leather pointer-events-auto whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-xs opacity-90"
         @click="emit('close')"
       >
         ⟨ Return to the Table
@@ -933,14 +933,14 @@ watch(spread, () => {
   }
   .bookmark {
     padding: 0.7rem 0.9rem 0.85rem;
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 
 .bookmark {
   padding: 0.5rem 0.75rem 0.65rem;
   font-family: "Cinzel", serif;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -978,7 +978,7 @@ watch(spread, () => {
   width: 6.2rem;
   flex-shrink: 0;
   font-family: "Cinzel", serif;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1072,7 +1072,7 @@ watch(spread, () => {
 .quest-period {
   margin: 0.05rem 0 0.15rem;
   font-family: "Cinzel", serif;
-  font-size: 0.64rem;
+  font-size: 0.75rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1119,7 +1119,7 @@ watch(spread, () => {
   right: 0;
   top: 0.2rem;
   font-family: "Cinzel", serif;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1134,7 +1134,7 @@ watch(spread, () => {
   top: 0.2rem;
   transform: rotate(-11deg);
   font-family: "Cinzel", serif;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -1156,7 +1156,7 @@ watch(spread, () => {
 .artifact-kind {
   margin: 0;
   font-family: "Cinzel", serif;
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -1177,7 +1177,7 @@ watch(spread, () => {
 }
 .rune-chip {
   font-family: "Cinzel", serif;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1189,7 +1189,7 @@ watch(spread, () => {
 .inspect-link {
   margin-left: 0.35rem;
   font-family: "Cinzel", serif;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1230,7 +1230,7 @@ watch(spread, () => {
 .scribble {
   font-family: "EB Garamond", serif;
   font-style: italic;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.3;
   color: rgba(94, 19, 15, 0.75);
 }
@@ -1243,7 +1243,7 @@ watch(spread, () => {
 }
 .contact-kind {
   font-family: "Cinzel", serif;
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;

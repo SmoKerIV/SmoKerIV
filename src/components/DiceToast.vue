@@ -75,7 +75,7 @@ const sparks = computed(() => {
       </p>
       <button
         v-if="toast.actionLabel"
-        class="btn-leather mt-2 rounded px-4 py-1.5 text-[11px]"
+        class="btn-leather mt-2 rounded px-4 py-1.5 text-xs"
         @click="emit('action')"
       >
         {{ toast.actionLabel }}

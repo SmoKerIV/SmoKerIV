@@ -340,7 +340,7 @@ onUnmounted(() => {
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #8a6b25;
+  color: #6e5316;
 }
 .spell-flavor {
   font-family: "EB Garamond", serif;

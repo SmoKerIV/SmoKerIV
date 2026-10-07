@@ -110,7 +110,7 @@ const card = computed(() => itemCards[props.item]);
   color: var(--ink-faint);
 }
 .entry-active {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--arcane-dim);

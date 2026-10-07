@@ -32,7 +32,7 @@ const emit = defineEmits<{
       <p class="m-0 font-heading text-xs font-semibold uppercase tracking-[0.25em] text-parchment/80">
         {{ identity.name }}
       </p>
-      <p class="m-0 font-body text-[11px] italic text-parchment/45">
+      <p class="m-0 font-body text-xs italic text-parchment/75">
         {{ identity.title }}
       </p>
     </div>
