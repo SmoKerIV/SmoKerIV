@@ -39,15 +39,36 @@ export const stats = [
 export const spellSchools = [
   {
     school: "Evocation — Frontend",
-    spells: ["TypeScript", "React", "Vue", "Next.js", "Nuxt.js"],
+    spells: [
+      "TypeScript",
+      "Vue 3",
+      "Nuxt.js",
+      "React",
+      "Next.js",
+      "Svelte 5 / SvelteKit",
+    ],
+  },
+  {
+    school: "Enchantment — UI & Desktop",
+    spells: ["Pinia", "PrimeVue", "Vuetify", "Tailwind CSS", "Electron"],
   },
   {
     school: "Conjuration — Backend",
-    spells: ["Node.js", "Express.js", "NestJS", "Supabase", "Firebase"],
+    spells: ["Node.js", "Express.js", "NestJS", "Python", "Supabase", "Firebase"],
   },
   {
     school: "Transmutation — Data & Infra",
-    spells: ["PostgreSQL", "Prisma", "Drizzle", "Docker", "Linux"],
+    spells: [
+      "PostgreSQL",
+      "SQLite",
+      "Prisma",
+      "Drizzle",
+      "Docker",
+      "Linux",
+      "Nginx",
+      "PM2",
+      "Git",
+    ],
   },
 ];
 

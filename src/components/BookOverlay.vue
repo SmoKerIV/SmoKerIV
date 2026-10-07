@@ -290,7 +290,8 @@ const MARGIN_SCRIBBLES = [
 const SPELL_ICONS: Record<number, string> = {
   0: "M12 2c2 4 6 6 6 11a6 6 0 0 1-12 0c0-2 .8-3.6 2-5 .2 1.4 1 2.4 2 3 0-3.5.7-6.5 2-9z", // flame
   1: "M12 3a9 9 0 1 0 9 9M12 7a5 5 0 1 0 5 5M12 11a1 1 0 1 0 1 1", // portal rings
-  2: "M10 3h4M12 3v6l5 9a2 2 0 0 1-1.8 3H8.8A2 2 0 0 1 7 18l5-9z", // alembic
+  2: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z", // spark
+  3: "M10 3h4M12 3v6l5 9a2 2 0 0 1-1.8 3H8.8A2 2 0 0 1 7 18l5-9z", // alembic
 };
 
 const contactLines = [
@@ -475,15 +476,15 @@ watch(spread, () => {
             <p class="dropcap">
               Spells mastered across long campaigns — cast daily, in production, without a saving throw.
             </p>
-            <div class="school">
+            <div v-for="(school, si) in spellSchools.slice(0, 2)" :key="school.school" class="school">
               <h3 class="school-name">
                 <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-arcane-dark" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
-                  <path :d="SPELL_ICONS[0]" />
+                  <path :d="SPELL_ICONS[si]" />
                 </svg>
-                {{ spellSchools[0]!.school }}
+                {{ school.school }}
               </h3>
               <ul class="spell-list">
-                <li v-for="spell in spellSchools[0]!.spells" :key="spell">{{ spell }}</li>
+                <li v-for="spell in school.spells" :key="spell">{{ spell }}</li>
               </ul>
             </div>
           </template>
@@ -635,12 +636,12 @@ watch(spread, () => {
             </p>
           </template>
 
-          <!-- skills: schools 2 & 3 -->
+          <!-- skills: schools 3 & 4 -->
           <template v-else-if="section === 'skills'">
-            <div v-for="(school, si) in spellSchools.slice(1)" :key="school.school" class="school">
+            <div v-for="(school, si) in spellSchools.slice(2)" :key="school.school" class="school">
               <h3 class="school-name">
                 <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-arcane-dark" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
-                  <path :d="SPELL_ICONS[si + 1]" />
+                  <path :d="SPELL_ICONS[si + 2]" />
                 </svg>
                 {{ school.school }}
               </h3>
