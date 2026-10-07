@@ -218,6 +218,8 @@ const SPELLS: Spell[] = [
     name: "Wish",
     school: "Conjuration · 9th level",
     flavor: "wish for a Computer Wizard",
+    // The contract toast lands under the console's scrim unless the page closes.
+    closes: true,
     cast: () => {
       setTimeout(() => emit("wish"), 650);
       return "The mightiest of spells… a summoning contract materializes.";
