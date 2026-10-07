@@ -361,7 +361,7 @@ const MOTH_ANCHORS: [THREE.Vector3, THREE.Vector3] = [
 export class SceneManager implements ISceneManager {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly clock = new THREE.Clock();
+  private readonly timer = new THREE.Timer();
   private readonly rig: CameraRig;
   private readonly lights: Lights;
   private readonly particles: Particles;
@@ -1745,7 +1745,7 @@ export class SceneManager implements ISceneManager {
 
   /** Impact beat: flash + radial embers + smoke, then the overlay's shake. */
   private detonateFireball(impact: THREE.Vector3): void {
-    this.lights.flashAt(impact, this.clock.elapsedTime);
+    this.lights.flashAt(impact, this.timer.getElapsed());
     this.markShadowsDirty();
     this.particles.burstEmbersAt(impact);
     this.particles.puffSmoke(impact);
@@ -2213,8 +2213,9 @@ export class SceneManager implements ISceneManager {
     this.renderSoon = false;
 
     // Clamp delta so a resumed tab doesn't jump the simulation.
-    const delta = Math.min(this.clock.getDelta(), 0.1);
-    const elapsed = this.clock.elapsedTime;
+    this.timer.update();
+    const delta = Math.min(this.timer.getDelta(), 0.1);
+    const elapsed = this.timer.getElapsed();
 
     this.rig.update(elapsed, delta);
     this.lights.update(elapsed);
@@ -2291,7 +2292,7 @@ export class SceneManager implements ISceneManager {
     const shouldRun =
       this.stageReady && !this.userPaused && !document.hidden && !this.disposed;
     if (shouldRun && this.rafId === null) {
-      this.clock.getDelta(); // Swallow the paused interval.
+      this.timer.reset(); // Swallow the paused interval.
       this.rafId = requestAnimationFrame(this.loop);
     } else if (!shouldRun && this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
