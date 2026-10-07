@@ -149,6 +149,18 @@ export class SceneManager implements ISceneManager {
   private bookOpen = false;
   private bookTl: gsap.core.Timeline | null = null;
   private readonly runeProxy = { v: RUNE_IDLE };
+  /** The spellbook's contact-shadow quad + its closed-book footprint. */
+  private bookShadow: {
+    mesh: THREE.Mesh;
+    scaleX: number;
+    x: number;
+    z: number;
+    shift: number;
+    cos: number;
+    sin: number;
+  } | null = null;
+  /** 0 = closed book, 1 = fully open spread (drives the contact shadow). */
+  private readonly bookOpenProxy = { v: 0 };
 
   /** Reading pages of the open tome (DOM ink is projected onto these). */
   private readingPages: { left: THREE.Mesh; right: THREE.Mesh } | null = null;
@@ -580,6 +592,7 @@ export class SceneManager implements ISceneManager {
     }
     this.dicePhysics?.dispose();
     gsap.killTweensOf(this.runeProxy);
+    gsap.killTweensOf(this.bookOpenProxy);
     gsap.killTweensOf(this.moodProxy);
     gsap.killTweensOf(this.lightningProxy);
     if (this.gustRelightTimer) {
@@ -741,14 +754,18 @@ export class SceneManager implements ISceneManager {
     const texture = new THREE.CanvasTexture(canvas);
 
     const geometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
-    const drop = (root: THREE.Object3D, y: number, opacity: number): void => {
+    const drop = (
+      root: THREE.Object3D,
+      y: number,
+      opacity: number,
+    ): THREE.Mesh | null => {
       const box = new THREE.Box3();
       root.updateWorldMatrix(true, true);
       root.traverse((object) => {
         const mesh = object as THREE.Mesh;
         if (mesh.isMesh && mesh.visible) box.expandByObject(mesh);
       });
-      if (box.isEmpty()) return;
+      if (box.isEmpty()) return null;
       const center = box.getCenter(new THREE.Vector3());
       const extent = box.getSize(new THREE.Vector3());
       const shadow = new THREE.Mesh(
@@ -765,11 +782,27 @@ export class SceneManager implements ISceneManager {
       // Below the rune circle's +0.002 lift and drawn before it.
       shadow.renderOrder = -1;
       this.scene.add(shadow);
+      return shadow;
     };
 
     for (const [id, group] of this.itemGroups) {
       if (id === "dice") continue;
-      drop(group, TABLE_SURFACE_Y + 0.0012, 0.3);
+      const shadow = drop(group, TABLE_SURFACE_Y + 0.0012, 0.3);
+      if (id === "spellbook" && shadow) {
+        // Measured from the closed book; applyBookShadow() widens it toward
+        // the opened spread (the cover swings out over the -X side).
+        this.bookShadow = {
+          mesh: shadow,
+          scaleX: shadow.scale.x,
+          x: shadow.position.x,
+          z: shadow.position.z,
+          // Spine sits on the closed book's -X edge: opening shifts the
+          // footprint centre half a book-width toward -X (group-local).
+          shift: (shadow.scale.x / 1.5) * 0.5,
+          cos: Math.cos(group.rotation.y),
+          sin: Math.sin(group.rotation.y),
+        };
+      }
     }
     drop(candleB, TABLE_SURFACE_Y + 0.0012, 0.3);
     drop(table, 0.0015, 0.2);
@@ -1082,6 +1115,17 @@ export class SceneManager implements ISceneManager {
     }
   };
 
+  /** Widen/shift the book's contact shadow to follow bookOpenProxy. */
+  private readonly applyBookShadow = (): void => {
+    const b = this.bookShadow;
+    if (!b) return;
+    const t = this.bookOpenProxy.v;
+    b.mesh.scale.x = b.scaleX * (1 + 0.95 * t);
+    const d = -b.shift * t;
+    b.mesh.position.x = b.x + d * b.cos;
+    b.mesh.position.z = b.z - d * b.sin;
+  };
+
   private readonly applyRune = (): void => {    const setIntensity = this.runeCircle?.userData.setIntensity as
       | ((value: number) => void)
       | undefined;
@@ -1226,6 +1270,11 @@ export class SceneManager implements ISceneManager {
         );
       });
       tl.to(
+        this.bookOpenProxy,
+        { v: 1, duration: 1.1, ease: "power3.inOut", onUpdate: this.applyBookShadow },
+        0,
+      );
+      tl.to(
         this.runeProxy,
         // Ramp the rune/arcane glow for the opening flourish, but settle at
         // a dim level — full intensity washes the parchment out while reading.
@@ -1275,6 +1324,11 @@ export class SceneManager implements ISceneManager {
       tl.to(
         parts.frontCover.rotation,
         { z: 0, duration: 0.5, ease: "power2.inOut" },
+        0,
+      );
+      tl.to(
+        this.bookOpenProxy,
+        { v: 0, duration: 0.5, ease: "power2.inOut", onUpdate: this.applyBookShadow },
         0,
       );
       tl.to(
