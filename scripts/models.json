@@ -1,0 +1,386 @@
+{
+  "_comment": "Paths are relative to <src>/<slug>/. fit: {axis: x|y|z|max|max_xy, metres} or {scale}. z = height after orientation fix (Blender Z-up, exported Y-up).",
+  "defaults": {
+    "texture_size": 1024,
+    "jpeg_quality": 82,
+    "image_format": "JPEG",
+    "max_tris": 15000
+  },
+  "models": {
+    "chair": {
+      "source": "obj/Chair.obj",
+      "fit": {
+        "axis": "z",
+        "metres": 0.95
+      },
+      "texture_size": 1024,
+      "decimate_ratio": null,
+      "materials": {
+        "*": {
+          "base": "obj/textures/wood_Diffuse.png",
+          "normal": "obj/textures/wood_Normal.png",
+          "roughness": 0.47,
+          "metallic": 0.0
+        }
+      },
+      "outputs": [
+        {
+          "name": "chair",
+          "objects": [
+            "Chair"
+          ]
+        }
+      ]
+    },
+    "candle": {
+      "source": "Antique_Brass_Candle_Holder/Antique_Brass_Candle_Holder.obj",
+      "fit": {
+        "axis": "z",
+        "metres": 0.25
+      },
+      "texture_size": 512,
+      "materials": {
+        "*": {
+          "base": "Antique_Brass_Candle_Holder/Candle_Holder_diffuse.png",
+          "normal": "Antique_Brass_Candle_Holder/Candle_Holder_normal.png",
+          "roughness": {
+            "file": "Antique_Brass_Candle_Holder/Candle_Holder_reflect.png",
+            "channel": "luma",
+            "invert": true,
+            "gain": 0.6,
+            "bias": 0.3
+          },
+          "metallic": {
+            "file": "Antique_Brass_Candle_Holder/Candle_Holder_reflect.png",
+            "channel": "luma",
+            "gain": 1.4,
+            "bias": -0.2
+          },
+          "metal_tint_file": "Antique_Brass_Candle_Holder/Candle_Holder_reflect.png"
+        }
+      },
+      "outputs": [
+        {
+          "name": "candle",
+          "objects": [
+            "Antique_Brass_Candle_Holder"
+          ]
+        }
+      ],
+      "import": {
+        "forward_axis": "Y",
+        "up_axis": "Z"
+      }
+    },
+    "buckler": {
+      "source": "[OBJ] Shield/Shield.obj",
+      "fit": {
+        "axis": "max_xy",
+        "metres": 0.45
+      },
+      "texture_size": 1024,
+      "materials": {
+        "*": {
+          "base": "[FBX] Shield - 3/textures/Shield_01_Basecolor.png",
+          "normal": "[FBX] Shield - 3/textures/Shield_01_Normal.png",
+          "ao": {
+            "file": "[FBX] Shield - 3/textures/Shield_01_AO.png",
+            "channel": "r"
+          },
+          "roughness": {
+            "file": "[FBX] Shield - 3/textures/Shield_01_Roughness.png",
+            "channel": "r"
+          },
+          "metallic": {
+            "file": "[FBX] Shield - 3/textures/Shield_01_Metallic.png",
+            "channel": "r"
+          }
+        }
+      },
+      "outputs": [
+        {
+          "name": "buckler",
+          "objects": [
+            "Shield"
+          ]
+        }
+      ]
+    },
+    "fireplace": {
+      "source": "fireplace_classic/fireplace_classic.obj",
+      "import": {
+        "forward_axis": "Y",
+        "up_axis": "Z"
+      },
+      "fit": {
+        "axis": "z",
+        "metres": 1.6
+      },
+      "max_tris": 20000,
+      "texture_size": 1024,
+      "materials": {
+        "fireplace_classic_grating": {
+          "base_color": [
+            0.03,
+            0.03,
+            0.035
+          ],
+          "roughness": 0.45,
+          "metallic": 0.85
+        },
+        "*": {
+          "base": "fireplace_classic/fireplace_classic_diffuse.jpg",
+          "bump": "fireplace_classic/fireplace_classic_bump.jpg",
+          "bump_strength": 3.0,
+          "roughness": 0.85,
+          "metallic": 0.0
+        }
+      },
+      "outputs": [
+        {
+          "name": "fireplace",
+          "objects": [
+            "fireplace_classic"
+          ]
+        }
+      ]
+    },
+    "chest": {
+      "source": "Treasure Chest/TreasureChest.blend",
+      "fit": {
+        "axis": "x",
+        "metres": 0.5
+      },
+      "texture_size": 1024,
+      "materials": {
+        "*": {
+          "base": "Treasure Chest/Textures 4K/Treasure Chests_Material.001_BaseColor.png",
+          "normal": "Treasure Chest/Textures 4K/Treasure Chests_Material.001_Normal.png",
+          "roughness": {
+            "file": "Treasure Chest/Textures 4K/Treasure Chests_Material.001_Roughness.png",
+            "channel": "r"
+          },
+          "metallic": {
+            "file": "Treasure Chest/Textures 4K/Treasure Chests_Material.001_Metallic.png",
+            "channel": "r"
+          }
+        }
+      },
+      "outputs": [
+        {
+          "name": "chest",
+          "objects": [
+            "Treasure Chest Bottom",
+            "Treasure Chest Top"
+          ]
+        }
+      ]
+    },
+    "crate": {
+      "source": "Wooden Crate v2/Crate Rectangle.blend",
+      "fit": {
+        "axis": "max",
+        "metres": 0.5
+      },
+      "texture_size": 1024,
+      "materials": {
+        "*": {
+          "base": "Wooden Crate v2/Textures/Crate Rectangle_BaseColor.png",
+          "normal": "Wooden Crate v2/Textures/Crate Rectangle_Normal.png",
+          "roughness": {
+            "file": "Wooden Crate v2/Textures/Crate Rectangle_Roughness.png",
+            "channel": "r"
+          },
+          "metallic": {
+            "file": "Wooden Crate v2/Textures/Crate Rectangle_Metallic.png",
+            "channel": "r"
+          }
+        }
+      },
+      "outputs": [
+        {
+          "name": "crate",
+          "objects": [
+            "Crate Rectangle"
+          ]
+        }
+      ]
+    },
+    "barrels": {
+      "source": "barrel_set/models/barrel_set.blend",
+      "fit": {
+        "axis": "z",
+        "metres": 0.9
+      },
+      "texture_size": 1024,
+      "materials": {
+        "barrel_01_mat": {
+          "base": "barrel_set/textures/barrel_01.png",
+          "roughness": 0.8,
+          "metallic": 0.0
+        },
+        "barrel_02_mat": {
+          "base": "barrel_set/textures/barrel_02.png",
+          "roughness": 0.8,
+          "metallic": 0.0
+        },
+        "barrel_03_mat": {
+          "base": "barrel_set/textures/barrel_03.png",
+          "roughness": 0.8,
+          "metallic": 0.0
+        },
+        "barrel_04_mat": {
+          "base": "barrel_set/textures/barrel_04.png",
+          "roughness": 0.8,
+          "metallic": 0.0
+        },
+        "barrel_05_mat": {
+          "base": "barrel_set/textures/barrel_05.png",
+          "roughness": 0.8,
+          "metallic": 0.0
+        }
+      },
+      "outputs": [
+        {
+          "name": "barrel-1",
+          "objects": [
+            "barrel_01"
+          ],
+          "fit": {
+            "axis": "z",
+            "metres": 0.75
+          }
+        },
+        {
+          "name": "barrel-2",
+          "objects": [
+            "barrel_02"
+          ],
+          "fit": {
+            "axis": "z",
+            "metres": 0.9
+          }
+        },
+        {
+          "name": "barrel-3",
+          "objects": [
+            "barrel_03"
+          ],
+          "fit": {
+            "axis": "z",
+            "metres": 0.85
+          }
+        },
+        {
+          "name": "barrel-4",
+          "objects": [
+            "barrel_04"
+          ],
+          "fit": {
+            "axis": "z",
+            "metres": 1.0
+          }
+        },
+        {
+          "name": "barrel-5",
+          "objects": [
+            "barrel_05"
+          ],
+          "fit": {
+            "axis": "z",
+            "metres": 0.7
+          }
+        }
+      ]
+    },
+    "scrolls-books": {
+      "source": "scrolls_n_books/models/scrolls_n_books_set.blend",
+      "fit": {
+        "scale": 0.4
+      },
+      "texture_size": 512,
+      "materials": {
+        "*": {
+          "base": "scrolls_n_books/textures/scrolls_books_title.png",
+          "roughness": {
+            "file": "scrolls_n_books/textures/scrolls_books_rough.png",
+            "channel": "r"
+          },
+          "metallic": {
+            "file": "scrolls_n_books/textures/scrolls_books_metal.png",
+            "channel": "r"
+          }
+        }
+      },
+      "outputs": [
+        {
+          "name": "book-closed-1",
+          "objects": [
+            "magic_book_01"
+          ]
+        },
+        {
+          "name": "book-closed-2",
+          "objects": [
+            "magic_book_02"
+          ]
+        },
+        {
+          "name": "book-open-1",
+          "objects": [
+            "magic_book_01_open"
+          ]
+        },
+        {
+          "name": "book-open-2",
+          "objects": [
+            "magic_book_02_open"
+          ]
+        },
+        {
+          "name": "book-stack",
+          "objects": [
+            "magic_book_01",
+            "magic_book_02"
+          ],
+          "stack": {
+            "rot_deg": [
+              0,
+              12
+            ]
+          }
+        },
+        {
+          "name": "scroll-1",
+          "objects": [
+            "scroll_01"
+          ]
+        },
+        {
+          "name": "scroll-2",
+          "objects": [
+            "scroll_02"
+          ]
+        },
+        {
+          "name": "scroll-3",
+          "objects": [
+            "scroll_03"
+          ]
+        },
+        {
+          "name": "scroll-4",
+          "objects": [
+            "scroll_04"
+          ]
+        },
+        {
+          "name": "ink",
+          "objects": [
+            "ink"
+          ]
+        }
+      ]
+    }
+  }
+}
