@@ -10,7 +10,11 @@ export interface ToastPayload {
 <script setup lang="ts">
 import { computed } from "vue";
 
-const props = defineProps<{ toast: ToastPayload }>();
+const props = defineProps<{
+  toast: ToastPayload;
+  /** Lift above the floating "Open the Tome" button (touch table view). */
+  clearBottomButton?: boolean;
+}>();
 const emit = defineEmits<{ action: [] }>();
 
 /** Random screen-sparkles for a natural 20. */
@@ -29,7 +33,12 @@ const sparks = computed(() => {
 </script>
 
 <template>
-  <div class="pointer-events-none fixed inset-x-0 bottom-14 z-60 flex justify-center px-4">
+  <div
+    class="pointer-events-none fixed inset-x-0 z-60 flex justify-center px-4"
+    :style="{
+      bottom: `calc(${clearBottomButton ? '8.5rem' : '3.5rem'} + var(--safe-bottom))`,
+    }"
+  >
     <!-- nat-20 screen sparkle -->
     <div v-if="sparks.length" class="fixed inset-0" aria-hidden="true">
       <span

@@ -747,7 +747,17 @@ import.meta.hot?.dispose(() => teardown());
 
     <!-- toasts (dice, easter eggs) -->
     <Transition name="toast">
-      <DiceToast v-if="toast" :toast="toast" @action="onToastAction" />
+      <DiceToast
+        v-if="toast"
+        :toast="toast"
+        :clear-bottom-button="
+          !useFallback &&
+          appPhase === 'table' &&
+          isCoarseDevice &&
+          !flatBookOpen
+        "
+        @action="onToastAction"
+      />
     </Transition>
 
     <!-- the wizard's prepared-spell page -->
