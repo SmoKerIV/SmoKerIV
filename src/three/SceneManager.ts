@@ -53,6 +53,7 @@ import {
   woodLightMaterial,
   woodStaveMaterial,
 } from "./models/materials";
+import { swordMaps } from "./models/sword";
 import { DicePhysics, measureObstacle } from "./dicePhysics";
 import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
@@ -228,6 +229,7 @@ const TEXTURE_WARMUPS: (() => unknown)[] = [
   scrollEndMaterial,
   makeCrestTexture,
   makeBladeRuneTexture,
+  swordMaps,
   makeRuneCircleTexture,
   makeDotTexture,
   wallMaps,
