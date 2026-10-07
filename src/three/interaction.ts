@@ -138,6 +138,14 @@ export class Interaction {
   }
 
   highlightNext(direction: 1 | -1): ItemId {
+    // While an item is focused only that item is selectable, so keyboard
+    // cycling stays on it instead of highlighting hidden-from-reach items.
+    if (this.focusFilter !== null) {
+      const only = this.focusFilter;
+      this.keyboardIndex = this.order.indexOf(only);
+      this.highlightedItem = only;
+      return only;
+    }
     const count = this.order.length;
     this.keyboardIndex = (this.keyboardIndex + direction + count) % count;
     const item = this.order[this.keyboardIndex];
