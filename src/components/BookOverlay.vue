@@ -447,7 +447,7 @@ watch(spread, () => {
             <div class="flex h-full flex-col items-center justify-center gap-3 text-center">
               <span class="font-body text-sm italic tracking-wide text-ink-faint">herein lies</span>
               <span class="text-gold" aria-hidden="true">✦ ❖ ✦</span>
-              <h1 class="m-0 font-decorative text-3xl leading-tight text-ink">
+              <h1 class="m-0 font-decorative text-3xl leading-tight text-ink" style="text-wrap: balance">
                 The Tome of<br />{{ identity.name }}
               </h1>
               <span class="text-gold" aria-hidden="true">✦ ❖ ✦</span>
@@ -516,7 +516,7 @@ watch(spread, () => {
               <span v-if="quest.current" class="active-badge">⟡ Active Quest</span>
               <span v-else class="stamp" aria-label="completed">Completed</span>
               <h3 class="quest-title">{{ quest.role }} <span class="quest-at">at</span> {{ quest.company }}</h3>
-              <p class="quest-period">{{ quest.period }}</p>
+              <p class="quest-period num">{{ quest.period }}</p>
               <p class="quest-summary">{{ quest.summary }}</p>
             </article>
           </template>
@@ -529,8 +529,8 @@ watch(spread, () => {
             </p>
             <div v-for="artifact in artifactsLeft" :key="artifact.name" class="artifact">
               <p class="artifact-kind">
-                {{ artifact.kind }}
-                <span v-if="artifact.badge" class="artifact-badge" :data-badge="artifact.badge">{{ artifact.badge }}</span>
+                <span>{{ artifact.kind }}</span>
+                <span v-if="artifact.badge" class="art-badge" :data-badge="artifact.badge">{{ artifact.badge }}</span>
               </p>
               <h3 class="artifact-name">{{ artifact.name }}</h3>
               <p class="artifact-desc">{{ artifact.description }}</p>
@@ -542,7 +542,7 @@ watch(spread, () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   class="inspect-link"
-                >Inspect ↗</a>
+                >Inspect<span aria-hidden="true" class="inspect-arrow">↗</span><span class="sr-only"> {{ artifact.name }} (opens in a new tab)</span></a>
               </div>
             </div>
           </template>
@@ -640,7 +640,7 @@ watch(spread, () => {
             <div v-for="(stat, i) in stats" :key="stat.short" class="mb-2.5">
               <div class="mb-1 flex items-baseline justify-between font-heading text-xs font-semibold uppercase tracking-wider text-ink-soft">
                 <span>{{ stat.short }} · {{ stat.label }}</span>
-                <span class="text-ink">{{ stat.value }} <span class="text-ink-faint">({{ statMod(stat.value) }})</span></span>
+                <span class="num text-ink">{{ stat.value }} <span class="text-ink-faint">({{ statMod(stat.value) }})</span></span>
               </div>
               <div class="stat-track">
                 <div
@@ -683,13 +683,13 @@ watch(spread, () => {
               <span v-if="quest.current" class="active-badge">⟡ Active Quest</span>
               <span v-else class="stamp" aria-label="completed">Completed</span>
               <h3 class="quest-title">{{ quest.role }} <span class="quest-at">at</span> {{ quest.company }}</h3>
-              <p class="quest-period">{{ quest.period }}</p>
+              <p class="quest-period num">{{ quest.period }}</p>
               <p class="quest-summary">{{ quest.summary }}</p>
             </article>
             <p v-if="questsRight.length === 0" class="folio mt-6">
               — the log is still being written —
             </p>
-            <p v-else-if="spreadCount > 1" class="folio">
+            <p v-else-if="spreadCount > 1" class="folio num">
               folio {{ spread + 1 }} of {{ spreadCount }}
             </p>
           </template>
@@ -698,8 +698,8 @@ watch(spread, () => {
           <template v-else-if="section === 'projects'">
             <div v-for="artifact in artifactsRight" :key="artifact.name" class="artifact">
               <p class="artifact-kind">
-                {{ artifact.kind }}
-                <span v-if="artifact.badge" class="artifact-badge" :data-badge="artifact.badge">{{ artifact.badge }}</span>
+                <span>{{ artifact.kind }}</span>
+                <span v-if="artifact.badge" class="art-badge" :data-badge="artifact.badge">{{ artifact.badge }}</span>
               </p>
               <h3 class="artifact-name">{{ artifact.name }}</h3>
               <p class="artifact-desc">{{ artifact.description }}</p>
@@ -711,10 +711,10 @@ watch(spread, () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   class="inspect-link"
-                >Inspect ↗</a>
+                >Inspect<span aria-hidden="true" class="inspect-arrow">↗</span><span class="sr-only"> {{ artifact.name }} (opens in a new tab)</span></a>
               </div>
             </div>
-          <p v-if="spreadCount > 1" class="folio">
+          <p v-if="spreadCount > 1" class="folio num">
               folio {{ spread + 1 }} of {{ spreadCount }}
             </p>
           </template>
@@ -894,6 +894,10 @@ watch(spread, () => {
 .ink-pad.book-page p {
   margin-bottom: 0.55em;
 }
+/* One vertical rhythm for every repeated block on a page. */
+.ink-pad {
+  --rhythm: 0.85rem;
+}
 
 
 /* ------------------------------------------------------------- */
@@ -1015,7 +1019,7 @@ watch(spread, () => {
 }
 
 .school {
-  margin-bottom: 1rem;
+  margin-bottom: var(--rhythm);
 }
 .school-name {
   display: flex;
@@ -1049,7 +1053,7 @@ watch(spread, () => {
 
 .quest {
   position: relative;
-  margin-bottom: 0.85rem;
+  margin-bottom: var(--rhythm);
   padding: 0.1rem 5.4rem 0.1rem 0.8rem;
   border-left: 2px solid rgba(176, 141, 60, 0.55);
 }
@@ -1076,23 +1080,6 @@ watch(spread, () => {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-faint);
-}
-.artifact-badge {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0 0.4rem;
-  border: 1px solid currentColor;
-  border-radius: 2px;
-  font-size: 0.85em;
-  letter-spacing: 0.12em;
-  vertical-align: 1px;
-  color: var(--ink-faint);
-}
-.artifact-badge[data-badge="Live"] {
-  color: #2a796e;
-}
-.artifact-badge[data-badge="Work"] {
-  color: #5a2e1d;
 }
 .continued {
   font-weight: 400;
@@ -1144,36 +1131,44 @@ watch(spread, () => {
   padding: 0.45em 0.7em;
 }
 
-/* Artifacts as ruled ledger entries — ink only, no card boxes. */
+/* Artifacts as ruled ledger entries — ink only, no card boxes.
+   Hierarchy: kind (+ badge) → name → description → tech chips → link. */
 .artifact {
-  margin-bottom: 0.8rem;
-  padding-bottom: 0.7rem;
+  margin-bottom: var(--rhythm);
+  padding-bottom: calc(var(--rhythm) - 0.1rem);
   border-bottom: 1px dotted rgba(74, 56, 38, 0.4);
 }
 .artifact:last-child {
   border-bottom: none;
 }
 .artifact-kind {
-  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  margin: 0 0 0.15rem;
   font-family: "Cinzel", serif;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: #8a6b25;
+  color: #7a5c1a;
 }
 .artifact-name {
-  margin: 0.1rem 0 0.25rem;
+  margin: 0 0 0.25rem;
   font-family: "Cinzel", serif;
-  font-size: 1rem;
+  font-size: 1.02rem;
   font-weight: 700;
+  line-height: 1.25;
   color: var(--ink);
+  text-wrap: balance;
 }
 .artifact-desc {
-  margin: 0 0 0.45rem;
+  margin: 0 0 0.5rem;
   font-size: 0.92rem;
   font-style: italic;
   color: var(--ink-soft);
+  text-wrap: pretty;
 }
 .rune-chip {
   font-family: "Cinzel", serif;
@@ -1187,18 +1182,46 @@ watch(spread, () => {
   padding: 0.26em 0.55em;
 }
 .inspect-link {
-  margin-left: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: auto;
+  padding: 0.2em 0.1em;
   font-family: "Cinzel", serif;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #1d5c52;
-  text-decoration: underline dotted rgba(20, 101, 90, 0.6);
-  text-underline-offset: 3px;
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 1px;
+  transition: color 0.2s ease, background-size 0.2s ease;
 }
-.inspect-link:hover {
+.inspect-arrow {
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+.inspect-link:hover,
+.inspect-link:focus-visible {
   color: var(--ink);
+  background-size: 100% 2px;
+}
+.inspect-link:hover .inspect-arrow,
+.inspect-link:focus-visible .inspect-arrow {
+  transform: translate(1px, -1px);
+}
+.inspect-link:focus-visible {
+  outline: 2px solid #1d5c52;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+@media (pointer: coarse) {
+  .inspect-link {
+    min-height: 2.75rem;
+  }
 }
 
 .toc-line {

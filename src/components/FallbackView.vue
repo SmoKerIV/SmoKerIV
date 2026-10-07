@@ -241,7 +241,7 @@ const contactLines = [
               <span class="font-heading text-xs font-semibold uppercase tracking-wider text-ink-soft">
                 {{ stat.short }} · {{ stat.label }}
               </span>
-              <span class="font-heading text-xs font-semibold text-ink">
+              <span class="num font-heading text-xs font-semibold text-ink">
                 {{ stat.value }}<span class="font-normal text-ink-faint"> / {{ STAT_MAX }}</span>
               </span>
             </div>
@@ -276,7 +276,7 @@ const contactLines = [
             <span class="font-heading text-sm font-semibold text-leather">{{ quest.company }}</span>
             <span v-if="quest.current" class="badge">Active Quest</span>
           </div>
-          <p class="m-0 mt-1 font-heading text-xs uppercase tracking-[0.18em] text-ink-faint">
+          <p class="num m-0 mt-1 font-heading text-xs uppercase tracking-[0.18em] text-ink-faint">
             {{ quest.period }}
           </p>
           <p class="m-0 mt-1.5 italic text-ink-soft">{{ quest.summary }}</p>
@@ -291,13 +291,13 @@ const contactLines = [
           :key="artifact.name"
           class="mb-5 rounded border border-leather/25 bg-[rgba(255,252,240,0.35)] px-5 py-4"
         >
-          <p class="m-0 font-heading text-xs font-semibold uppercase tracking-[0.24em] text-[#7a5c1a]">
-            {{ artifact.kind }}
-            <span v-if="artifact.badge" class="badge ml-2 align-middle">{{ artifact.badge }}</span>
+          <p class="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 font-heading text-xs font-semibold uppercase tracking-[0.24em] text-[#7a5c1a]">
+            <span>{{ artifact.kind }}</span>
+            <span v-if="artifact.badge" class="art-badge" :data-badge="artifact.badge">{{ artifact.badge }}</span>
           </p>
-          <h3 class="m-0 mt-1 font-heading text-base font-bold text-ink">{{ artifact.name }}</h3>
+          <h3 class="m-0 mt-1.5 font-heading text-base font-bold leading-snug text-ink">{{ artifact.name }}</h3>
           <p class="m-0 mt-1.5 text-ink-soft">{{ artifact.description }}</p>
-          <div class="mt-2.5 flex flex-wrap gap-1.5">
+          <div class="mt-3 flex flex-wrap gap-1.5">
             <span v-for="tech in artifact.tech" :key="tech" class="chip">{{ tech }}</span>
           </div>
           <a
@@ -305,9 +305,10 @@ const contactLines = [
             :href="artifact.url"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn-leather mt-3.5 inline-block rounded px-4 py-1.5 text-xs"
+            class="btn-leather art-link mt-4 inline-flex items-center gap-1.5 rounded px-4 text-xs"
           >
-            Inspect Artifact ↗
+            Inspect Artifact<span aria-hidden="true">↗</span>
+            <span class="sr-only">{{ artifact.name }} (opens in a new tab)</span>
           </a>
         </div>
       </section>
@@ -477,6 +478,14 @@ const contactLines = [
   .chip {
     font-size: 12px;
   }
+}
+
+.art-link {
+  min-height: 2.75rem;
+}
+.art-link:focus-visible {
+  outline: 2px solid var(--arcane);
+  outline-offset: 3px;
 }
 
 .badge {
