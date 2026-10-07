@@ -156,38 +156,43 @@ function parseMatrix(
 }
 
 /**
- * Section tabs sit on the top edge of the open spread, like index tabs
- * glued to the pages: centred over the two panes, bottoms touching the
- * highest projected top corner of the papers.
+ * Leather thumb-index tabs live in page space: a PAGE_CSS_W x PAGE_CSS_H
+ * layer carrying the same matrix as the ink pane they hang off, so they
+ * move, scale and tilt with the book. Two-page mode: the right page's
+ * fore-edge. Single-page mode: the edge of the page being read (right page
+ * -> right edge, left page -> mirrored onto the left edge), so the index is
+ * always on the outer edge nearest the reader's thumb.
  */
-const tabsStyle = computed<Record<string, string> | null>(() => {
+const indexSide = computed<"left" | "right">(() =>
+  single.value && page.value === "left" ? "left" : "right",
+);
+const indexStyle = computed<Record<string, string> | null>(() => {
   const t = props.transforms;
   if (!t) return null;
-  const L = parseMatrix(t.left);
-  const R = parseMatrix(t.right);
-  if (!L || !R) return null;
-  if (single.value) {
-    // Sit on the page being read; follows the glide between pages.
-    const P = page.value === "left" ? L : R;
-    return {
-      left: `${P.e + (P.a * PAGE_CSS_W) / 2}px`,
-      top: `${Math.min(P.f, P.b * PAGE_CSS_W + P.f)}px`,
-      transform: "translate(-50%, -100%)",
-    };
+  const matrix = indexSide.value === "left" ? t.left : t.right;
+  const M = parseMatrix(matrix);
+  if (!M) return null;
+  const scale = Math.max(0.2, Math.hypot(M.a, M.b));
+  // Keep the pulled-out tab (~36 rendered px) inside the viewport: when the
+  // page's outer edge is too close to the screen edge, tuck the whole index
+  // inward over the page margin instead of clipping it.
+  const TAB_EXTENT = 44;
+  const GUTTER = 4;
+  let shift = 0;
+  if (typeof window !== "undefined") {
+    if (indexSide.value === "right") {
+      const edge = M.a * PAGE_CSS_W + M.e;
+      shift = Math.min(0, (window.innerWidth - GUTTER - edge - TAB_EXTENT) / scale);
+    } else {
+      shift = Math.max(0, (TAB_EXTENT + GUTTER - M.e) / scale);
+    }
   }
-  // Top corners of each pane: (0,0) → (e, f), (W,0) → (aW+e, bW+f).
-  const top = Math.min(
-    L.f,
-    L.b * PAGE_CSS_W + L.f,
-    R.f,
-    R.b * PAGE_CSS_W + R.f,
-  );
-  const leftX = L.e; // left pane, outer top corner
-  const rightX = R.a * PAGE_CSS_W + R.e; // right pane, outer top corner
   return {
-    left: `${(leftX + rightX) / 2}px`,
-    top: `${top}px`,
-    transform: "translate(-50%, -100%)",
+    ...paneBase,
+    transform: matrix,
+    // Projection scale: tab type is sized in rendered px, never below 12.
+    "--s": String(scale),
+    "--shift": `${shift}px`,
   };
 });
 
@@ -722,7 +727,7 @@ watch(spread, () => {
               </li>
             </ol>
             <p class="mt-5 text-center font-body text-xs italic text-ink-faint">
-              — turn the pages with the arrows, the arrow keys, or the bookmarks —
+              — turn the pages with the arrows, the arrow keys, or the index tabs —
             </p>
           </template>
 
@@ -900,23 +905,26 @@ watch(spread, () => {
       @click="next"
     >›</button>
 
-    <nav
-      v-if="tabsStyle"
-      class="pointer-events-auto fixed z-30 flex items-end gap-1"
-      :style="tabsStyle"
-      aria-label="Tome sections"
+    <div
+      v-if="indexStyle"
+      class="thumb-layer"
+      :class="`thumb-${indexSide}`"
+      :style="indexStyle"
     >
-      <button
-        v-for="s in SECTIONS"
-        :key="s.id"
-        class="bookmark"
-        :class="{ 'bookmark-active': s.id === section }"
-        :aria-current="s.id === section ? 'page' : undefined"
-        @click="navigate(s.id)"
-      >
-        {{ s.tab }}
-      </button>
-    </nav>
+      <nav class="thumb-index" aria-label="Tome sections">
+        <button
+          v-for="s in SECTIONS"
+          :key="s.id"
+          class="thumb-tab"
+          :class="{ 'thumb-active': s.id === section }"
+          :style="{ flexGrow: s.tab.length + 3 }"
+          :aria-current="s.id === section ? 'page' : undefined"
+          @click="navigate(s.id)"
+        >
+          {{ s.tab }}
+        </button>
+      </nav>
+    </div>
   </div>
 </template>
 
@@ -1028,37 +1036,82 @@ watch(spread, () => {
     width: 3rem;
     height: 3rem;
   }
-  .bookmark {
-    padding: 0.7rem 0.9rem 0.85rem;
-    font-size: 12px;
-  }
 }
 
-.bookmark {
-  padding: 0.5rem 0.75rem 0.65rem;
+/* Leather thumb-index tabs on the fore-edge (page space; see indexStyle).
+   Sizes are in page units: --s is the projection scale, so `12px / --s`
+   renders at 12 screen px; the max() keeps type growing with the book. */
+.thumb-layer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  z-index: 30;
+  pointer-events: none;
+}
+.thumb-index {
+  position: absolute;
+  top: 1%;
+  bottom: 1%;
+  width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(3px / var(--s));
+  transform: translateX(var(--shift, 0px));
+}
+.thumb-right .thumb-index { left: 100%; }
+.thumb-left .thumb-index { right: 100%; }
+.thumb-tab {
+  --pull: calc(8px / var(--s));
+  flex: 1 1 0;
+  min-height: 0;
+  width: calc(26px / var(--s));
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  writing-mode: vertical-rl;
   font-family: "Cinzel", serif;
-  font-size: 12px;
+  font-size: calc(12.5px / var(--s));
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.03em;
+  line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
-  color: rgba(234, 217, 184, 0.75);
-  background:
-    linear-gradient(180deg, var(--leather-light) 0%, var(--leather) 55%, var(--leather-dark) 100%);
-  border: 1px solid rgba(20, 8, 4, 0.85);
-  border-bottom: none;
-  border-radius: 5px 5px 0 0;
-  box-shadow: 0 -3px 8px rgba(0, 0, 0, 0.35);
-  transition: transform 0.2s ease, color 0.2s ease, background 0.2s ease;
+  color: #f0e2c4;
+  background: linear-gradient(90deg, #4a1810, #7a2e1f 60%, #5c2116);
+  border: 0;
+  border-radius: 0 calc(7px / var(--s)) calc(7px / var(--s)) 0;
+  box-shadow: calc(3px / var(--s)) calc(2px / var(--s)) calc(5px / var(--s)) rgba(0, 0, 0, 0.45);
+  transform: translateX(0);
+  transition:
+    transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 0.25s,
+    color 0.25s;
 }
-.bookmark:hover {
-  color: #f3e6cb;
-  filter: brightness(1.15);
+.thumb-left .thumb-tab {
+  align-self: flex-end;
+  background: linear-gradient(270deg, #4a1810, #7a2e1f 60%, #5c2116);
+  border-radius: calc(7px / var(--s)) 0 0 calc(7px / var(--s));
+  box-shadow: calc(-3px / var(--s)) calc(2px / var(--s)) calc(5px / var(--s)) rgba(0, 0, 0, 0.45);
 }
-.bookmark-active {
-  transform: translateY(-5px);
-  color: var(--arcane);
-  background: linear-gradient(180deg, #256b61 0%, var(--arcane-dim) 45%, #174540 100%);
+.thumb-right .thumb-tab:hover { transform: translateX(calc(var(--pull) * 0.6)); }
+.thumb-left .thumb-tab:hover { transform: translateX(calc(var(--pull) * -0.6)); }
+.thumb-right .thumb-tab.thumb-active { transform: translateX(var(--pull)); }
+.thumb-left .thumb-tab.thumb-active { transform: translateX(calc(var(--pull) * -1)); }
+.thumb-tab.thumb-active {
+  color: var(--ink);
+  background: linear-gradient(90deg, #e4d5b0, var(--parchment));
+  box-shadow:
+    calc(3px / var(--s)) calc(2px / var(--s)) calc(6px / var(--s)) rgba(0, 0, 0, 0.35),
+    inset 0 0 0 calc(1px / var(--s)) rgba(184, 145, 61, 0.6);
+}
+.thumb-left .thumb-tab.thumb-active {
+  background: linear-gradient(270deg, #e4d5b0, var(--parchment));
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumb-tab { transition: none; }
 }
 
 /* ------------------------------------------------------------- */
