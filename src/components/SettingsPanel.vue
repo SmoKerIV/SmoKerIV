@@ -79,7 +79,7 @@ const flatUrl = ((): string => {
 </script>
 
 <template>
-  <aside
+  <div
     ref="rootEl"
     aria-modal="true"
     class="parchment fixed bottom-0 right-0 top-0 z-50 flex w-[min(22rem,92vw)] flex-col overflow-y-auto shadow-tome"
@@ -238,7 +238,7 @@ const flatUrl = ((): string => {
         Prefer a plain page? Read the tome as parchment.
       </a>
     </footer>
-  </aside>
+  </div>
 </template>
 
 <style scoped>
