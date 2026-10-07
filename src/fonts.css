@@ -1,0 +1,100 @@
+/* Self-hosted webfonts (latin subset, woff2 only, from @fontsource) — no
+   render-blocking request to a third-party CDN. font-display: swap keeps
+   text visible in the fallback serif until each file arrives. The two files
+   used by the loader are also <link rel=preload>ed (see vite.config.ts). */
+
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/cinzel/files/cinzel-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/cinzel/files/cinzel-latin-600-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/cinzel/files/cinzel-latin-700-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-600-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-400-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-500-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-600-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Fira Code";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/fira-code/files/fira-code-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Fira Code";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/fira-code/files/fira-code-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Uncial Antiqua";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../node_modules/@fontsource/uncial-antiqua/files/uncial-antiqua-latin-400-normal.woff2") format("woff2");
+}

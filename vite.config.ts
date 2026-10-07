@@ -1,9 +1,41 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import vue from "@vitejs/plugin-vue";
+
+/**
+ * Fonts the loader screen paints (Cinzel 400 for the counter and status
+ * line, 600 for the wax button): preload their hashed build URLs so they
+ * arrive with the stylesheet instead of after it. Build only — in dev the
+ * bundle is empty and nothing is injected.
+ */
+const PRELOAD_FONTS = [/^assets\/cinzel-latin-400-normal-.+\.woff2$/, /^assets\/cinzel-latin-600-normal-.+\.woff2$/];
+function preloadFonts(): Plugin {
+  return {
+    name: "preload-loader-fonts",
+    apply: "build",
+    transformIndexHtml: {
+      order: "post",
+      handler(_html, ctx) {
+        const files = Object.keys(ctx.bundle ?? {});
+        return PRELOAD_FONTS.flatMap((re) => files.filter((f) => re.test(f))).map((file) => ({
+          tag: "link",
+          attrs: {
+            rel: "preload",
+            as: "font",
+            type: "font/woff2",
+            href: `/${file}`,
+            crossorigin: "",
+          },
+          injectTo: "head-prepend" as const,
+        }));
+      },
+    },
+  };
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    preloadFonts(),
     vue({
       template: {
         compilerOptions: {
