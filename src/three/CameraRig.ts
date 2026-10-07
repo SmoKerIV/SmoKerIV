@@ -309,6 +309,11 @@ export class CameraRig {
     this.reducedMotion = reduced;
   }
 
+  /** A pose tween (focus, retarget) is in flight. */
+  get isAnimating(): boolean {
+    return this.tween !== null;
+  }
+
   /** Freeze idle sway/parallax while the tome is being read. */
   setReading(reading: boolean): void {
     this.swayScale = reading ? 0 : 1;

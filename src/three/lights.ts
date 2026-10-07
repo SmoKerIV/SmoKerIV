@@ -189,6 +189,18 @@ export class Lights {
     this.impactFlashStart = elapsed;
   }
 
+  /**
+   * A one-shot effect is running (impact flash, hearth flare, candle
+   * gutter or snuff/relight fade) — the render loop keeps full rate.
+   * Steady flicker doesn't count.
+   */
+  get isAnimating(): boolean {
+    if (this.impactFlashStart >= 0 || this.flareStart >= 0) return true;
+    if (this.gutterIndex >= 0) return true;
+    for (const f of this.candleFlickers) if (f.lit !== f.litTarget) return true;
+    return false;
+  }
+
   update(elapsed: number): void {
     // Local delta for the snuff fades (update only receives elapsed).
     const delta = THREE.MathUtils.clamp(elapsed - this.lastElapsed, 0, 0.1);

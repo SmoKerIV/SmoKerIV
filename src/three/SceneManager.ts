@@ -96,6 +96,35 @@ const FIREBALL_TRAIL_STEP = 0.06;
 const FIREBALL_THROW_DISTANCE = 1.7;
 const FIREBALL_LIGHT_INTENSITY = 3;
 
+// --- Idle throttling -------------------------------------------------------
+/** No pointer/keyboard input for this long (and nothing animating) → idle. */
+const IDLE_AFTER_MS = 60_000;
+/** Frame interval while idle at the table (~30 fps). */
+const IDLE_FRAME_MS = 1000 / 30;
+/** Frame interval while reading with the camera settled (~15 fps). */
+const READING_FRAME_MS = 1000 / 15;
+/** rAF timestamps jitter; render when within this much of the interval. */
+const FRAME_SLACK_MS = 4;
+const INPUT_EVENTS = [
+  "pointermove",
+  "pointerdown",
+  "keydown",
+  "wheel",
+  "touchstart",
+] as const;
+
+/**
+ * Dev-only `?idle=<seconds>` shortens the idle threshold for testing the
+ * throttle; production always uses IDLE_AFTER_MS.
+ */
+function idleAfterMs(): number {
+  if (import.meta.env.DEV) {
+    const seconds = Number(new URLSearchParams(window.location.search).get("idle"));
+    if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  }
+  return IDLE_AFTER_MS;
+}
+
 // --- Auto quality fail-down --------------------------------------------------
 const FRAME_WINDOW = 90;
 /** Rolling window average above this (< 25 fps) triggers a downgrade. */
@@ -321,6 +350,15 @@ export class SceneManager implements ISceneManager {
   /** performance.now() until which casters may be moving (item hops). */
   private shadowBusyUntil = 0;
 
+  /** Idle throttle state (performance.now() timeline, like rAF stamps). */
+  private readonly idleAfter = idleAfterMs();
+  private lastInputAt = performance.now();
+  private lastRenderAt = Number.NEGATIVE_INFINITY;
+  /** Interval used for the previous rendered frame (0 = full rate). */
+  private lastFrameInterval = 0;
+  /** Render the next rAF regardless of throttling (resize, settings). */
+  private renderSoon = true;
+
   private rafId: number | null = null;
   private resizeRaf: number | null = null;
   private userPaused = false;
@@ -383,6 +421,12 @@ export class SceneManager implements ISceneManager {
     this.resizeObserver = new ResizeObserver(this.scheduleResize);
     this.resizeObserver.observe(canvas);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
+    for (const type of INPUT_EVENTS) {
+      window.addEventListener(type, this.onUserInput, {
+        capture: true,
+        passive: true,
+      });
+    }
     this.handleResize();
     this.events.onProgress?.(PROGRESS.start);
     void this.init(canvas);
@@ -649,10 +693,12 @@ export class SceneManager implements ISceneManager {
     this.particles.setQuality(quality);
     this.updateMothVisibility();
     this.markShadowsDirty();
+    this.renderSoon = true;
   }
 
   setReducedMotion(reduced: boolean): void {
     this.settings.reducedMotion = reduced;
+    this.renderSoon = true;
     this.rig.setReducedMotion(reduced);
     this.lights.setReducedMotion(reduced);
     this.updateMothVisibility();
@@ -710,6 +756,9 @@ export class SceneManager implements ISceneManager {
     if (this.resizeRaf !== null) cancelAnimationFrame(this.resizeRaf);
     this.resizeRaf = null;
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    for (const type of INPUT_EVENTS) {
+      window.removeEventListener(type, this.onUserInput, { capture: true });
+    }
 
     this.bookTl?.kill();
     this.pageFlipTween?.kill();
@@ -1629,8 +1678,52 @@ export class SceneManager implements ISceneManager {
     );
   }
 
-  private readonly loop = (): void => {
+  /** Anything on screen animating that should run at the full frame rate? */
+  private isAnimating(now: number): boolean {
+    return (
+      this.transitioning ||
+      this.rig.isAnimating ||
+      this.shadowsAnimating(now) ||
+      this.fireballTween !== null ||
+      this.lights.isAnimating ||
+      this.particles.isAnimating ||
+      gsap.isTweening(this.moodProxy) ||
+      gsap.isTweening(this.lightningProxy) ||
+      gsap.isTweening(this.runeProxy) ||
+      gsap.isTweening(this.bookOpenProxy)
+    );
+  }
+
+  /**
+   * Target frame interval in ms (0 = every rAF). Full rate while anything
+   * animates or input arrived within the idle window; ~15 fps while reading
+   * with the camera settled (the page and ink are static); ~30 fps when idle.
+   */
+  private frameInterval(now: number): number {
+    if (!this.readyFired || this.renderSoon || this.isAnimating(now)) return 0;
+    if (this.reading) return READING_FRAME_MS;
+    if (now - this.lastInputAt > this.idleAfter) return IDLE_FRAME_MS;
+    return 0;
+  }
+
+  private readonly onUserInput = (): void => {
+    this.lastInputAt = performance.now();
+  };
+
+  private readonly loop = (now: number): void => {
     this.rafId = requestAnimationFrame(this.loop);
+
+    // Idle throttle: frame-skip until the target interval has passed. The
+    // clock delta then spans the skipped frames, so particles, flicker and
+    // dust simply step at the reduced rate.
+    const interval = this.frameInterval(now);
+    if (interval > 0 && now - this.lastRenderAt < interval - FRAME_SLACK_MS) {
+      return;
+    }
+    const steadyFullRate = interval === 0 && this.lastFrameInterval === 0;
+    this.lastRenderAt = now;
+    this.lastFrameInterval = interval;
+    this.renderSoon = false;
 
     // Clamp delta so a resumed tab doesn't jump the simulation.
     const delta = Math.min(this.clock.getDelta(), 0.1);
@@ -1668,7 +1761,8 @@ export class SceneManager implements ISceneManager {
       this.warmupUntil = elapsed + WARMUP_SECONDS;
       this.events.onReady?.();
     }
-    if (this.readyFired) this.measureFrame(delta, elapsed);
+    // Throttled frames (and the first one back) would read as a slow GPU.
+    if (this.readyFired && steadyFullRate) this.measureFrame(delta, elapsed);
   };
 
   private readonly scheduleResize = (): void => {
@@ -1685,6 +1779,8 @@ export class SceneManager implements ISceneManager {
     const height = canvas.clientHeight || window.innerHeight;
     if (width === 0 || height === 0) return;
     this.renderer.setSize(width, height, false);
+    // Resizing clears the canvas: repaint on the next frame even if idle.
+    this.renderSoon = true;
     this.rig.setSize(width, height);
     // Poses depend on aspect (table/focus framing, reading distance fit to
     // the frustum). Re-aim without killing an in-flight focus tween.
@@ -1693,6 +1789,8 @@ export class SceneManager implements ISceneManager {
   }
 
   private readonly onVisibilityChange = (): void => {
+    // Coming back to the tab counts as input: resume at full rate.
+    if (!document.hidden) this.lastInputAt = performance.now();
     this.updateRunning();
   };
 

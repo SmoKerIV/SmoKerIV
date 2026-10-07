@@ -222,6 +222,23 @@ export class Particles {
     this.group.add(this.sparklePoints);
   }
 
+  /**
+   * A one-shot effect is alive (ember pop, smoke wisp, fireball sparks) or
+   * the book sparkles are fading — the render loop keeps full rate.
+   * Ambient dust/embers don't count.
+   */
+  get isAnimating(): boolean {
+    if (
+      this.burstPoints.visible ||
+      this.smokePoints.visible ||
+      this.fireballPoints.visible
+    ) {
+      return true;
+    }
+    const target = this.bookActive ? 1 : 0;
+    return Math.abs(target - this.sparkleAmount) > 0.01;
+  }
+
   setBookActive(active: boolean): void {
     this.bookActive = active;
   }
