@@ -1,5 +1,5 @@
 /**
- * Longsword ~0.9 m, built lying flat along the X axis (blade tip toward +X),
+ * Hand-and-a-half longsword ~1.25 m, built lying flat along the X axis (blade tip toward +X),
  * resting on its side: blade width in Z, thickness in Y.
  *
  * - Blade: lofted diamond section with a secondary edge bevel and a
@@ -33,30 +33,30 @@ import {
 // --- Blade shape -------------------------------------------------------------
 
 const BLADE_X0 = 0.006; // blade root, hidden inside the guard
-const BLADE_LEN = 0.632;
-const STATIONS = 48;
+const BLADE_LEN = 0.92;
+const STATIONS = 60;
 
 /** Half-width (Z) of the blade at s in [0, 1] along its length. */
 function bladeHalfWidth(s: number): number {
-  const linear = 0.0255 - 0.0085 * Math.min(s / 0.78, 1);
-  if (s <= 0.7) return linear;
-  const u = Math.min((s - 0.7) / 0.3, 1);
+  const linear = 0.0245 - 0.0105 * Math.min(s / 0.8, 1);
+  if (s <= 0.74) return linear;
+  const u = Math.min((s - 0.74) / 0.26, 1);
   return Math.max(0.00035, linear * Math.cos((Math.PI / 2) * u) ** 0.75);
 }
 
 /** Half-thickness (Y) of the diamond ridge at s. */
 function bladeHalfThickness(s: number): number {
-  const base = 0.0043 * (1 - 0.42 * s);
-  if (s <= 0.8) return base;
-  const u = Math.min((s - 0.8) / 0.2, 1);
+  const base = 0.0041 * (1 - 0.5 * s);
+  if (s <= 0.84) return base;
+  const u = Math.min((s - 0.84) / 0.16, 1);
   return Math.max(0.0003, base * (1 - 0.85 * u * u));
 }
 
-/** Fuller depth factor: full near the hilt, running out by ~68%. */
+/** Fuller depth factor: plain ricasso at the hilt, then full, running out by ~68%. */
 function fullerDepth(s: number): number {
-  if (s < 0.015) return 0;
-  const a = THREE.MathUtils.smoothstep(s, 0.015, 0.04);
-  const b = 1 - THREE.MathUtils.smoothstep(s, 0.55, 0.68);
+  if (s < 0.05) return 0;
+  const a = THREE.MathUtils.smoothstep(s, 0.05, 0.085);
+  const b = 1 - THREE.MathUtils.smoothstep(s, 0.56, 0.68);
   return a * b;
 }
 
@@ -158,7 +158,7 @@ function buildBladeGeometry(): THREE.BufferGeometry {
 
 /** Strip conforming to the fuller floor, carrying the rune decal. */
 function buildRuneStrip(s0: number, s1: number, halfWidthFrac: number): THREE.BufferGeometry {
-  const steps = 32;
+  const steps = 48;
   const cols = [-1, -0.5, 0, 0.5, 1];
   const positions: number[] = [];
   const uvs: number[] = [];
@@ -256,7 +256,7 @@ function bladeMaps(): PbrMaps {
 function gripMaps(): PbrMaps {
   return cachedMaps("sword:grip", () => {
     const S = 512;
-    const TURNS = 11; // wraps along the grip
+    const TURNS = 15; // wraps along the grip
     const grain = noiseField(S, S, 9201, 24, 24, 3);
     const [canvas, ctx] = makeCanvas(S, S);
     const img = ctx.createImageData(S, S);
@@ -332,16 +332,16 @@ export function swordMaps(): void {
 
 /** Octagonal quillon along +Z, flaring to the tip and sweeping toward +X. */
 function quillonGeometry(side: 1 | -1): THREE.BufferGeometry {
-  const L = 0.104;
+  const L = 0.14;
   const profilePts: Array<[number, number]> = [
-    [0.0072, 0],
-    [0.0062, 0.018],
-    [0.0051, 0.05],
-    [0.0053, 0.072],
-    [0.0072, 0.087],
-    [0.0088, 0.095],
-    [0.0084, 0.1],
-    [0.0056, L - 0.0015],
+    [0.0074, 0],
+    [0.0064, 0.024],
+    [0.0052, 0.068],
+    [0.0054, 0.098],
+    [0.0074, 0.118],
+    [0.009, 0.128],
+    [0.0086, 0.134],
+    [0.0057, L - 0.0015],
     [0.0001, L],
   ];
   const geo = new THREE.LatheGeometry(
@@ -350,7 +350,7 @@ function quillonGeometry(side: 1 | -1): THREE.BufferGeometry {
   );
   const pos = geo.getAttribute("position") as THREE.BufferAttribute;
   const START = 0.019; // out from the centre block
-  const SWEEP = 1.7; // x offset = SWEEP * y^2 (toward the blade)
+  const SWEEP = 1.1; // x offset = SWEEP * y^2 (toward the blade)
   for (let i = 0; i < pos.count; i++) {
     const rx = pos.getX(i);
     const ry = pos.getY(i);
@@ -413,7 +413,7 @@ function wheelPommelGeometry(): THREE.BufferGeometry {
       .map(([r, y]) => new THREE.Vector2(r, -y)),
   ];
   // Lathe winds bottom-to-top: reverse so the faces point outward.
-  return new THREE.LatheGeometry(pts.reverse(), 28);
+  return new THREE.LatheGeometry(pts.reverse(), 32).scale(1.3, 1.4, 1.3);
 }
 
 export function buildSword(): THREE.Group {
@@ -461,7 +461,7 @@ export function buildSword(): THREE.Group {
   // Rune etching glowing in the fuller (canvas decal, conforming strip)
   const runeTex = makeBladeRuneTexture();
   const runes = new THREE.Mesh(
-    buildRuneStrip(0.06, 0.4, 0.27),
+    buildRuneStrip(0.12, 0.5, 0.27),
     new THREE.MeshStandardMaterial({
       map: runeTex,
       emissiveMap: runeTex,
@@ -488,12 +488,12 @@ export function buildSword(): THREE.Group {
 
   // --- Grip: swelled leather wrap between brass ferrules -------------------------
   const GRIP_FROM = -0.013;
-  const GRIP_LEN = 0.178;
+  const GRIP_LEN = 0.25;
   const gripPts: THREE.Vector2[] = [];
-  const ROWS = 18;
+  const ROWS = 24;
   for (let i = 0; i <= ROWS; i++) {
     const t = i / ROWS;
-    const r = 0.0124 + 0.0019 * Math.sin(Math.PI * t) ** 0.8 - 0.0006 * t;
+    const r = 0.0122 + 0.0021 * Math.sin(Math.PI * t) ** 0.8 - 0.0005 * t;
     gripPts.push(new THREE.Vector2(r, t * GRIP_LEN));
   }
   const gripGeo = new THREE.LatheGeometry(gripPts, 24).rotateZ(Math.PI / 2);
@@ -516,7 +516,7 @@ export function buildSword(): THREE.Group {
   }
 
   // --- Wheel pommel + peened tang button -------------------------------------------
-  const POMMEL_X = GRIP_FROM - GRIP_LEN - 0.022;
+  const POMMEL_X = GRIP_FROM - GRIP_LEN - 0.032;
   const pommel = new THREE.Mesh(wheelPommelGeometry(), darkSteel);
   pommel.position.x = POMMEL_X;
   parts.add(pommel);
@@ -530,15 +530,41 @@ export function buildSword(): THREE.Group {
     new THREE.LatheGeometry(buttonPts, 14).rotateZ(Math.PI / 2),
     darkSteel,
   );
-  button.position.x = POMMEL_X - 0.0265;
+  button.position.x = POMMEL_X - 0.0355;
   parts.add(button);
 
   // --- Resting pose ---------------------------------------------------------------------
-  // Tilt nose-down until the tip meets the table under the guard's
-  // support, then lift so the lowest point sits on y = 0 and recenter.
-  const guardHalf = 0.0155;
+  // Tilt nose-down until the tip meets the table at the same height as the
+  // lowest hilt point (guard or pommel), then lift so that point sits on
+  // y = 0 and recenter lengthwise.
   const tipX = BLADE_X0 + BLADE_LEN;
-  parts.rotation.z = -Math.atan2(guardHalf, tipX);
+  const hiltVerts: Array<[number, number]> = [];
+  for (const mesh of parts.children) {
+    if (mesh === bladeMesh || mesh === runes) continue;
+    const m = mesh as THREE.Mesh;
+    m.updateMatrix();
+    const pos = m.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m.matrix);
+      hiltVerts.push([v.x, v.y]);
+    }
+  }
+  const gap = (a: number): number => {
+    const sin = Math.sin(a);
+    const cos = Math.cos(a);
+    let low = Infinity;
+    for (const [x, y] of hiltVerts) low = Math.min(low, x * sin + y * cos);
+    return tipX * sin - low;
+  };
+  let lo = -0.2;
+  let hi = 0;
+  for (let k = 0; k < 40; k++) {
+    const mid = (lo + hi) / 2;
+    if (gap(mid) > 0) hi = mid;
+    else lo = mid;
+  }
+  parts.rotation.z = (lo + hi) / 2;
   group.add(parts);
   group.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(parts);
