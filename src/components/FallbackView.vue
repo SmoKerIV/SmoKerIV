@@ -296,6 +296,13 @@ const contactLines = [
           <a :href="`mailto:${contact.email}`" class="btn-wax inline-block px-8 py-3.5 text-xs">
             Send the Raven
           </a>
+          <a
+            href="/baker-cv.pdf"
+            download="Baker Alazzawi CV.pdf"
+            class="btn-leather ml-3 inline-block rounded px-5 py-3.5 text-xs"
+          >
+            Download the CV
+          </a>
         </div>
       </section>
 

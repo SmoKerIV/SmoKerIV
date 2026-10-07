@@ -196,6 +196,8 @@ export interface CardLink {
   href: string;
   /** Opens in a new tab (https links; mailto/tel stay in-page). */
   external?: boolean;
+  /** Saves the file under this name instead of navigating (same-origin only). */
+  download?: string;
 }
 
 export interface ItemCardContent {
@@ -248,6 +250,11 @@ export const itemCards: Record<FocusCardItem, ItemCardContent> = {
         label: contact.instagram.label,
         href: contact.instagram.url,
         external: true,
+      },
+      {
+        label: "Download the CV (PDF)",
+        href: "/baker-cv.pdf",
+        download: "Baker Alazzawi CV.pdf",
       },
     ],
   },

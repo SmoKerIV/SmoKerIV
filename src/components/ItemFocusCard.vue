@@ -44,6 +44,7 @@ const card = computed(() => itemCards[props.item]);
             :href="link.href"
             :target="link.external ? '_blank' : undefined"
             :rel="link.external ? 'noopener noreferrer' : undefined"
+            :download="link.download"
           >
             {{ link.label }}
           </a>
