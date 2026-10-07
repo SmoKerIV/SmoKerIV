@@ -185,6 +185,7 @@ export function buildCandle(): THREE.Group {
     }),
   );
   flame.name = "candleFlame";
+  flame.userData.noShadow = true;
   flame.position.y = POOL_Y + 0.011;
   group.add(flame);
 

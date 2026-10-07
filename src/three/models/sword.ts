@@ -91,6 +91,7 @@ export function buildSword(): THREE.Group {
       metalness: 0.0,
     }),
   );
+  runes.userData.noShadow = true;
   runes.position.set(0.15, 0.0068, 0);
   parts.add(runes);
 

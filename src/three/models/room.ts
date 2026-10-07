@@ -32,6 +32,7 @@ export function buildRoom(): THREE.Group {
     floorMat,
   );
   floor.receiveShadow = true;
+  floor.userData.noShadow = true; // room shell receives only
   group.add(floor);
 
   // --- Walls: inward-facing plaster planes --------------------------------
@@ -49,6 +50,7 @@ export function buildRoom(): THREE.Group {
     wall.position.set(x, HEIGHT / 2, z);
     wall.rotation.y = rotY;
     wall.receiveShadow = true;
+    wall.userData.noShadow = true;
     group.add(wall);
   }
 
@@ -57,6 +59,7 @@ export function buildRoom(): THREE.Group {
     new THREE.PlaneGeometry(ROOM, ROOM).rotateX(Math.PI / 2),
     new THREE.MeshStandardMaterial({ color: 0x8a7a60, roughness: 0.95 }),
   );
+  ceiling.userData.noShadow = true;
   ceiling.position.y = HEIGHT;
   group.add(ceiling);
 
@@ -119,6 +122,9 @@ export function buildRoom(): THREE.Group {
     roughness: 1,
   });
   const sky = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 1.0), skyMat);
+  // SceneManager repaints this for day/night by name.
+  sky.name = "windowSky";
+  sky.userData.noShadow = true;
   win.add(sky);
   const frameMat = wood;
   const frameParts: Array<[number, number, number, number]> = [
@@ -182,6 +188,7 @@ export function buildRoom(): THREE.Group {
   glow.rotation.y = Math.PI / 2;
   glow.position.set(0.44, 0.5, 0);
   glow.name = "fireplaceGlow";
+  glow.userData.noShadow = true;
   hearth.add(glow);
   // A couple of log cylinders in the recess
   const logMat = woodDarkMaterial();

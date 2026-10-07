@@ -3,7 +3,7 @@
  * spine on the -X side. Pivot at the bottom of the back cover.
  *
  * Animatable parts exposed via userData.parts (SpellbookParts):
- * - frontCover: group pivoted at the spine; rotate .z from 0 to ~ -PI to open.
+ * - frontCover: group pivoted at the spine; rotate .z from 0 to ~ +PI to open.
  * - flipPages: 3 loose page groups on the same spine line, front-to-back.
  */
 import * as THREE from "three";
@@ -99,7 +99,8 @@ export function buildSpellbook(): THREE.Group {
   flipPages.reverse();
 
   // --- Front cover group, pivot at the spine --------------------------------
-  // Rotate .z from 0 to ~ -Math.PI to open the book leftward.
+  // Rotate .z from 0 to ~ +Math.PI to open the book leftward (+z lifts the
+  // free edge up and over the spine; -z would swing it through the table).
   const frontCover = new THREE.Group();
   frontCover.name = "spellbookFrontCover";
   frontCover.position.set(SPINE_X, 0.073, 0);
@@ -158,6 +159,7 @@ export function buildSpellbook(): THREE.Group {
     depthWrite: false,
   });
   const rune = new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.17), runeMat);
+  rune.userData.noShadow = true;
   rune.rotation.x = -Math.PI / 2;
   rune.rotation.z = -Math.PI / 2;
   rune.position.set(W / 2, 0.0142, 0);

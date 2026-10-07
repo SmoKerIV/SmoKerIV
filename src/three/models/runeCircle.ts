@@ -30,6 +30,7 @@ export function buildRuneCircle(): THREE.Group {
     material,
   );
   plane.position.y = 0.001;
+  plane.userData.noShadow = true;
   plane.renderOrder = 2; // draw after opaque table/items
   group.add(plane);
 

@@ -45,7 +45,8 @@ const RUNE_HOVER = 0.6;
 // --- Day/night mood (night = the hand-tuned baseline) ----------------------
 const FOG_DENSITY_NIGHT = 0.055;
 const FOG_DENSITY_DAY = 0.045;
-// The room model's -Z window sky quad, found at runtime by its emissive.
+// The room model's -Z window sky quad, found at runtime by its mesh name.
+const WINDOW_SKY_NAME = "windowSky";
 const WINDOW_EMISSIVE_NIGHT = 0x24406b;
 const WINDOW_SKY_NIGHT = new THREE.Color(0x06101f);
 const WINDOW_SKY_DAY = new THREE.Color(0x8fb4d9);
@@ -603,19 +604,11 @@ export class SceneManager implements ISceneManager {
     const room = buildRoom();
     this.scene.add(room);
 
-    // The window's night-sky quad has no name; identify it by its unique
-    // deep-blue emissive so day mode can repaint it without touching models.
-    room.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh || Array.isArray(mesh.material)) return;
-      const material = mesh.material as THREE.MeshStandardMaterial;
-      if (
-        material.isMeshStandardMaterial &&
-        material.emissive.getHex() === WINDOW_EMISSIVE_NIGHT
-      ) {
-        this.windowSky = material;
-      }
-    });
+    // Day mode repaints the window's sky quad, which room.ts names.
+    const sky = room.getObjectByName(WINDOW_SKY_NAME) as THREE.Mesh | undefined;
+    if (sky && !Array.isArray(sky.material)) {
+      this.windowSky = sky.material as THREE.MeshStandardMaterial;
+    }
 
     const table = buildTable();
     table.position.set(0, 0, -0.15);
@@ -690,7 +683,9 @@ export class SceneManager implements ISceneManager {
     this.scene.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (mesh.isMesh) {
-        mesh.castShadow = true;
+        // Models flag non-solid / shell meshes with userData.noShadow
+        // (flames, rune decals, glass, room walls): they receive only.
+        mesh.castShadow = !mesh.userData.noShadow;
         mesh.receiveShadow = true;
       }
     });

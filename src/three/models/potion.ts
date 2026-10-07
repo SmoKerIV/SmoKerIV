@@ -45,7 +45,7 @@ export function buildPotions(): THREE.Group {
     ]),
     glassMaterial(0xcfe8e4),
   );
-  flaskGlass.castShadow = true;
+  flaskGlass.userData.noShadow = true; // glass: no opaque shadow
   flask.add(flaskGlass);
   const tealLiquid = new THREE.Mesh(
     new THREE.SphereGeometry(0.042, 12, 10),
@@ -73,7 +73,7 @@ export function buildPotions(): THREE.Group {
     ], 12),
     glassMaterial(0xf0dede),
   );
-  vialGlass.castShadow = true;
+  vialGlass.userData.noShadow = true;
   vial.add(vialGlass);
   const crimsonLiquid = new THREE.Mesh(
     new THREE.CylinderGeometry(0.019, 0.019, 0.115, 10),
