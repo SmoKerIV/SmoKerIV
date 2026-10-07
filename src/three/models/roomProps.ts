@@ -47,7 +47,7 @@ interface Placement {
 /** Hand-painted set (barrels, books): darker, a little desaturated. */
 const PAINTED_BG: PropLook = { tint: 0x8c7f72, roughnessMin: 0.85 };
 /** PBR props (crate, chest): darker, iron eased off (no env map). */
-const PBR_BG: PropLook = { tint: 0x83776b, metalness: 0.6 };
+const PBR_BG: PropLook = { tint: 0x8a7e72, metalness: 0.35 };
 
 const shelfTop = (i: number): number => SHELF.ys[i]! + 0.02;
 const shelfZ = BACK_WALL_Z + 0.13;

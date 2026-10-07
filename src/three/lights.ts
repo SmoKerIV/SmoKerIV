@@ -18,18 +18,18 @@ const MOON_NIGHT = new THREE.Color(0x4a6fa5);
 const MOON_DAY = new THREE.Color(0xffd9a3);
 const HEMI_SKY_NIGHT = new THREE.Color(0x1a1f2e);
 const HEMI_SKY_DAY = new THREE.Color(0x7c86a0);
-const HEMI_GROUND_NIGHT = new THREE.Color(0x2a1a10);
+const HEMI_GROUND_NIGHT = new THREE.Color(0x3c2516);
 const HEMI_GROUND_DAY = new THREE.Color(0x54402c);
 const MOON_INTENSITY_NIGHT = 0.4;
 const MOON_INTENSITY_DAY = 1.6;
-const HEMI_INTENSITY_NIGHT = 0.22;
+const HEMI_INTENSITY_NIGHT = 0.28;
 const HEMI_INTENSITY_DAY = 0.45;
 /** Candles and fire fall to this fraction in full daylight. */
 const FLAME_DAY_DIM = 0.6;
 
 const FIRE_BASE = 7.5;
 /** Hanging lantern: a small warm light that sways with the lantern. */
-const LANTERN_BASE = 2.2;
+const LANTERN_BASE = 4;
 const GUTTER_DURATION = 1.2;
 const FLARE_DURATION = 0.4;
 /** Candle light fade in/out on snuff/relight (seconds). */
@@ -84,7 +84,7 @@ export class Lights {
     this.fire.position.set(FIRE_POS.x, FIRE_POS.y + 0.3, FIRE_POS.z + 0.42);
     this.group.add(this.fire);
 
-    this.lantern = new THREE.PointLight(0xffa860, LANTERN_BASE, 4.5, 2);
+    this.lantern = new THREE.PointLight(0xffa860, LANTERN_BASE, 6, 2);
     this.group.add(this.lantern);
 
     // The one shadow caster: warm soft spot from above-left of the table.
