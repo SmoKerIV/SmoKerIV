@@ -312,9 +312,9 @@ function unfocus(): void {
 function enterInn(): void {
   if (appPhase.value !== "loading") return;
   track("enter_inn");
-  // Entering is automatic now (no button), so this is NOT a user gesture:
-  // the AudioContext is created suspended and resumes on the first real
-  // click/keypress (see the one-time listeners in onMounted).
+  // First visits arrive here from the "Enter the Inn" click (a real user
+  // gesture); returning visitors auto-enter, so the AudioContext may start
+  // suspended and resumes on the first click/keypress (see onMounted).
   audio.unlock();
   audio.setSfxOn(settings.sfxOn);
   audio.setMusicVolume(settings.musicVolume);
