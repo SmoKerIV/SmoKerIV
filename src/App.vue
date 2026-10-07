@@ -414,6 +414,9 @@ function unlockAudioOnGesture(): void {
 const TOUCH_HINT_KEY = "smokeriv-touch-hint-shown";
 function maybeShowTouchHint(): void {
   if (!isCoarseDevice.value) return;
+  // The curios are behind the flat tome (or absent on the flat page): the
+  // hint would float over the text it has nothing to do with.
+  if (useFallback || flatBookOpen.value) return;
   try {
     if (localStorage.getItem(TOUCH_HINT_KEY)) return;
     localStorage.setItem(TOUCH_HINT_KEY, "1");
@@ -858,7 +861,7 @@ import.meta.hot?.dispose(() => teardown());
 <template>
   <div class="relative h-full w-full overflow-hidden bg-night">
     <!-- No WebGL2 / ?flat=1 → plain parchment page -->
-    <FallbackView v-if="useFallback" v-model:section="bookSection" />
+    <FallbackView v-if="useFallback" v-model:section="bookSection" :cv-url="cvUrl" />
 
     <template v-else>
       <!-- first stop for keyboard users: straight to the tome -->
@@ -982,6 +985,7 @@ import.meta.hot?.dispose(() => teardown());
           </button>
           <FallbackView
             v-model:section="bookSection"
+            :cv-url="cvUrl"
             @scroll-direction="flatBackHidden = $event === 'down'"
           />
         </div>
