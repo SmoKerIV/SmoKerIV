@@ -40,9 +40,10 @@ const emit = defineEmits<{
     <!-- Icon buttons -->
     <div class="flex items-center gap-1.5">
       <button
+        type="button"
         class="hud-btn"
         :aria-label="musicOn ? 'Silence the bard' : 'Summon the bard'"
-        :title="musicOn ? 'Silence the bard' : 'Summon the bard'"
+        :data-tip="musicOn ? 'Silence the bard' : 'Summon the bard'"
         @click="emit('toggle-music')"
       >
         <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -54,9 +55,10 @@ const emit = defineEmits<{
       </button>
 
       <button
+        type="button"
         class="hud-btn coarse-only"
         aria-label="Open the wizard's prepared spells"
-        title="Prepared Spells"
+        data-tip="Prepared Spells"
         @click="emit('open-console')"
       >
         <!-- sparkling wand -->
@@ -68,9 +70,10 @@ const emit = defineEmits<{
       </button>
 
       <button
+        type="button"
         class="hud-btn"
         aria-label="Open the Innkeeper's Ledger (settings)"
-        title="The Innkeeper's Ledger"
+        data-tip="The Innkeeper's Ledger"
         @click="emit('open-settings')"
       >
         <!-- compass rose -->
@@ -86,8 +89,8 @@ const emit = defineEmits<{
         class="hud-btn"
         :href="cvUrl"
         download
-        aria-label="Take the Adventurer's Contract (CV)"
-        title="The Adventurer's Contract (CV)"
+        aria-label="Download the Adventurer's Contract (CV)"
+        data-tip="The Adventurer's Contract (CV)"
         @click="track('cv_download')"
       >
         <!-- scroll with download arrow -->
@@ -102,8 +105,8 @@ const emit = defineEmits<{
         :href="contact.github.url"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="GitHub — SmoKerIV"
-        title="GitHub"
+        aria-label="GitHub profile, SmoKerIV (opens in a new tab)"
+        data-tip="GitHub"
       >
         <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true">
           <path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.93.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.7 0 0 .84-.28 2.75 1.05a9.4 9.4 0 0 1 2.5-.34c.85 0 1.7.12 2.5.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.4.2 2.44.1 2.7.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.59.69.49A10.25 10.25 0 0 0 22 12.25C22 6.58 17.52 2 12 2z" />
@@ -115,21 +118,74 @@ const emit = defineEmits<{
 
 <style scoped>
 .hud-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.4rem;
-  height: 2.4rem;
+  /* 40px: the floor for a dense desktop control (44px on touch, below). */
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 9999px;
-  color: rgba(232, 220, 192, 0.6);
-  background: rgba(13, 10, 8, 0.45);
-  border: 1px solid rgba(176, 141, 60, 0.25);
+  color: rgba(232, 220, 192, 0.7);
+  background: rgba(13, 10, 8, 0.5);
+  border: 1px solid rgba(176, 141, 60, 0.3);
   backdrop-filter: blur(3px);
-  transition: color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    scale 0.15s ease;
 }
 .hud-btn:hover {
   color: var(--arcane);
-  border-color: rgba(71, 189, 173, 0.5);
+  border-color: rgba(71, 189, 173, 0.55);
+  background: rgba(13, 10, 8, 0.7);
+}
+.hud-btn:active {
+  scale: 0.96;
+}
+.hud-btn:focus-visible {
+  outline: 2px solid var(--arcane);
+  outline-offset: 3px;
+  border-radius: 9999px;
+  color: var(--arcane);
+}
+
+/* Tooltip: a small night-toned label above the button, anchored to the
+   button's right edge so the rightmost one never leaves the screen.
+   Only for hover and keyboard focus (touch has no hover). */
+.hud-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.5rem);
+  padding: 0.3rem 0.6rem;
+  font-family: "Cinzel", serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: var(--parchment);
+  background: rgba(13, 10, 8, 0.92);
+  border: 1px solid rgba(176, 141, 60, 0.35);
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(3px);
+  transition:
+    opacity 0.15s ease-out,
+    transform 0.15s ease-out;
+}
+@media (hover: hover) {
+  .hud-btn:hover::after {
+    opacity: 1;
+    transform: none;
+    transition-delay: 0.35s;
+  }
+}
+.hud-btn:focus-visible::after {
+  opacity: 1;
+  transform: none;
 }
 
 /* Fingers need ≥44px targets. */
@@ -137,6 +193,9 @@ const emit = defineEmits<{
   .hud-btn {
     width: 2.75rem;
     height: 2.75rem;
+  }
+  .hud-btn::after {
+    display: none;
   }
 }
 
