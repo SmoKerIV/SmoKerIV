@@ -7,6 +7,7 @@
  * focus anchor, contact shadow and dice colliders don't move.
  */
 import * as THREE from "three";
+import { mergeGeometries, toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   cachedMaps,
   fieldToTexture,
@@ -219,40 +220,63 @@ export function tooledCoverMaps(): LeatherMaps {
   });
 }
 
-/** Gilded page edges: stacked leaf lines, worn gold. u along the edge, v up. */
-export function giltEdgeMaps(): PbrMaps {
-  return cachedMaps("book:gilt", () => {
+/**
+ * Page edges (head, tail, fore-edge): a dense stack of aged cream leaves
+ * with faint gilt rubbed into them. Lines run along u; v climbs the stack
+ * (v = 0 on the back board, 1 under the front board).
+ */
+export function pageEdgeMaps(): PbrMaps {
+  return cachedMaps("book:pageEdge", () => {
     const W = 512;
-    const H = 128;
+    const H = 512;
     const rand = mulberry32(7301);
-    const wear = noiseField(W, H, 7302, 6, 2, 4);
-    const lines = new Float32Array(H);
-    for (let y = 0; y < H; y++) lines[y] = 0.7 + rand() * 0.3;
+    const stain = noiseField(W, H, 7302, 5, 3, 4);
+    const fibre = noiseField(W, H, 7303, 64, 2, 2);
+    // ~170 leaves over the stack: each leaf a lighter body and a thin,
+    // slightly darker seam, with per-leaf tone jitter.
+    const leaf = new Float32Array(H);
+    const seam = new Float32Array(H);
+    let y = 0;
+    while (y < H) {
+      const thick = 2 + Math.floor(rand() * 2.2);
+      const tone = 0.9 + rand() * 0.1;
+      for (let k = 0; k < thick && y < H; k++, y++) {
+        leaf[y] = tone;
+        seam[y] = k === thick - 1 ? 1 : 0;
+      }
+    }
     const [canvas, ctx] = makeCanvas(W, H);
     const img = ctx.createImageData(W, H);
     const h = new Float32Array(W * H);
     const rough = new Float32Array(W * H);
-    for (let y = 0; y < H; y++) {
-      // Thin dark gaps between leaves every couple of texels
-      const gap = y % 2 === 0 ? 0.55 : 1;
+    for (let yy = 0; yy < H; yy++) {
+      // Darker, more foxed toward the boards (top and bottom of the stack)
+      const edge = Math.min(yy, H - 1 - yy) / H;
+      const foxEdge = 1 - THREE.MathUtils.smoothstep(edge, 0, 0.12);
       for (let x = 0; x < W; x++) {
-        const i = y * W + x;
-        const wv = wear[i]!;
-        const worn = Math.max(0, wv - 0.62) * 2.5; // gold rubbed off → paper
-        const gold = 1 - Math.min(1, worn);
-        const l = lines[y]! * gap;
-        img.data[i * 4] = (210 * gold + 222 * (1 - gold)) * l;
-        img.data[i * 4 + 1] = (162 * gold + 206 * (1 - gold)) * l;
-        img.data[i * 4 + 2] = (78 * gold + 168 * (1 - gold)) * l;
+        const i = yy * W + x;
+        const st = stain[i]!;
+        const fx = Math.max(0, st - 0.55) * 1.6 + foxEdge * 0.25;
+        const l = leaf[yy]! * (1 - seam[yy]! * 0.16) * (0.97 + fibre[i]! * 0.06);
+        // Faint gilt: warm gold where the stain field is low
+        const gilt = Math.max(0, 0.5 - st) * 0.5;
+        const r = (226 * (1 - gilt) + 214 * gilt) * l * (1 - fx * 0.22);
+        const g = (210 * (1 - gilt) + 170 * gilt) * l * (1 - fx * 0.3);
+        const b = (172 * (1 - gilt) + 92 * gilt) * l * (1 - fx * 0.42);
+        img.data[i * 4] = r;
+        img.data[i * 4 + 1] = g;
+        img.data[i * 4 + 2] = b;
         img.data[i * 4 + 3] = 255;
-        h[i] = gap * 0.6 + wv * 0.2;
-        rough[i] = 0.32 + (1 - gold) * 0.55 + (1 - gap) * 0.2;
+        h[i] = -seam[yy]! * 0.6 + leaf[yy]! * 0.2;
+        rough[i] = 0.62 - gilt * 0.5 + seam[yy]! * 0.15;
       }
     }
     ctx.putImageData(img, 0, 0);
+    const map = toTexture(canvas);
+    map.anisotropy = 8;
     return {
-      map: toTexture(canvas),
-      normalMap: heightToNormalMap(h, W, H, 1.5),
+      map,
+      normalMap: heightToNormalMap(h, W, H, 0.8),
       roughnessMap: fieldToTexture(rough, W, H),
     };
   });
@@ -269,13 +293,15 @@ export function agedBrassMaps(): PbrMaps {
     const h = new Float32Array(S * S);
     const rough = new Float32Array(S * S);
     for (let i = 0; i < S * S; i++) {
-      const tarnish = Math.max(0, n[i]! - 0.55) * 2;
-      img.data[i * 4] = 200 - tarnish * 90;
-      img.data[i * 4 + 1] = 160 - tarnish * 75;
-      img.data[i * 4 + 2] = 86 - tarnish * 40;
+      // Warm, slightly orange brass (a yellow-green albedo turns teal-green
+      // under the arcane light) with soft darker tarnish in the noise lows.
+      const tarnish = Math.max(0, n[i]! - 0.5) * 1.4;
+      img.data[i * 4] = 186 - tarnish * 70;
+      img.data[i * 4 + 1] = 132 - tarnish * 56;
+      img.data[i * 4 + 2] = 62 - tarnish * 26;
       img.data[i * 4 + 3] = 255;
-      h[i] = dents[i]! * 0.5;
-      rough[i] = 0.32 + tarnish * 0.4;
+      h[i] = dents[i]! * 0.3;
+      rough[i] = 0.42 + tarnish * 0.3;
     }
     ctx.putImageData(img, 0, 0);
     return {
@@ -290,7 +316,7 @@ export function agedBrassMaps(): PbrMaps {
 export function spellbookMaps(): void {
   plainLeatherMaps();
   tooledCoverMaps();
-  giltEdgeMaps();
+  pageEdgeMaps();
   agedBrassMaps();
 }
 
@@ -327,14 +353,15 @@ export function tooledLeather(): THREE.MeshStandardMaterial {
   });
 }
 
-export function giltEdge(): THREE.MeshStandardMaterial {
-  const m = giltEdgeMaps();
+/** Page edges: mostly paper, a touch of metal for the rubbed-in gilt. */
+export function pageEdge(): THREE.MeshStandardMaterial {
+  const m = pageEdgeMaps();
   return new THREE.MeshStandardMaterial({
     map: m.map,
     normalMap: m.normalMap,
     roughnessMap: m.roughnessMap,
     roughness: 1,
-    metalness: 0.55,
+    metalness: 0.12,
   });
 }
 
@@ -344,8 +371,11 @@ export function agedBrass(): THREE.MeshStandardMaterial {
     map: m.map,
     normalMap: m.normalMap,
     roughnessMap: m.roughnessMap,
+    // No env map in the scene: a near-pure metal only mirrors the lights,
+    // and the teal arcane light over the book tinted it green. Half metal
+    // keeps a warm diffuse body under the candles plus a soft sheen.
     roughness: 1,
-    metalness: 0.8,
+    metalness: 0.5,
   });
 }
 
@@ -426,34 +456,79 @@ export function slabGeometry(
 }
 
 /**
- * Brass corner guard: a flat plate whose inner edge is a concave arc, legs
- * along +X and +Z from the corner (rotate about Y to fit other corners).
- * Sits on y = 0, ~1.6 mm thick.
+ * Brass corner guard bent from ~1 mm sheet around a board corner: a top
+ * plate with a concave inner edge, a band down the board's two edges (and
+ * around its rounded corner) and a narrower lip folded under the board.
+ * Local frame: corner at the origin, board inside +X/+Z, board faces at
+ * y = 0 and y = boardT (rotate about Y to fit other corners).
  */
-export function cornerGuardGeometry(leg: number): THREE.BufferGeometry {
-  const shape = new THREE.Shape();
-  shape.moveTo(0, 0);
-  shape.lineTo(leg, 0);
-  shape.lineTo(leg, leg * 0.18);
-  shape.quadraticCurveTo(leg * 0.3, leg * 0.3, leg * 0.18, leg);
-  shape.lineTo(0, leg);
-  shape.closePath();
-  const depth = 0.0008;
-  const bevel = 0.0004;
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth,
-    bevelEnabled: true,
-    bevelThickness: bevel,
-    bevelSize: bevel,
-    bevelSegments: 1,
-    curveSegments: 5,
-  });
-  geo.rotateX(Math.PI / 2); // shape y → +z, extrusion → −y
-  geo.translate(0, depth + bevel, 0);
-  // Planar UVs for the brass noise
+export function cornerGuardGeometry(leg: number, boardT: number): THREE.BufferGeometry {
+  const R = 0.0082; // the slab's rounded corner (radius + bevel)
+  const e = 0.001; // sheet thickness
+  const plate = (L: number): THREE.Shape => {
+    const shape = new THREE.Shape();
+    shape.moveTo(R, 0);
+    shape.lineTo(L, 0);
+    shape.lineTo(L, L * 0.18);
+    shape.quadraticCurveTo(L * 0.3, L * 0.3, L * 0.18, L);
+    shape.lineTo(0, L);
+    shape.lineTo(0, R);
+    shape.absarc(R, R, R, Math.PI, Math.PI * 1.5, false);
+    return shape;
+  };
+  const band = new THREE.Shape();
+  band.moveTo(leg, -e);
+  band.lineTo(R, -e);
+  band.absarc(R, R, R + e, Math.PI * 1.5, Math.PI, true);
+  band.lineTo(-e, leg);
+  band.lineTo(0, leg);
+  band.lineTo(0, R);
+  band.absarc(R, R, R, Math.PI, Math.PI * 1.5, false);
+  band.lineTo(leg, 0);
+  band.closePath();
+
+  const extrude = (shape: THREE.Shape, depth: number, top: number): THREE.BufferGeometry => {
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth,
+      bevelEnabled: false,
+      curveSegments: 6,
+    });
+    geo.rotateX(Math.PI / 2); // shape y → +z, extrusion → −y
+    geo.translate(0, top, 0);
+    return geo;
+  };
+  const parts = [
+    extrude(plate(leg), e, boardT + e), // top plate
+    extrude(band, boardT + 2 * e, boardT + e), // edge band
+    extrude(plate(leg * 0.42), e, 0), // lip under the board
+  ];
+  const geo = mergeGeometries(parts)!;
+  for (const part of parts) part.dispose();
+  geo.clearGroups();
+  return brassUVs(geo);
+}
+
+/**
+ * Box-projected UVs (by face normal, 10 per metre) so the brass noise keeps
+ * the same scale on every face of a small part instead of stretching into
+ * streaks. Returns the same geometry.
+ */
+export function brassUVs(geo: THREE.BufferGeometry): THREE.BufferGeometry {
   const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  const nor = geo.getAttribute("normal") as THREE.BufferAttribute;
   const uv = geo.getAttribute("uv") as THREE.BufferAttribute;
-  for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) * 8, pos.getZ(i) * 8);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const ax = Math.abs(nor.getX(i));
+    const ay = Math.abs(nor.getY(i));
+    const az = Math.abs(nor.getZ(i));
+    if (ay >= ax && ay >= az) uv.setXY(i, x * 10, z * 10);
+    else if (ax >= az) uv.setXY(i, z * 10, y * 10);
+    else uv.setXY(i, x * 10, y * 10);
+  }
+  uv.needsUpdate = true;
   return geo;
 }
 
@@ -466,27 +541,63 @@ export function cornerRotation(ix: 1 | -1, iz: 1 | -1): number {
 }
 
 /**
- * Raised spine band: a rounded cord following the spine's half-ellipse
- * (semi-axes a in X, b in Y, centred at (cx, cy)) on the −X side, at z.
+ * Raised cord on the spine's outer surface: a tube of elliptical section
+ * (radial x across semi-axes) whose centre runs `lift` outside the spine
+ * ellipse (semi-axes a in X, b in Y, centred at (cx, cy)) at z, for the
+ * ellipse angle t in [tFrom, tTo] (x = cx + a cos t, y = cy + b sin t).
+ * The section shrinks to nothing over `taper` radians at both ends, so
+ * the cord rises out of the leather instead of ending in a cut.
  */
-export function spineBandGeometry(
+export function spineCordGeometry(
   cx: number,
   cy: number,
   a: number,
   b: number,
   z: number,
-  tube: number,
   tFrom: number,
   tTo: number,
+  radial: number,
+  across: number,
+  lift = 0,
+  taper = 0.22,
 ): THREE.BufferGeometry {
-  const pts: THREE.Vector3[] = [];
-  const N = 16;
-  for (let i = 0; i <= N; i++) {
-    const t = tFrom + ((tTo - tFrom) * i) / N;
-    pts.push(new THREE.Vector3(cx - a * Math.cos(t), cy + b * Math.sin(t), z));
+  const NT = 48;
+  const NS = 12;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let i = 0; i <= NT; i++) {
+    const t = tFrom + ((tTo - tFrom) * i) / NT;
+    const px = cx + a * Math.cos(t);
+    const py = cy + b * Math.sin(t);
+    let nx = Math.cos(t) / a;
+    let ny = Math.sin(t) / b;
+    const nl = Math.hypot(nx, ny);
+    nx /= nl;
+    ny /= nl;
+    const edge = Math.min(t - tFrom, tTo - t) / taper;
+    const f = edge >= 1 ? 1 : Math.sin(Math.max(0, edge) * Math.PI * 0.5);
+    for (let j = 0; j <= NS; j++) {
+      // Seam on the buried inner side (phi = pi).
+      const phi = Math.PI + (2 * Math.PI * j) / NS;
+      const r = lift + radial * f * Math.cos(phi);
+      positions.push(px + nx * r, py + ny * r, z + across * f * Math.sin(phi));
+      uvs.push(t * 0.06, j / NS);
+    }
   }
-  const curve = new THREE.CatmullRomCurve3(pts);
-  return new THREE.TubeGeometry(curve, 20, tube, 6, false);
+  for (let i = 0; i < NT; i++) {
+    for (let j = 0; j < NS; j++) {
+      const p = i * (NS + 1) + j;
+      const q = p + NS + 1;
+      indices.push(p, q, p + 1, p + 1, q, q + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
 }
 
 /**
@@ -513,43 +624,165 @@ export function pageBlockGeometry(w: number, h: number, d: number): THREE.Buffer
   return geo;
 }
 
+/** Point on an ellipse at angle t (x = cx + a cos t, y = cy + b sin t). */
+function ellipsePoint(cx: number, cy: number, a: number, b: number, t: number): THREE.Vector2 {
+  return new THREE.Vector2(cx + a * Math.cos(t), cy + b * Math.sin(t));
+}
+
 /**
- * Spine leather: an elliptical shell (semi-axes a in X, b in Y, centred at
- * (cx, cy)) along Z, covering the top half (the ridge over the boards) and
- * the outer-lower quarter down to the table.
+ * Spine leather as a solid wall `wall` thick: the outer elliptical face
+ * (semi-axes a in X, b in Y, centred at (cx, cy)) runs from angle tFrom
+ * (inside the book, under the front board) over the ridge and down the
+ * outside to the table; the wall closes at both ends with slightly rounded
+ * edges. Spans z ±length/2. UVs: u around the spine, v along it (end
+ * faces planar), at one leather tile per 0.5 m.
  */
-export function spineWrapGeometry(
+export function spineShellGeometry(
   cx: number,
   cy: number,
   a: number,
   b: number,
+  wall: number,
   length: number,
+  tFrom: number,
+  tTo = Math.PI + Math.asin(Math.min(1, cy / b)), // default: outer meets y = 0
 ): THREE.BufferGeometry {
-  // Angle t: x = cx + a cos t, y = cy + b sin t; 0 → inner top, π → outer.
-  const t0 = 0;
-  const t1 = Math.PI * 1.5;
-  const N = 30;
-  const positions: number[] = [];
-  const uvs: number[] = [];
-  const indices: number[] = [];
-  for (let i = 0; i <= N; i++) {
-    const t = t0 + ((t1 - t0) * i) / N;
-    const x = cx + a * Math.cos(t);
-    const y = Math.max(0, cy + b * Math.sin(t));
-    for (const [k, z] of [-length / 2, length / 2].entries()) {
-      positions.push(x, y, z);
-      uvs.push(i / N, k);
+  const N = 64;
+  const tEnd = tTo;
+  const shape = new THREE.Shape();
+  const p0 = ellipsePoint(cx, cy, a, b, tFrom);
+  shape.moveTo(p0.x, p0.y);
+  for (let i = 1; i <= N; i++) {
+    const p = ellipsePoint(cx, cy, a, b, tFrom + ((tEnd - tFrom) * i) / N);
+    shape.lineTo(p.x, Math.max(0, p.y));
+  }
+  const ia = a - wall;
+  const ib = b - wall;
+  const tInEnd = Math.min(Math.PI * 1.5, tEnd);
+  for (let i = N; i >= 0; i--) {
+    const p = ellipsePoint(cx, cy, ia, ib, tFrom + ((tInEnd - tFrom) * i) / N);
+    shape.lineTo(p.x, p.y);
+  }
+  shape.closePath();
+  const bevel = 0.0007;
+  const extruded = new THREE.ExtrudeGeometry(shape, {
+    depth: length - 2 * bevel,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelOffset: -bevel, // keep the outline's extents
+    bevelSegments: 2,
+    curveSegments: 4,
+  });
+  extruded.translate(0, 0, -length / 2 + bevel);
+  const geo = toCreasedNormals(extruded, Math.PI / 5);
+  extruded.dispose();
+  geo.clearGroups();
+  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  const nor = geo.getAttribute("normal") as THREE.BufferAttribute;
+  const uv = geo.getAttribute("uv") as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    if (Math.abs(nor.getZ(i)) > 0.6) {
+      uv.setXY(i, x * 2, y * 2);
+    } else {
+      let t = Math.atan2((y - cy) / b, (x - cx) / a);
+      if (t < tFrom - 0.3) t += Math.PI * 2;
+      uv.setXY(i, t * 0.035 * 2, z * 2);
     }
   }
-  for (let i = 0; i < N; i++) {
-    const p = i * 2;
-    // Outward normals: t increases counter-clockwise seen from +Z.
-    indices.push(p, p + 2, p + 1, p + 1, p + 2, p + 3);
+  return geo;
+}
+
+/**
+ * Solid filler under the spine wall seen from the head/tail: the region
+ * between the inner spine ellipse (semi-axes a, b) and the vertical line
+ * x = xIn, for yLo <= y <= yHi, extruded over z ±zHalf. Used for the
+ * rounded back of the text block (paper) and the joint behind it.
+ * UVs on the end faces: u along X over `uSpan`, v = (y - vFrom) / vSpan.
+ */
+export function spineFillGeometry(
+  cx: number,
+  cy: number,
+  a: number,
+  b: number,
+  xIn: number,
+  yLo: number,
+  yHi: number,
+  zHalf: number,
+  vFrom: number,
+  vSpan: number,
+  uSpan = 0.5,
+): THREE.BufferGeometry {
+  const N = 32;
+  const tAt = (y: number): number =>
+    Math.PI - Math.asin(THREE.MathUtils.clamp((y - cy) / b, -1, 1));
+  const t0 = tAt(yHi);
+  const t1 = tAt(yLo);
+  const shape = new THREE.Shape();
+  for (let i = 0; i <= N; i++) {
+    const p = ellipsePoint(cx, cy, a, b, t0 + ((t1 - t0) * i) / N);
+    if (i === 0) shape.moveTo(p.x, p.y);
+    else shape.lineTo(p.x, p.y);
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
+  shape.lineTo(xIn, yLo);
+  shape.lineTo(xIn, yHi);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: zHalf * 2,
+    bevelEnabled: false,
+    curveSegments: 4,
+  });
+  geo.translate(0, 0, -zHalf);
+  geo.clearGroups();
+  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  const uv = geo.getAttribute("uv") as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    uv.setXY(i, (pos.getX(i) + pos.getZ(i)) / uSpan, (pos.getY(i) - vFrom) / vSpan);
+  }
+  return geo;
+}
+
+/**
+ * U-shaped top course of the page block (open on the spine side, -X):
+ * outer edge at x in [xS, xF], z ±zO; the pocket inside it (x < xP,
+ * |z| < zP) holds the loose pages. Occupies y in [0, h] so it can be
+ * squashed toward its base. Groups: 0 = top/bottom, 1 = walls. Wall UVs:
+ * v runs vFrom..1 bottom to top (continuing the page block's edge map).
+ */
+export function pageRimGeometry(
+  xS: number,
+  xF: number,
+  xP: number,
+  zO: number,
+  zP: number,
+  h: number,
+  vFrom: number,
+): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  // Shape y becomes −z after rotateX(−π/2); the outline is symmetric.
+  shape.moveTo(xS, -zO);
+  shape.lineTo(xF, -zO);
+  shape.lineTo(xF, zO);
+  shape.lineTo(xS, zO);
+  shape.lineTo(xS, zP);
+  shape.lineTo(xP, zP);
+  shape.lineTo(xP, -zP);
+  shape.lineTo(xS, -zP);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+  geo.rotateX(-Math.PI / 2); // extrusion → +y
+  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  const nor = geo.getAttribute("normal") as THREE.BufferAttribute;
+  const uv = geo.getAttribute("uv") as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    if (Math.abs(nor.getY(i)) > 0.5) uv.setXY(i, x * 2, z * 2);
+    else uv.setXY(i, (x + xS) / (xF - xS) + z * 2, vFrom + (y / h) * (1 - vFrom));
+  }
   return geo;
 }

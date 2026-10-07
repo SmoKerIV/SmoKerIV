@@ -13,14 +13,17 @@ import { pageBlockMaterial, parchmentMaterial } from "./materials";
 import { makeRuneCircleTexture } from "./textures";
 import {
   agedBrass,
+  brassUVs,
   cornerGuardGeometry,
   cornerRotation,
-  giltEdge,
   pageBlockGeometry,
+  pageEdge,
+  pageRimGeometry,
   plainLeather,
   slabGeometry,
-  spineBandGeometry,
-  spineWrapGeometry,
+  spineCordGeometry,
+  spineFillGeometry,
+  spineShellGeometry,
   tooledLeather,
 } from "./spellbookLook";
 
@@ -78,28 +81,69 @@ export function buildSpellbook(): THREE.Group {
   backCover.receiveShadow = true;
   group.add(backCover);
 
-  // --- Page block (cream, inset, flush to the spine) -----------------------
+  // --- Page block: fills the boards' inner height ---------------------------
+  // Real books: the boards overhang the text block by a small "square"
+  // (~3-4 mm here) and the leaves fill the space between them. The block's
+  // top face stays at y = 0.066 under the loose pages; a U-shaped top
+  // course (open at the spine) carries the head, tail and fore-edge on up
+  // to just under the front board and squashes flat as the cover opens,
+  // so nothing rises around the reading spread.
   const blockH = 0.054;
-  // Gilded edges on the fore-edge, head and tail; concave fore-edge.
-  const gilt = giltEdge();
-  const pageBlock = new THREE.Mesh(pageBlockGeometry(0.46, blockH, 0.33), [
-    gilt,
-    pageBlockMaterial(),
-    pageBlockMaterial(),
-    pageBlockMaterial(),
-    gilt,
-    gilt,
-  ]);
-  pageBlock.position.set(SPINE_X + 0.01 + 0.23, 0.012 + blockH / 2, 0);
+  const BLOCK_Y0 = 0.012;
+  const BLOCK_TOP = BLOCK_Y0 + blockH; // 0.066, under the loose pages
+  const STACK_TOP = 0.0715; // front board underside is 0.073
+  const STACK_H = STACK_TOP - BLOCK_Y0;
+  const BLOCK_X0 = SPINE_X + 0.01; // −0.24, against the spine
+  const BLOCK_X1 = W / 2 - 0.0045; // fore-edge square 4.5 mm (clasp clearance)
+  const BLOCK_Z = D / 2 - 0.003; // head/tail square 3 mm
+  const edge = pageEdge();
+  const pageSide = pageBlockMaterial();
+  const blockGeo = pageBlockGeometry(BLOCK_X1 - BLOCK_X0, blockH, BLOCK_Z * 2);
+  {
+    // Edge-map v measured over the whole stack so the leaves continue
+    // into the top course at the same spacing.
+    const pos = blockGeo.getAttribute("position") as THREE.BufferAttribute;
+    const nor = blockGeo.getAttribute("normal") as THREE.BufferAttribute;
+    const uv = blockGeo.getAttribute("uv") as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      if (Math.abs(nor.getY(i)) > 0.5) continue;
+      uv.setY(i, (pos.getY(i) + blockH / 2) / STACK_H);
+    }
+  }
+  // Groups follow BoxGeometry: +x, −x, +y, −y, +z, −z
+  const pageBlock = new THREE.Mesh(blockGeo, [edge, pageSide, pageSide, pageSide, edge, edge]);
+  pageBlock.position.set((BLOCK_X0 + BLOCK_X1) / 2, BLOCK_Y0 + blockH / 2, 0);
   pageBlock.castShadow = true;
+  pageBlock.receiveShadow = true;
   group.add(pageBlock);
+
+  const RIM_H = STACK_TOP - BLOCK_TOP;
+  const pageRim = new THREE.Mesh(
+    pageRimGeometry(
+      BLOCK_X0,
+      BLOCK_X1,
+      SPINE_INNER_X + PAGE_W + 0.0015, // clear of the right reading page
+      BLOCK_Z,
+      PAGE_D / 2 + 0.0015,
+      RIM_H,
+      blockH / STACK_H,
+    ),
+    [pageSide, edge],
+  );
+  pageRim.position.set(0, BLOCK_TOP, 0);
+  pageRim.castShadow = true;
+  pageRim.receiveShadow = true;
+  group.add(pageRim);
+
+  // Old block centre: the parchment top keeps its exact place and size.
+  const BLOCK_TOP_X = SPINE_X + 0.01 + 0.23;
 
   // Written parchment on top of the page block (visible when open)
   const blockTop = new THREE.Mesh(
     new THREE.PlaneGeometry(0.455, 0.325).rotateX(-Math.PI / 2),
     parchmentMaterial(true),
   );
-  blockTop.position.set(pageBlock.position.x, 0.012 + blockH + 0.0004, 0);
+  blockTop.position.set(BLOCK_TOP_X, 0.012 + blockH + 0.0004, 0);
   group.add(blockTop);
 
   // --- Loose flip pages, pivoted at the spine line --------------------------
@@ -140,32 +184,19 @@ export function buildSpellbook(): THREE.Group {
   frontCover.add(innerFace);
 
   // Tooled border + embossed sigil ring live in the cover's maps. Brass
-  // corner guards on the cover top, with lips over the edges at the fore
-  // corners (kept inside the original footprint).
-  const guardGeo = cornerGuardGeometry(0.046);
-  // Lips straddle the cover's side faces and stand only 0.2 mm proud, so
-  // the book's bounding box (focus anchor, contact shadow) doesn't grow.
-  const LIP = 0.0006;
-  const PROUD = 0.0002;
-  for (const [x, z, ix, iz] of [
-    [0.0015, -(D / 2 - 0.0005), 1, 1],
-    [0.0015, D / 2 - 0.0005, 1, -1],
-    [W - 0.0005, -(D / 2 - 0.0005), -1, 1],
-    [W - 0.0005, D / 2 - 0.0005, -1, -1],
-  ] as Array<[number, number, 1 | -1, 1 | -1]>) {
+  // corner guards bent around the two fore corners of the front board
+  // (top plate, edge band, lip under the board; 1 mm sheet).
+  const COVER_T = 0.013;
+  const guardGeo = cornerGuardGeometry(0.046, COVER_T);
+  for (const [z, iz] of [
+    [-D / 2, 1],
+    [D / 2, -1],
+  ] as Array<[number, 1 | -1]>) {
     const guard = new THREE.Mesh(guardGeo, brass);
-    guard.position.set(x, 0.013, z);
-    guard.rotation.y = cornerRotation(ix, iz);
+    guard.position.set(W, 0, z);
+    guard.rotation.y = cornerRotation(-1, iz);
+    guard.castShadow = true;
     frontCover.add(guard);
-    // Edge lips: down the cover's side faces at the corner
-    const zLip = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.0136, LIP), brass);
-    zLip.position.set(x + ix * 0.023, 0.0068, -iz * (D / 2 + PROUD - LIP / 2));
-    frontCover.add(zLip);
-    if (ix === -1) {
-      const xLip = new THREE.Mesh(new THREE.BoxGeometry(LIP, 0.0136, 0.046), brass);
-      xLip.position.set(W + PROUD - LIP / 2, 0.0068, z + iz * 0.023);
-      frontCover.add(xLip);
-    }
   }
 
   // Emissive arcane rune in the cover center (teal, low intensity)
@@ -186,11 +217,14 @@ export function buildSpellbook(): THREE.Group {
 
   // Metal clasp wrapping the fore edge (attached to the front cover);
   // same boxes as before, now beveled, with rivets and a catch knob.
-  const claspPlate = new THREE.Mesh(slabGeometry(0.055, 0.005, 0.06, 0.008, 0.0012), brass);
+  const claspPlate = new THREE.Mesh(
+    brassUVs(slabGeometry(0.055, 0.005, 0.06, 0.008, 0.0012)),
+    brass,
+  );
   claspPlate.position.set(W - 0.03, 0.014, 0);
   frontCover.add(claspPlate);
   const claspStrap = new THREE.Mesh(
-    slabGeometry(0.014, 0.072, 0.06, 0.004, 0.0015),
+    brassUVs(slabGeometry(0.014, 0.072, 0.06, 0.004, 0.0015)),
     brass,
   );
   claspStrap.position.set(W + 0.004, -0.026, 0);
@@ -232,37 +266,101 @@ export function buildSpellbook(): THREE.Group {
     group.add(page);
   }
 
-  // --- Spine wrap: rounded leather along -X ----------------------------------
-  // The old half-cylinder hump on top (same extents, also the open book's
-  // gutter ridge) now continues down the outside to the table, so the
-  // spine reads as one wrapped piece. Head/tail caps reach z ±0.183 and
-  // x −0.277 like the old band boxes did.
+  // --- Spine: rounded leather along -X --------------------------------------
+  // A solid leather wall (same outer curve as before, so the open book's
+  // gutter ridge is unchanged) from under the front board, over the ridge
+  // and down the outside to the table. Behind it at the head and tail: the
+  // rounded back of the text block (paper) and the joints (leather), so the
+  // ends read solid instead of a hollow sheet.
   const spineLeather = plainLeather(2);
   const SPINE_CX = SPINE_X + 0.002;
   const SPINE_CY = 0.044;
+  const SPINE_A = 0.0248;
+  const SPINE_B = 0.045;
+  const SPINE_WALL = 0.0028;
+  // Where the wall dives under the front board (t < 1.25) it would stand
+  // proud of the text block's head/tail, so that inner stretch (only seen
+  // as the open book's gutter ridge) stops flush with the block instead.
+  const SPINE_SPLIT = 1.25;
   const spine = new THREE.Mesh(
-    spineWrapGeometry(SPINE_CX, SPINE_CY, 0.0248, 0.045, D + 0.004),
+    spineShellGeometry(SPINE_CX, SPINE_CY, SPINE_A, SPINE_B, SPINE_WALL, D + 0.004, SPINE_SPLIT),
     spineLeather,
   );
-  spine.castShadow = true;
-  group.add(spine);
-  // Head and tail caps (rolled leather over the headbands)
+  const spineInner = new THREE.Mesh(
+    spineShellGeometry(
+      SPINE_CX, SPINE_CY, SPINE_A, SPINE_B, SPINE_WALL, (D / 2 - 0.0035) * 2, 0.45,
+      SPINE_SPLIT + 0.05,
+    ),
+    spineLeather,
+  );
+  for (const piece of [spine, spineInner]) {
+    piece.castShadow = true;
+    piece.receiveShadow = true;
+    group.add(piece);
+  }
+  const innerA = SPINE_A - SPINE_WALL + 0.0004;
+  const innerB = SPINE_B - SPINE_WALL + 0.0004;
+  const spineBack = new THREE.Mesh(
+    spineFillGeometry(
+      SPINE_CX, SPINE_CY, innerA, innerB,
+      BLOCK_X0 - 0.0002, BLOCK_Y0, STACK_TOP, BLOCK_Z,
+      BLOCK_Y0, STACK_H, BLOCK_X1 - BLOCK_X0,
+    ),
+    edge,
+  );
+  group.add(spineBack);
+  const joint = new THREE.Mesh(
+    spineFillGeometry(
+      SPINE_CX, SPINE_CY, innerA, innerB,
+      BLOCK_X0 - 0.0002, SPINE_CY - innerB + 0.0004, SPINE_CY + innerB - 0.0004,
+      D / 2 - 0.005, 0, 0.5,
+    ),
+    leather,
+  );
+  group.add(joint);
+
+  // Head and tail caps: leather rolled over the headbands, just past the
+  // spine's ends. They set the closed book's outer extents (x −0.277,
+  // z ±0.183) exactly as before.
   for (const z of [-(0.183 - 0.0025), 0.183 - 0.0025]) {
     const cap = new THREE.Mesh(
-      spineBandGeometry(SPINE_CX, SPINE_CY, 0.0265, 0.0455, z, 0.0025, -1.12, 1.5),
+      spineCordGeometry(
+        SPINE_CX, SPINE_CY, SPINE_A, SPINE_B, z,
+        1.72, 4.32, 0.0034, 0.0025, 0.0008, 0.3,
+      ),
       spineLeather,
     );
+    cap.castShadow = true;
     group.add(cap);
   }
-  // Raised bands across the spine's back (cords under the leather)
+  // Raised bands: shallow cords on the spine's back between the two
+  // boards' joints, ~2.5 mm proud, half sunk into the leather wall.
   for (const z of [-0.128, -0.045, 0.045, 0.128]) {
     const band = new THREE.Mesh(
-      spineBandGeometry(SPINE_CX, SPINE_CY, 0.0252, 0.0452, z, 0.0028, -1.15, 1.35),
+      spineCordGeometry(
+        SPINE_CX, SPINE_CY, SPINE_A, SPINE_B, z,
+        1.85, 4.2, 0.0025, 0.0042, 0, 0.25,
+      ),
       spineLeather,
     );
     band.castShadow = true;
     group.add(band);
   }
+
+  // The top course of the page block squashes flat over the first ~35° of
+  // the cover's swing (and rises again as it closes).
+  const syncRim = (): void => {
+    const k = 1 - THREE.MathUtils.smoothstep(frontCover.rotation.z, 0.04, 0.6);
+    const visible = k > 0.002;
+    if (pageRim.visible !== visible) pageRim.visible = visible;
+    const sy = Math.max(k, 0.002);
+    if (pageRim.scale.y !== sy) {
+      pageRim.scale.y = sy;
+      pageRim.updateMatrix();
+      pageRim.matrixWorld.multiplyMatrices(group.matrixWorld, pageRim.matrix);
+    }
+  };
+  pageBlock.onBeforeRender = syncRim;
 
   group.userData.itemId = "spellbook";
   group.userData.label = ITEM_LABELS.spellbook.name;

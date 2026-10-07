@@ -9,7 +9,7 @@ export const identity = {
   handle: "SmoKer",
   title: "Computer Wizard",
   /** The mundane-world job title, kept as flavor under the wizard title. */
-  profession: "Full-Stack Software Developer",
+  profession: "Software Developer",
   fantasyClass: "Computer Wizard",
   origin: "Baghdad, Iraq",
   status: "available" as "available" | "busy",
