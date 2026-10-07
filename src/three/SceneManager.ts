@@ -679,6 +679,17 @@ export class SceneManager implements ISceneManager {
     this.placeOnTable(candleB, LAYOUT.candleB);
     this.interactableRoots.push(candleB);
 
+    // The overview pose is fitted to this: every item + both candles.
+    const layoutBox = new THREE.Box3();
+    for (const root of this.interactableRoots) {
+      root.updateWorldMatrix(true, true);
+      root.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (mesh.isMesh && mesh.visible) layoutBox.expandByObject(mesh);
+      });
+    }
+    this.rig.setTableBounds(layoutBox);
+
     const spellbook = this.itemGroups.get("spellbook");
     this.spellbookParts =
       (spellbook?.userData.parts as SpellbookParts | undefined) ?? null;
@@ -848,6 +859,7 @@ export class SceneManager implements ISceneManager {
     this.rig.registerAnchor(
       id,
       new THREE.Vector3(center.x, TABLE_SURFACE_Y, center.z),
+      (box.max.x - box.min.x) / 2,
     );
   }
 

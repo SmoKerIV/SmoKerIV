@@ -7,6 +7,9 @@ interface Pose {
   target: THREE.Vector3;
 }
 
+/** Fraction of the frustum width an item may fill in its close-up. */
+const FOCUS_FILL = 0.84;
+
 /** Camera offset relative to an item's registered anchor point. */
 interface FocusPreset {
   offset: THREE.Vector3;
@@ -21,12 +24,25 @@ const TABLE_POSE: Pose = {
   target: v3(0, 1.0, -0.15),
 };
 
-/** Portrait screens can't frame the whole spread — center on the tome. */
-const PORTRAIT_ASPECT = 0.9;
-const TABLE_POSE_PORTRAIT: Pose = {
-  position: v3(0, 1.62, 1.05),
-  target: v3(0, 0.97, -0.05),
-};
+/**
+ * Narrow screens can't frame a 2.3 m wide table at the desktop FOV from
+ * inside a 3.2 m room, so the vertical FOV widens and the camera pitches
+ * down as the aspect drops: t runs 0 (aspect >= WIDE) .. 1 (aspect <= NARROW).
+ */
+const FOV_BASE = 42;
+const FOV_NARROW = 84;
+const ASPECT_WIDE = 1.25;
+const ASPECT_NARROW = 0.5;
+/** Camera pitch (degrees above horizontal, seen from the table target). */
+const PITCH_BASE = 21;
+const PITCH_NARROW = 42;
+/** Screen-space safe area for the table fit (NDC): sides, top, bottom. */
+const FIT_X = 0.92;
+const FIT_TOP = 0.9;
+const FIT_BOTTOM = 0.8;
+/** The camera never rises above the ceiling beams (≈3.03 m). */
+const MAX_CAMERA_Y = 2.95;
+const MAX_CAMERA_Z = 3.2;
 
 const FOCUS_PRESETS: Record<ItemId, FocusPreset> = {
   // spellbook uses a computed aspect-aware reading pose (see poseFor).
@@ -42,7 +58,13 @@ const FOCUS_PRESETS: Record<ItemId, FocusPreset> = {
 
 /** Open spread: cover lands left of the spine; center ≈ x −0.24 off the anchor. */
 const READING_TARGET_OFFSET = v3(-0.24, 0.005, -0.01);
-const SPREAD_WIDTH = 0.9;
+/** Open book bounds relative to the anchor: both covers + page block. */
+const BOOK_OPEN_HALF_W = 0.5;
+const BOOK_OPEN_HALF_D = 0.18;
+/** Margins: sides leave air around the covers; depth leaves room for the
+ *  section tabs above and the page arrows below. */
+const BOOK_MARGIN_W = 1.08;
+const BOOK_MARGIN_D = 1.6;
 /**
  * Near-perfect top-down reading pose (≈1° toward the reader — just enough
  * for lookAt's up vector to stay stable). Straight-down matters: the page
@@ -88,6 +110,12 @@ export class CameraRig {
   private readonly lookAt = new THREE.Vector3();
 
   private readonly anchors = new Map<ItemId, THREE.Vector3>();
+  /** Horizontal half-extent (m) of each item, for narrow-aspect close-ups. */
+  private readonly halfWidths = new Map<ItemId, number>();
+  /** World corners of the table's item layout, for the overview fit. */
+  private tableCorners: THREE.Vector3[] = [];
+  private readonly fitCamera = new THREE.PerspectiveCamera();
+  private readonly fitPoint = new THREE.Vector3();
 
   private readonly parallaxTarget = new THREE.Vector2();
   private readonly parallax = new THREE.Vector2();
@@ -121,8 +149,25 @@ export class CameraRig {
   }
 
   /** SceneManager registers item world positions once the table is laid out. */
-  registerAnchor(item: ItemId, anchor: THREE.Vector3): void {
+  registerAnchor(
+    item: ItemId,
+    anchor: THREE.Vector3,
+    halfWidth?: number,
+  ): void {
     this.anchors.set(item, anchor.clone());
+    if (halfWidth !== undefined) this.halfWidths.set(item, halfWidth);
+  }
+
+  /** World bounds of everything on the table (items, candles with flames). */
+  setTableBounds(box: THREE.Box3): void {
+    this.tableCorners = [];
+    for (const x of [box.min.x, box.max.x]) {
+      for (const y of [box.min.y, box.max.y]) {
+        for (const z of [box.min.z, box.max.z]) {
+          this.tableCorners.push(new THREE.Vector3(x, y, z));
+        }
+      }
+    }
   }
 
   /** Tween the base pose toward an item (or the table when null). */
@@ -190,7 +235,22 @@ export class CameraRig {
 
   setSize(width: number, height: number): void {
     this.camera.aspect = width / height;
+    this.camera.fov = this.fovFor(this.camera.aspect);
     this.camera.updateProjectionMatrix();
+  }
+
+  /** 0 on wide screens .. 1 on tall phones (smoothstep of the aspect). */
+  private narrowness(aspect: number): number {
+    const t = THREE.MathUtils.clamp(
+      (ASPECT_WIDE - aspect) / (ASPECT_WIDE - ASPECT_NARROW),
+      0,
+      1,
+    );
+    return t * t * (3 - 2 * t);
+  }
+
+  private fovFor(aspect: number): number {
+    return THREE.MathUtils.lerp(FOV_BASE, FOV_NARROW, this.narrowness(aspect));
   }
 
   /**
@@ -264,34 +324,18 @@ export class CameraRig {
   }
 
   private poseFor(item: ItemId | null): Pose {
-    if (item === null) {
-      // Portrait (mobile): the tome is the site — keep the view centered on
-      // it instead of the table's middle, so it never drifts off to a side.
-      const aspect = this.camera.aspect || 1.6;
-      if (aspect < PORTRAIT_ASPECT) {
-        const book = this.anchors.get("spellbook");
-        const x = book ? book.x : 0;
-        return {
-          position: TABLE_POSE_PORTRAIT.position.clone().setX(x),
-          target: TABLE_POSE_PORTRAIT.target.clone().setX(x),
-        };
-      }
-      return {
-        position: TABLE_POSE.position.clone(),
-        target: TABLE_POSE.target.clone(),
-      };
-    }
+    const aspect = this.camera.aspect || 1.6;
+    const tanV = Math.tan((this.camera.fov * Math.PI) / 360);
+    if (item === null) return this.tablePose(aspect);
+
     const anchor = this.anchors.get(item) ?? TABLE_POSE.target;
     if (item === "spellbook") {
-      // Aspect-aware reading pose: distance chosen so the open spread fills
-      // ~88% of the frustum width, clamped to sane bounds.
-      const aspect = this.camera.aspect || 1.6;
-      const halfTan = Math.tan((this.camera.fov * Math.PI) / 360);
-      const d = THREE.MathUtils.clamp(
-        SPREAD_WIDTH / (0.88 * 2 * halfTan * aspect),
-        0.62,
-        1.4,
-      );
+      // Fit the open book's bounding box (both covers + margin) into the
+      // frustum: the distance must satisfy the horizontal and the vertical
+      // half-angle, whichever is tighter for this aspect.
+      const dH = (BOOK_OPEN_HALF_W * BOOK_MARGIN_W) / (tanV * aspect);
+      const dV = (BOOK_OPEN_HALF_D * BOOK_MARGIN_D) / tanV;
+      const d = THREE.MathUtils.clamp(Math.max(dH, dV), 0.6, 1.9);
       const target = anchor.clone().add(READING_TARGET_OFFSET);
       const position = target
         .clone()
@@ -299,10 +343,95 @@ export class CameraRig {
       return { position, target };
     }
     const preset = FOCUS_PRESETS[item];
+    const offset = preset.offset.clone();
+    // Narrow aspects: back the camera off along its offset until the item's
+    // width fits the horizontal FOV.
+    const halfW = this.halfWidths.get(item);
+    if (halfW !== undefined) {
+      const need = halfW / (FOCUS_FILL * tanV * aspect);
+      const len = offset.length();
+      if (need > len) offset.multiplyScalar(need / len);
+    }
     return {
-      position: anchor.clone().add(preset.offset),
+      position: anchor.clone().add(offset),
       target: anchor.clone().add(preset.targetOffset),
     };
+  }
+
+  /**
+   * Overview pose: base direction/target from the desktop pose, pitched
+   * steeper on narrow screens, pulled back along that direction until every
+   * corner of the item layout projects inside the safe area (and never past
+   * the room's ceiling/wall).
+   */
+  private tablePose(aspect: number): Pose {
+    const t = this.narrowness(aspect);
+    const pitch = THREE.MathUtils.degToRad(
+      THREE.MathUtils.lerp(PITCH_BASE, PITCH_NARROW, t),
+    );
+    const target = TABLE_POSE.target.clone();
+    const dir = v3(0, Math.sin(pitch), Math.cos(pitch));
+    const baseDist = TABLE_POSE.position.distanceTo(TABLE_POSE.target);
+    const corners = this.tableCorners;
+    if (corners.length === 0) {
+      return { position: target.clone().addScaledVector(dir, baseDist), target };
+    }
+    // Centre horizontally on the layout so asymmetric item spreads fit.
+    let minX = Infinity;
+    let maxX = -Infinity;
+    for (const c of corners) {
+      minX = Math.min(minX, c.x);
+      maxX = Math.max(maxX, c.x);
+    }
+    target.x = (minX + maxX) / 2;
+
+    const cam = this.fitCamera;
+    cam.fov = this.camera.fov;
+    cam.aspect = aspect;
+    cam.near = this.camera.near;
+    cam.far = this.camera.far;
+    cam.updateProjectionMatrix();
+    cam.up.copy(WORLD_UP);
+    const fits = (d: number): boolean => {
+      cam.position.copy(target).addScaledVector(dir, d);
+      cam.lookAt(target);
+      cam.updateMatrixWorld();
+      for (const c of corners) {
+        const p = this.fitPoint.copy(c).project(cam);
+        if (
+          Math.abs(p.x) > FIT_X ||
+          p.y > FIT_TOP ||
+          p.y < -FIT_BOTTOM
+        ) {
+          return false;
+        }
+      }
+      return true;
+    };
+    // Largest distance the room allows along this direction.
+    const dMax = Math.max(
+      baseDist,
+      Math.min(
+        (MAX_CAMERA_Y - target.y) / dir.y,
+        (MAX_CAMERA_Z - target.z) / dir.z,
+      ),
+    );
+    let d = baseDist;
+    if (!fits(d)) {
+      let lo = d;
+      let hi = dMax;
+      if (!fits(hi)) {
+        d = hi; // best effort inside the room
+      } else {
+        for (let i = 0; i < 20; i++) {
+          const mid = (lo + hi) / 2;
+          if (fits(mid)) hi = mid;
+          else lo = mid;
+        }
+        d = hi;
+      }
+    }
+    return { position: target.clone().addScaledVector(dir, d), target };
   }
 
   private killTween(): void {
