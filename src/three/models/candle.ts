@@ -218,7 +218,7 @@ export function buildCandleFromModel(model: THREE.Object3D): THREE.Group {
   group.name = "candle";
   // Warm ivory wax and older brass: the raw albedo is near-white and
   // blows out right under the flame; no env map, so ease off the metal.
-  styleModel(model, { tint: 0xe2cfb2, metalness: 0.75 });
+  styleModel(model, { tint: 0xc9b293, metalness: 0.75 });
   model.scale.setScalar(MODEL_CANDLE_SCALE);
   group.add(model);
 

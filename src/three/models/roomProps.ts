@@ -59,8 +59,9 @@ const PLACEMENTS: Placement[] = [
   { key: "bookClosed1", x: 2.25, y: shelfTop(1), z: shelfZ, rotY: Math.PI / 2, rotZ: Math.PI / 2, scale: 0.85, look: PAINTED_BG, clutter: true },
   { key: "bookClosed2", x: 2.35, y: shelfTop(1), z: shelfZ, rotY: Math.PI / 2, rotZ: Math.PI / 2, scale: 0.85, look: PAINTED_BG, clutter: true },
   { key: "scroll3", x: 2.56, y: shelfTop(1), z: shelfZ, rotY: Math.PI / 2 - 0.2, scale: 0.9, look: PAINTED_BG, clutter: true },
-  // Pulled up to the table's front-left corner, turned toward it.
-  { key: "chair", x: -0.62, z: 0.66, rotY: Math.PI - 0.38, scale: 1, look: { tint: 0x9a8a7a }, castShadow: true },
+  // Pushed in at the far side of the table's left end, its back rising
+  // over the tabletop in the overview (between the hearth and the candle).
+  { key: "chair", x: -1.32, z: -0.95, rotY: 0.75, scale: 1, look: { tint: 0x9a8a7a }, castShadow: true },
 ];
 
 export function dressRoom(
