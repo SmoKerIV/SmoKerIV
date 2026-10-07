@@ -141,6 +141,8 @@ export class SceneManager implements ISceneManager {
   private spellbookParts: SpellbookParts | null = null;
 
   private _focused: ItemId | null = null;
+  /** Which of the two candle roots the current candle focus is anchored to. */
+  private focusedCandleRoot: THREE.Group | null = null;
   private focusToken = 0;
   private transitioning = false;
   private transitionTarget: ItemId | null = null;
@@ -275,9 +277,22 @@ export class SceneManager implements ISceneManager {
   }
 
   focusItem(item: ItemId | null): void {
+    // Two candles share one itemId: anchor the pose to the instance that
+    // was actually picked (keyboard activation picks the primary one).
+    let candleRoot: THREE.Group | null = null;
+    if (item === "candle") {
+      candleRoot =
+        this.lastPickedRoot?.userData.itemId === "candle"
+          ? this.lastPickedRoot
+          : (this.itemGroups.get("candle") ?? null);
+    }
+    const sameTarget = (current: ItemId | null): boolean =>
+      item === current &&
+      (item !== "candle" || candleRoot === this.focusedCandleRoot);
+
     if (this.transitioning) {
-      if (item === this.transitionTarget) return;
-    } else if (item === this._focused) {
+      if (sameTarget(this.transitionTarget)) return;
+    } else if (sameTarget(this._focused)) {
       return;
     }
 
@@ -285,20 +300,13 @@ export class SceneManager implements ISceneManager {
     this.transitioning = true;
     this.transitionTarget = item;
     this._focused = item;
+    this.focusedCandleRoot = candleRoot;
     // While focused, hover stops but the focused item stays clickable
     // (candle snuffing counts clicks even in the close-up).
     this.interaction.setFocus(item);
     this.particles.setBookActive(item === "spellbook");
 
-    // Two candles share one itemId: anchor the pose to the instance that
-    // was actually picked (keyboard activation picks the primary one).
-    if (item === "candle") {
-      const root =
-        this.lastPickedRoot?.userData.itemId === "candle"
-          ? this.lastPickedRoot
-          : this.itemGroups.get("candle");
-      if (root) this.registerAnchor("candle", root);
-    }
+    if (candleRoot) this.registerAnchor("candle", candleRoot);
 
     const waits: Promise<void>[] = [this.rig.focusTo(item)];
     if (item === "spellbook") {
