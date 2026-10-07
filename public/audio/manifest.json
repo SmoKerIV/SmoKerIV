@@ -1,0 +1,979 @@
+{
+  "version": 1,
+  "sampleRate": 48000,
+  "formats": {
+    "webm": "audio/webm; codecs=opus",
+    "m4a": "audio/mp4; codecs=mp4a.40.2"
+  },
+  "note": "files are base paths relative to /audio/ without extension: try .webm first, .m4a for Safari. One-shots are mono, loop slots set loop=true with loopStart/loopEnd in seconds (the audio is already crossfaded; loopStart=0, loopEnd=duration). gain is a linear suggestion on top of the bus volume. One-shots are loudness-matched per category and peak-capped at -3 dBFS; loops are at -30 (fire), -32 (wind), -40 (room) LUFS.",
+  "slots": {
+    "fire": {
+      "category": "ambience",
+      "bus": "ambience",
+      "files": [
+        "ambience/fire"
+      ],
+      "loop": true,
+      "loopStart": 0,
+      "loopEnd": 33,
+      "duration": 33,
+      "channels": 1,
+      "gain": 1,
+      "target": "-30 LUFS integrated, limiter -3 dBFS",
+      "measured": [
+        {
+          "duration": 33,
+          "lufs": -30.5,
+          "truePeakDb": -2.6,
+          "webmBytes": 231570,
+          "m4aBytes": 377179
+        }
+      ],
+      "notes": "NoOneIsReal \"The Fireplace 3\": 36 s window, 3 s equal-power crossfade -> 33 s loop. Layer fire-crackle one-shots on top."
+    },
+    "fire-crackle": {
+      "category": "ambience",
+      "bus": "ambience",
+      "files": [
+        "ambience/fire-crackle-1",
+        "ambience/fire-crackle-2",
+        "ambience/fire-crackle-3",
+        "ambience/fire-crackle-4",
+        "ambience/fire-crackle-5",
+        "ambience/fire-crackle-6"
+      ],
+      "loop": false,
+      "duration": 0.17,
+      "channels": 1,
+      "gain": 0.8,
+      "target": "peak <= -3 dBFS, -27 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.17,
+          "peakDb": -2.2,
+          "truePeakDb": -2.1,
+          "rmsDb": -34.5,
+          "lufs": null,
+          "webmBytes": 1285,
+          "m4aBytes": 2419
+        },
+        {
+          "duration": 0.17,
+          "peakDb": -9.5,
+          "truePeakDb": -9,
+          "rmsDb": -33.6,
+          "lufs": null,
+          "webmBytes": 1419,
+          "m4aBytes": 2358
+        },
+        {
+          "duration": 0.17,
+          "peakDb": -7,
+          "truePeakDb": -6.8,
+          "rmsDb": -30.1,
+          "lufs": null,
+          "webmBytes": 1408,
+          "m4aBytes": 2416
+        },
+        {
+          "duration": 0.17,
+          "peakDb": -6.2,
+          "truePeakDb": -6.2,
+          "rmsDb": -31.3,
+          "lufs": null,
+          "webmBytes": 1416,
+          "m4aBytes": 2390
+        },
+        {
+          "duration": 0.17,
+          "peakDb": -6.8,
+          "truePeakDb": -6.8,
+          "rmsDb": -30,
+          "lufs": null,
+          "webmBytes": 1426,
+          "m4aBytes": 2322
+        },
+        {
+          "duration": 0.17,
+          "peakDb": -6.7,
+          "truePeakDb": -6.6,
+          "rmsDb": -29,
+          "lufs": null,
+          "webmBytes": 1439,
+          "m4aBytes": 2358
+        }
+      ],
+      "notes": "Pops cut from the same fireplace recording (high-passed 350 Hz so they do not add rumble). Randomise 0.4-3 s apart, pitch +-5 %."
+    },
+    "room-tone": {
+      "category": "ambience",
+      "bus": "ambience",
+      "files": [
+        "ambience/room-tone"
+      ],
+      "loop": true,
+      "loopStart": 0,
+      "loopEnd": 27,
+      "duration": 27,
+      "channels": 2,
+      "gain": 1,
+      "target": "-40 LUFS integrated, limiter -3 dBFS",
+      "measured": [
+        {
+          "duration": 27,
+          "lufs": -40.1,
+          "truePeakDb": -25.6,
+          "webmBytes": 147264,
+          "m4aBytes": 249631
+        }
+      ],
+      "notes": "callmethefoo \"Soft Room Tone\" (cabin): 30 s window, 3 s crossfade -> 27 s loop at -40 LUFS (very quiet bed)."
+    },
+    "wind-window": {
+      "category": "ambience",
+      "bus": "ambience",
+      "files": [
+        "ambience/wind-window"
+      ],
+      "loop": true,
+      "loopStart": 0,
+      "loopEnd": 36.5,
+      "duration": 36.5,
+      "channels": 2,
+      "gain": 1,
+      "target": "-32 LUFS integrated, limiter -3 dBFS",
+      "measured": [
+        {
+          "duration": 36.5,
+          "lufs": -32,
+          "truePeakDb": -16,
+          "webmBytes": 270452,
+          "m4aBytes": 446601
+        }
+      ],
+      "notes": "JORDI77RS interior wind through window: steady 40 s section (54-94 s), 3.5 s crossfade -> 36.5 s stereo loop."
+    },
+    "creak": {
+      "category": "ambience",
+      "bus": "ambience",
+      "files": [
+        "ambience/creak-1",
+        "ambience/creak-2",
+        "ambience/creak-3"
+      ],
+      "loop": false,
+      "duration": 0.635,
+      "channels": 1,
+      "gain": 0.8,
+      "target": "peak <= -3 dBFS, -27 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.605,
+          "peakDb": -10.9,
+          "truePeakDb": -10.9,
+          "rmsDb": -27.4,
+          "lufs": -24.1,
+          "webmBytes": 3897,
+          "m4aBytes": 5827
+        },
+        {
+          "duration": 0.338,
+          "peakDb": -13.1,
+          "truePeakDb": -13.1,
+          "rmsDb": -27.1,
+          "lufs": null,
+          "webmBytes": 2373,
+          "m4aBytes": 3800
+        },
+        {
+          "duration": 0.635,
+          "peakDb": -6.7,
+          "truePeakDb": -6.5,
+          "rmsDb": -27.3,
+          "lufs": -27.9,
+          "webmBytes": 4607,
+          "m4aBytes": 5998
+        }
+      ],
+      "notes": "Kenney RPG Audio creak1/creak3 + Vehicle tinysized floor-creak-01. Random timing, quiet."
+    },
+    "fireball-whoosh": {
+      "category": "spells",
+      "bus": "sfx",
+      "files": [
+        "spells/fireball-whoosh"
+      ],
+      "loop": false,
+      "duration": 3.1,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -19 dBFS RMS",
+      "measured": [
+        {
+          "duration": 3.1,
+          "peakDb": -2.9,
+          "truePeakDb": -2.9,
+          "rmsDb": -20.7,
+          "lufs": -21.1,
+          "webmBytes": 15449,
+          "m4aBytes": 25006
+        }
+      ],
+      "notes": "julianmateo fireball pass-by: swell 0.4-2.6 s, tail faded. Fire it on cast, impact follows ~1.2 s later."
+    },
+    "fireball-impact": {
+      "category": "spells",
+      "bus": "sfx",
+      "files": [
+        "spells/fireball-impact"
+      ],
+      "loop": false,
+      "duration": 1.069,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -19 dBFS RMS",
+      "measured": [
+        {
+          "duration": 1.069,
+          "peakDb": -2.8,
+          "truePeakDb": -2.8,
+          "rmsDb": -21.5,
+          "lufs": -22.7,
+          "webmBytes": 5592,
+          "m4aBytes": 9402
+        }
+      ],
+      "notes": "Blankened Fireball Explosion (stereo folded to mono). Source peaks at 0 dBFS with a small DC offset (removed)."
+    },
+    "zap": {
+      "category": "spells",
+      "bus": "sfx",
+      "files": [
+        "spells/zap-1",
+        "spells/zap-2"
+      ],
+      "loop": false,
+      "duration": 0.884,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -19 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.75,
+          "peakDb": -3.4,
+          "truePeakDb": -3.4,
+          "rmsDb": -21.9,
+          "lufs": -17.9,
+          "webmBytes": 5344,
+          "m4aBytes": 6879
+        },
+        {
+          "duration": 0.884,
+          "peakDb": -3.5,
+          "truePeakDb": -3.5,
+          "rmsDb": -31.6,
+          "lufs": -27.7,
+          "webmBytes": 6644,
+          "m4aBytes": 8023
+        }
+      ],
+      "notes": "JoelAudio ELECTRIC_ZAP_001 and Vehicle tinysized paralyzer-discharge-01."
+    },
+    "thunder": {
+      "category": "spells",
+      "bus": "sfx",
+      "files": [
+        "spells/thunder"
+      ],
+      "loop": false,
+      "duration": 12.5,
+      "channels": 1,
+      "gain": 0.9,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 12.5,
+          "peakDb": -4.4,
+          "truePeakDb": -4.4,
+          "rmsDb": -27.4,
+          "lufs": -28.1,
+          "webmBytes": 56119,
+          "m4aBytes": 96936
+        }
+      ],
+      "notes": "mikala_oidua distant thunder clap: first 12.5 s (two claps + roll), tail faded over 2.5 s."
+    },
+    "gust": {
+      "category": "spells",
+      "bus": "sfx",
+      "files": [
+        "spells/gust"
+      ],
+      "loop": false,
+      "duration": 3.8,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -23 dBFS RMS",
+      "measured": [
+        {
+          "duration": 3.8,
+          "peakDb": -13.2,
+          "truePeakDb": -13.2,
+          "rmsDb": -26.7,
+          "lufs": -26.5,
+          "webmBytes": 19183,
+          "m4aBytes": 30449
+        }
+      ],
+      "notes": "Rising swell cut from the interior wind recording (5.0-8.8 s). Soft, whistling gust; layer with synth noise for a harder rush."
+    },
+    "sparkle": {
+      "category": "spells",
+      "bus": "sfx",
+      "files": [
+        "spells/sparkle"
+      ],
+      "loop": false,
+      "duration": 2.591,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -19 dBFS RMS",
+      "measured": [
+        {
+          "duration": 2.591,
+          "peakDb": -3.1,
+          "truePeakDb": -3.1,
+          "rmsDb": -22,
+          "lufs": -18.9,
+          "webmBytes": 20960,
+          "m4aBytes": 21090
+        }
+      ],
+      "notes": "SkySpeira Mysterious Sparkle Flourish (stereo folded to mono)."
+    },
+    "clatter": {
+      "category": "spells",
+      "bus": "sfx",
+      "files": [
+        "spells/clatter-1",
+        "spells/clatter-2",
+        "spells/clatter-3"
+      ],
+      "loop": false,
+      "duration": 1.95,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -19 dBFS RMS",
+      "measured": [
+        {
+          "duration": 1.95,
+          "peakDb": -2.9,
+          "truePeakDb": -2.8,
+          "rmsDb": -23.1,
+          "lufs": -18.9,
+          "webmBytes": 11907,
+          "m4aBytes": 16612
+        },
+        {
+          "duration": 1.4,
+          "peakDb": -2.2,
+          "truePeakDb": -2.2,
+          "rmsDb": -20,
+          "lufs": -15.9,
+          "webmBytes": 8221,
+          "m4aBytes": 12043
+        },
+        {
+          "duration": 1.5,
+          "peakDb": -2.1,
+          "truePeakDb": -2,
+          "rmsDb": -21.6,
+          "lufs": -18.4,
+          "webmBytes": 7629,
+          "m4aBytes": 12766
+        }
+      ],
+      "notes": "taure board-game wooden pieces thrown; three isolated bursts."
+    },
+    "book-open": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/book-open-1",
+        "sfx/book-open-2"
+      ],
+      "loop": false,
+      "duration": 0.7,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.65,
+          "peakDb": -3.7,
+          "truePeakDb": -3.7,
+          "rmsDb": -22,
+          "lufs": -23.7,
+          "webmBytes": 2940,
+          "m4aBytes": 5423
+        },
+        {
+          "duration": 0.7,
+          "peakDb": -4.5,
+          "truePeakDb": -4.5,
+          "rmsDb": -22,
+          "lufs": -22.8,
+          "webmBytes": 3625,
+          "m4aBytes": 6216
+        }
+      ],
+      "notes": "IENBA Heavy Book: the two double-thump hits (cover lands + settle)."
+    },
+    "book-close": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/book-close-1",
+        "sfx/book-close-2"
+      ],
+      "loop": false,
+      "duration": 0.65,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.65,
+          "peakDb": -3.2,
+          "truePeakDb": -3.2,
+          "rmsDb": -22.3,
+          "lufs": -24.1,
+          "webmBytes": 3468,
+          "m4aBytes": 5175
+        },
+        {
+          "duration": 0.55,
+          "peakDb": -3,
+          "truePeakDb": -3,
+          "rmsDb": -22.8,
+          "lufs": -25.2,
+          "webmBytes": 2983,
+          "m4aBytes": 5242
+        }
+      ],
+      "notes": "IENBA Heavy Book: single sharp thumps."
+    },
+    "page-turn": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/page-turn-1",
+        "sfx/page-turn-2",
+        "sfx/page-turn-3",
+        "sfx/page-turn-4"
+      ],
+      "loop": false,
+      "duration": 0.95,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.95,
+          "peakDb": -3.3,
+          "truePeakDb": -3.3,
+          "rmsDb": -25.9,
+          "lufs": -22.3,
+          "webmBytes": 4894,
+          "m4aBytes": 8403
+        },
+        {
+          "duration": 0.95,
+          "peakDb": -2.6,
+          "truePeakDb": -2.5,
+          "rmsDb": -24.7,
+          "lufs": -21.4,
+          "webmBytes": 5265,
+          "m4aBytes": 8370
+        },
+        {
+          "duration": 0.721,
+          "peakDb": -7.1,
+          "truePeakDb": -6.3,
+          "rmsDb": -23.8,
+          "lufs": -19.2,
+          "webmBytes": 4643,
+          "m4aBytes": 6710
+        },
+        {
+          "duration": 0.688,
+          "peakDb": -5.1,
+          "truePeakDb": -5.1,
+          "rmsDb": -35.7,
+          "lufs": -34.8,
+          "webmBytes": 4013,
+          "m4aBytes": 6410
+        }
+      ],
+      "notes": "xkeril heavy-paper turns (2 cuts), Vehicle book-page-02, Kenney bookFlip1."
+    },
+    "sword-ring": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/sword-ring-1",
+        "sfx/sword-ring-2"
+      ],
+      "loop": false,
+      "duration": 1.286,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 1.286,
+          "peakDb": -2.8,
+          "truePeakDb": -2.5,
+          "rmsDb": -33.1,
+          "lufs": -27.7,
+          "webmBytes": 9077,
+          "m4aBytes": 11029
+        },
+        {
+          "duration": 0.995,
+          "peakDb": -2.2,
+          "truePeakDb": -1.1,
+          "rmsDb": -28.3,
+          "lufs": -24,
+          "webmBytes": 8177,
+          "m4aBytes": 8803
+        }
+      ],
+      "notes": "Vehicle tinysized sword-clash-01/02: bright metal hit with a long harmonic ring."
+    },
+    "shield-knock": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/shield-knock-1",
+        "sfx/shield-knock-2"
+      ],
+      "loop": false,
+      "duration": 0.564,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.328,
+          "peakDb": -2.9,
+          "truePeakDb": -2.9,
+          "rmsDb": -26.4,
+          "lufs": null,
+          "webmBytes": 2103,
+          "m4aBytes": 3590
+        },
+        {
+          "duration": 0.564,
+          "peakDb": -3.4,
+          "truePeakDb": -3.4,
+          "rmsDb": -30.3,
+          "lufs": -29.5,
+          "webmBytes": 2918,
+          "m4aBytes": 5477
+        }
+      ],
+      "notes": "TRP wood-door knocks pitched down 3 semitones (rubberband), low-passed 7 kHz."
+    },
+    "cork-pop": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/cork-pop-1",
+        "sfx/cork-pop-2",
+        "sfx/cork-pop-3",
+        "sfx/cork-pop-4"
+      ],
+      "loop": false,
+      "duration": 0.546,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.331,
+          "peakDb": -5.8,
+          "truePeakDb": -5.8,
+          "rmsDb": -22,
+          "lufs": null,
+          "webmBytes": 2074,
+          "m4aBytes": 3603
+        },
+        {
+          "duration": 0.332,
+          "peakDb": -4.8,
+          "truePeakDb": -4.4,
+          "rmsDb": -23.7,
+          "lufs": null,
+          "webmBytes": 2086,
+          "m4aBytes": 3659
+        },
+        {
+          "duration": 0.546,
+          "peakDb": -8.8,
+          "truePeakDb": -8.8,
+          "rmsDb": -22,
+          "lufs": -24.4,
+          "webmBytes": 3356,
+          "m4aBytes": 5256
+        },
+        {
+          "duration": 0.265,
+          "peakDb": -3.3,
+          "truePeakDb": -3,
+          "rmsDb": -23.4,
+          "lufs": null,
+          "webmBytes": 1795,
+          "m4aBytes": 3124
+        }
+      ],
+      "notes": "Vehicle tinysized/accessory vial and bottle uncork pops."
+    },
+    "slosh": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/slosh-1",
+        "sfx/slosh-2"
+      ],
+      "loop": false,
+      "duration": 1.3,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 1.3,
+          "peakDb": -2.8,
+          "truePeakDb": -2.8,
+          "rmsDb": -25.7,
+          "lufs": -27.8,
+          "webmBytes": 8266,
+          "m4aBytes": 11415
+        },
+        {
+          "duration": 1.2,
+          "peakDb": -2.9,
+          "truePeakDb": -2.9,
+          "rmsDb": -27.9,
+          "lufs": -26.6,
+          "webmBytes": 10484,
+          "m4aBytes": 10719
+        }
+      ],
+      "notes": "WEAK: liquid gurgle from Vehicle water-vial-fill / water-pour; no true bottle-slosh in the CC0 set. Consider a synth."
+    },
+    "parchment": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/parchment-1",
+        "sfx/parchment-2"
+      ],
+      "loop": false,
+      "duration": 2.85,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 2.85,
+          "peakDb": -3.1,
+          "truePeakDb": -3.1,
+          "rmsDb": -33.1,
+          "lufs": -31.4,
+          "webmBytes": 14870,
+          "m4aBytes": 23328
+        },
+        {
+          "duration": 2.4,
+          "peakDb": -3.1,
+          "truePeakDb": -3.1,
+          "rmsDb": -33.6,
+          "lufs": -31.8,
+          "webmBytes": 12730,
+          "m4aBytes": 19732
+        }
+      ],
+      "notes": "Vrymaa Parchment - Unroll: two rustle sections."
+    },
+    "tankard": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/tankard-1",
+        "sfx/tankard-2"
+      ],
+      "loop": false,
+      "duration": 0.415,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.393,
+          "peakDb": -7.9,
+          "truePeakDb": -7.9,
+          "rmsDb": -22.6,
+          "lufs": null,
+          "webmBytes": 2743,
+          "m4aBytes": 4122
+        },
+        {
+          "duration": 0.415,
+          "peakDb": -4,
+          "truePeakDb": -4,
+          "rmsDb": -24.1,
+          "lufs": -24.7,
+          "webmBytes": 2493,
+          "m4aBytes": 4296
+        }
+      ],
+      "notes": "kyles pint glass set down on wood (source is clipped at 0 dBFS) + Vehicle wooden bowl set down. No pewter clink exists in CC0 set."
+    },
+    "candle-puff": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/candle-puff"
+      ],
+      "loop": false,
+      "duration": 0.239,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.239,
+          "peakDb": -6.1,
+          "truePeakDb": -6,
+          "rmsDb": -22.6,
+          "lufs": null,
+          "webmBytes": 1859,
+          "m4aBytes": 2975
+        }
+      ],
+      "notes": "Reitanna Blowing Out Candle: single puff."
+    },
+    "match-strike": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/match-strike"
+      ],
+      "loop": false,
+      "duration": 1.3,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 1.3,
+          "peakDb": -4.3,
+          "truePeakDb": -4.3,
+          "rmsDb": -32.1,
+          "lufs": -32.9,
+          "webmBytes": 7114,
+          "m4aBytes": 11162
+        }
+      ],
+      "notes": "scalywhale Match strike 03: scratch + flare. Very quiet source, normalised up."
+    },
+    "dice": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/dice-1",
+        "sfx/dice-2",
+        "sfx/dice-3",
+        "sfx/dice-4",
+        "sfx/dice-5",
+        "sfx/dice-6",
+        "sfx/dice-7",
+        "sfx/dice-8"
+      ],
+      "loop": false,
+      "duration": 0.38,
+      "channels": 1,
+      "gain": 0.9,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.3,
+          "peakDb": -5.7,
+          "truePeakDb": -5.7,
+          "rmsDb": -35.9,
+          "lufs": null,
+          "webmBytes": 2045,
+          "m4aBytes": 3486
+        },
+        {
+          "duration": 0.3,
+          "peakDb": -6.4,
+          "truePeakDb": -5.4,
+          "rmsDb": -39.4,
+          "lufs": null,
+          "webmBytes": 2057,
+          "m4aBytes": 3424
+        },
+        {
+          "duration": 0.35,
+          "peakDb": -2.9,
+          "truePeakDb": -2.4,
+          "rmsDb": -32.6,
+          "lufs": null,
+          "webmBytes": 2215,
+          "m4aBytes": 3866
+        },
+        {
+          "duration": 0.32,
+          "peakDb": -4,
+          "truePeakDb": -4,
+          "rmsDb": -33.6,
+          "lufs": null,
+          "webmBytes": 2136,
+          "m4aBytes": 3595
+        },
+        {
+          "duration": 0.38,
+          "peakDb": -2.8,
+          "truePeakDb": -2.6,
+          "rmsDb": -36.1,
+          "lufs": null,
+          "webmBytes": 2433,
+          "m4aBytes": 4091
+        },
+        {
+          "duration": 0.15,
+          "peakDb": -3.9,
+          "truePeakDb": -3.9,
+          "rmsDb": -26.3,
+          "lufs": null,
+          "webmBytes": 1317,
+          "m4aBytes": 2263
+        },
+        {
+          "duration": 0.206,
+          "peakDb": -2.8,
+          "truePeakDb": -2.8,
+          "rmsDb": -29.4,
+          "lufs": null,
+          "webmBytes": 1578,
+          "m4aBytes": 2739
+        },
+        {
+          "duration": 0.09,
+          "peakDb": -5.5,
+          "truePeakDb": -5.5,
+          "rmsDb": -23.1,
+          "lufs": null,
+          "webmBytes": 1023,
+          "m4aBytes": 1839
+        }
+      ],
+      "notes": "Individual impacts (physics triggers per contact): 5 from H_Botha polyhedral roll on wood, Wuzzy wooden dice 1/3, Kenney casino die-throw-1. Randomise pitch +-8 %."
+    },
+    "nat20": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/nat20"
+      ],
+      "loop": false,
+      "duration": 2.686,
+      "channels": 1,
+      "gain": 0.85,
+      "target": "peak <= -3 dBFS, -24 dBFS RMS",
+      "measured": [
+        {
+          "duration": 2.686,
+          "peakDb": -11.9,
+          "truePeakDb": -11.7,
+          "rmsDb": -24,
+          "lufs": -19.7,
+          "webmBytes": 25228,
+          "m4aBytes": 21629
+        }
+      ],
+      "notes": "LaurenPonder Crystal Twinkle (clean, pure partials; synthetic). Layer with sparkle."
+    },
+    "fanfare": {
+      "category": "sfx",
+      "bus": "sfx",
+      "files": [
+        "sfx/fanfare-1",
+        "sfx/fanfare-2"
+      ],
+      "loop": false,
+      "duration": 1.741,
+      "channels": 1,
+      "gain": 0.8,
+      "target": "peak <= -3 dBFS, -22 dBFS RMS",
+      "measured": [
+        {
+          "duration": 1.74,
+          "peakDb": -11.8,
+          "truePeakDb": -11.8,
+          "rmsDb": -22,
+          "lufs": -22.2,
+          "webmBytes": 12364,
+          "m4aBytes": 14530
+        },
+        {
+          "duration": 1.741,
+          "peakDb": -12.4,
+          "truePeakDb": -12.3,
+          "rmsDb": -22,
+          "lufs": -22,
+          "webmBytes": 14646,
+          "m4aBytes": 14516
+        }
+      ],
+      "notes": "Kenney Music Jingles SAX07 (brassy synth, ta-ta-ta-taaa) and NES00 (chiptune). No real brass fanfare in the CC0 set."
+    },
+    "hover": {
+      "category": "ui",
+      "bus": "ui",
+      "files": [
+        "ui/hover-1",
+        "ui/hover-2"
+      ],
+      "loop": false,
+      "duration": 0.109,
+      "channels": 1,
+      "gain": 1,
+      "target": "peak <= -3 dBFS, -34 dBFS RMS",
+      "measured": [
+        {
+          "duration": 0.037,
+          "peakDb": -13.6,
+          "truePeakDb": -13.6,
+          "rmsDb": -34.8,
+          "lufs": null,
+          "webmBytes": 780,
+          "m4aBytes": 1323
+        },
+        {
+          "duration": 0.109,
+          "peakDb": -15.6,
+          "truePeakDb": -15.5,
+          "rmsDb": -34,
+          "lufs": null,
+          "webmBytes": 1149,
+          "m4aBytes": 1960
+        }
+      ],
+      "notes": "Kenney UI Audio rollover2/rollover5, low-passed 7 kHz, baked in ~-34 dBFS RMS so it is very soft."
+    }
+  }
+}
