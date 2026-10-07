@@ -103,6 +103,7 @@ export const sceneAudio = {
           // the flame gutters before it goes out
           for (let n = 0; n < 2; n++) {
             void audio.play("fire-crackle", {
+              bus: "sfx",
               position,
               gain: rand(0.3, 0.5),
               delay: 0.05 + i * 0.1 + n * rand(0.1, 0.18),
@@ -133,6 +134,7 @@ export const sceneAudio = {
     void audio.play("fireball-impact", { position, delay });
     for (let n = 0; n < 3; n++) {
       void audio.play("fire-crackle", {
+        bus: "sfx",
         position,
         gain: rand(0.35, 0.7),
         delay: delay + 0.15 + n * rand(0.12, 0.3),
@@ -197,7 +199,7 @@ export const sceneAudio = {
         void audio.playLayer("metal-clink", { ...at, delay: 0.04, gain: 0.8 });
         break;
       case "candle":
-        void audio.play("fire-crackle", { ...at, gain: 0.35 });
+        void audio.play("fire-crackle", { ...at, bus: "sfx", gain: 0.35 });
         break;
       default:
         break;
@@ -254,6 +256,7 @@ export const sceneAudio = {
     this.cancelIdle();
     idleTimer = setTimeout(() => {
       audio.prefetch("spells");
+      audio.prefetch(["fire-crackle"]); // spell + candle crackles, even with ambience off
       idleTimer2 = setTimeout(() => audio.prefetch("sfx"), 2000);
     }, 5000);
   },

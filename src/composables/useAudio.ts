@@ -26,7 +26,8 @@
  *   play(slot, opts?)                one-shot -> Promise<SoundHandle | null>
  *     opts: variant, gain (linear), rate, detune (cents), delay (s),
  *           pan (-1..1) | position {x,y,z} | source (named position),
- *           duck ({amount, ms} or false; spells duck ambience by default)
+ *           duck ({amount, ms} or false; spells duck ambience by default),
+ *           bus (override the slot's bus, e.g. spell crackles on "sfx")
  *   startLoop(slot, opts?) / stopLoop(slot, fadeMs?)
  *   startAmbience() / stopAmbience(fadeMs?)   fire + room tone + wind loops
  *                                    plus random crackles and creaks
@@ -115,6 +116,12 @@ export interface PlayOptions {
   source?: string;
   /** Duck ambience under this sound; spells do it unless false. */
   duck?: { amount: number; ms: number } | false;
+  /**
+   * Route through this bus instead of the slot's own (e.g. a fire-crackle
+   * that belongs to a spell plays on "sfx", so it follows the SFX toggle,
+   * not the ambience one).
+   */
+  bus?: BusName;
 }
 
 export interface SoundHandle {
@@ -865,7 +872,7 @@ async function playVoice(
   if (!hasUserActivation()) return null;
   const c = ensureContext();
   if (!c || !buses) return null;
-  const bus = slotBus(slot);
+  const bus = opts.bus ?? slotBus(slot);
   if (!enabled[bus]) return null;
   const tune = tuningFor(slot);
 
@@ -875,7 +882,7 @@ async function playVoice(
     bufs = await withTimeout(loadSlot(slot), wait);
   }
   if (!ctx || ctx !== c) return null; // disposed while waiting
-  const dest = slotDestination(slot);
+  const dest = opts.bus ? (buses?.[opts.bus] ?? null) : slotDestination(slot);
   if (!dest) return null;
 
   const def = manifest?.slots[slot];
