@@ -6,11 +6,10 @@
  * bottles (SceneManager builds one dice collider per child).
  * Pivot at the table contact plane (y = 0).
  *
- * Glass is a MeshPhysicalMaterial. Where the quality allows it
- * (userData.setQuality, driven by SceneManager) it uses real transmission
- * (refraction through an IOR 1.5 shell, opaque pass); otherwise it falls
- * back to a cheap transparent shell that keeps the bloom mask (see
- * keepBloomMask) and draws back faces first.
+ * Glass is a MeshPhysicalMaterial on a cheap transparent shell at every
+ * quality tier (it keeps the bloom mask, see keepBloomMask, and draws back
+ * faces first). Real transmission is deliberately off: it re-renders the
+ * opaque scene into a second target for no visible gain at table distance.
  */
 import * as THREE from "three";
 import { ITEM_LABELS, type Quality } from "../types";
@@ -156,7 +155,7 @@ function makeGlass(tint: number): THREE.MeshPhysicalMaterial {
   });
   glass.userData.glass = true;
   glass.userData.tint = tint;
-  setGlassMode(glass, true);
+  setGlassMode(glass, false);
   return glass;
 }
 
@@ -583,12 +582,12 @@ export function buildPotions(): THREE.Group {
   group.add(buildFlask(), buildVial(), buildSquareBottle());
 
   /**
-   * Transmission on high only: it renders the opaque scene a second time
-   * into the transmission target (see renderer.transmissionResolutionScale
-   * in SceneManager); medium and low use the transparent shell.
+   * Transmission is off on every tier (the transparent shell looks the
+   * same and costs half the draw calls). Kept as a hook so SceneManager's
+   * quality plumbing stays uniform.
    */
-  group.userData.setQuality = (quality: Quality): void => {
-    const on = quality === "high";
+  group.userData.setQuality = (_quality: Quality): void => {
+    const on = false;
     group.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;

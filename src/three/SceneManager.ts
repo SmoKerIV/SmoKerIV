@@ -542,9 +542,8 @@ export class SceneManager implements ISceneManager {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.95;
-    // The potions' glass (high quality only) refracts the opaque scene from
-    // a second render; at half resolution it costs a fraction and the
-    // refracted room is soft behind the bottles anyway.
+    // Potion glass no longer uses transmission; this only bounds the cost
+    // if a transmissive material is ever added back.
     this.renderer.transmissionResolutionScale = 0.5;
     this.renderer.shadowMap.enabled = settings.quality !== "low";
     // r185 deprecates PCFSoftShadowMap and swaps it for PCFShadowMap on the
