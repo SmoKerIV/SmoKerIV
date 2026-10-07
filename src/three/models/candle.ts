@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { ITEM_LABELS } from "../types";
 import type { CandleParts } from "../types";
 import { brassMaterial, waxMaterial } from "./materials";
+import { styleModel } from "../assets";
 
 /** Tiny deterministic PRNG so both candles get an identical melt profile. */
 function mulberry32(seed: number): () => number {
@@ -160,6 +161,21 @@ export function buildCandle(): THREE.Group {
   group.add(wick);
 
   // --- Flame: ONE teardrop mesh (scene attaches the flickering light) -----------------
+  const flame = makeCandleFlame();
+  flame.position.y = POOL_Y + 0.011;
+  group.add(flame);
+
+  group.userData.itemId = "candle";
+  group.userData.label = ITEM_LABELS.candle.name;
+  group.userData.parts = { flame } satisfies CandleParts;
+  return group;
+}
+
+/**
+ * Teardrop flame (base at y = 0, ~5 cm tall). One mesh per candle: the
+ * scene attaches the flickering light beside it and hides it on snuff.
+ */
+export function makeCandleFlame(): THREE.Mesh {
   const flame = new THREE.Mesh(
     new THREE.LatheGeometry(
       [
@@ -186,7 +202,59 @@ export function buildCandle(): THREE.Group {
   );
   flame.name = "candleFlame";
   flame.userData.noShadow = true;
-  flame.position.y = POOL_Y + 0.011;
+  return flame;
+}
+
+/** Licensed holder is 0.25 m tall; a touch smaller sits better by the props. */
+const MODEL_CANDLE_SCALE = 0.88;
+
+/**
+ * Brass candle holder from the licensed model (it ships with a black wick
+ * and no flame) carrying the scene's own flame at the wick tip. Same
+ * contract as buildCandle(): pivot on the table, CandleParts.flame.
+ */
+export function buildCandleFromModel(model: THREE.Object3D): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "candle";
+  // Warm ivory wax and older brass: the raw albedo is near-white and
+  // blows out right under the flame; no env map, so ease off the metal.
+  styleModel(model, { tint: 0xe2cfb2, metalness: 0.75 });
+  model.scale.setScalar(MODEL_CANDLE_SCALE);
+  group.add(model);
+
+  // The wick is the topmost geometry: average the vertices within a few
+  // millimetres of the top (in the group's frame) to find its tip.
+  group.updateWorldMatrix(true, true);
+  const toGroup = group.matrixWorld.clone().invert();
+  let topY = -Infinity;
+  const points: THREE.Vector3[] = [];
+  const v = new THREE.Vector3();
+  model.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const m = new THREE.Matrix4().multiplyMatrices(toGroup, mesh.matrixWorld);
+    const pos = mesh.geometry.getAttribute("position");
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m);
+      if (v.y > topY - 0.006) {
+        if (v.y > topY) topY = v.y;
+        points.push(v.clone());
+      }
+    }
+  });
+  const tip = new THREE.Vector3();
+  let n = 0;
+  for (const p of points) {
+    if (p.y < topY - 0.006) continue;
+    tip.add(p);
+    n++;
+  }
+  if (n > 0) tip.divideScalar(n);
+  tip.y = topY;
+
+  const flame = makeCandleFlame();
+  // Base of the teardrop wraps the wick's upper end.
+  flame.position.set(tip.x, tip.y - 0.006, tip.z);
   group.add(flame);
 
   group.userData.itemId = "candle";

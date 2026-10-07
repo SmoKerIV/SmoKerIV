@@ -15,15 +15,18 @@ import {
 } from "./types";
 import {
   buildCandle,
+  buildCandleFromModel,
   buildDice,
   buildPotions,
   buildRoom,
   buildRuneCircle,
   buildScroll,
   buildShield,
+  buildShieldFromModel,
   buildSpellbook,
   buildSword,
   buildTable,
+  buildTableProps,
   buildTankard,
 } from "./models";
 import { CameraRig } from "./CameraRig";
@@ -50,6 +53,7 @@ import {
 import { DicePhysics, measureObstacle } from "./dicePhysics";
 import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
+import { loadModels, ModelLibrary, type ModelKey } from "./assets";
 
 const PIXEL_RATIO_CAP: Record<Quality, number> = {
   low: 1,
@@ -146,10 +150,27 @@ let lagSmoothingOwners = 0;
 /** Loader progress at the end of each start-up stage (first frame = 1). */
 const PROGRESS = {
   start: 0.04,
-  textures: 0.5,
-  models: 0.8,
+  textures: 0.4,
+  /** Licensed glTF downloads (fetched alongside the texture painting). */
+  assets: 0.62,
+  models: 0.82,
   shaders: 0.95,
 } as const;
+
+/**
+ * Licensed props, probe first (see assets.ts): the candle is the most
+ * visible swap, so a missing models folder is detected on it.
+ */
+const MODEL_KEYS: ModelKey[] = [
+  "candle",
+  "buckler",
+  "ink",
+  "bookStack",
+  "scroll1",
+];
+
+/** Texture anisotropy for the glTF props, per quality. */
+const MODEL_ANISOTROPY: Record<Quality, number> = { low: 2, medium: 4, high: 8 };
 const COMPILE_TIMEOUT_MS = 5000;
 /** Delay after the stage is ready before fetching the d20 physics engine. */
 const DICE_PRELOAD_DELAY_MS = 2500;
@@ -232,7 +253,10 @@ const LAYOUT: Record<ItemId, Placement> & { candleB: Placement } = {
   candleB: { x: 0.95, z: -0.45, rotY: 0 },
 };
 
-/** Candle flame tips the moth orbits (flame sits ~0.21 above the table). */
+/**
+ * Candle flame tips the moth orbits (flame sits ~0.21 above the table);
+ * re-measured from the built candles once the stage exists.
+ */
 const MOTH_ANCHORS: [THREE.Vector3, THREE.Vector3] = [
   new THREE.Vector3(LAYOUT.candle.x, TABLE_SURFACE_Y + 0.21, LAYOUT.candle.z),
   new THREE.Vector3(LAYOUT.candleB.x, TABLE_SURFACE_Y + 0.21, LAYOUT.candleB.z),
@@ -256,6 +280,10 @@ export class SceneManager implements ISceneManager {
   private readonly interactableRoots: THREE.Group[] = [];
   private runeCircle: THREE.Group | null = null;
   private spellbookParts: SpellbookParts | null = null;
+  /** Non-interactive tabletop props (dice colliders, contact shadows). */
+  private tableProps: THREE.Group[] = [];
+  /** Licensed glTF props (empty when the models folder is missing). */
+  private models = new ModelLibrary({});
 
   private _focused: ItemId | null = null;
   /** Which of the two candle roots the current candle focus is anchored to. */
@@ -785,6 +813,9 @@ export class SceneManager implements ISceneManager {
       this.fireball = null;
     }
     this.dicePhysics?.dispose();
+    // Sources of the cloned props (clones in the scene share their GPU
+    // resources; disposing twice is harmless).
+    this.models.disposeSources();
     gsap.killTweensOf(this.runeProxy);
     gsap.killTweensOf(this.bookOpenProxy);
     gsap.killTweensOf(this.moodProxy);
@@ -838,6 +869,25 @@ export class SceneManager implements ISceneManager {
       if (!this.disposed) this.events.onProgress?.(value);
     };
 
+    // The glTF downloads run while the canvases are painted; their share
+    // of the ring is reported once the texture stage is through.
+    let assetFraction = 0;
+    let assetStage = false;
+    const modelsReady = loadModels({
+      keys: MODEL_KEYS,
+      anisotropy: Math.min(
+        this.renderer.capabilities.getMaxAnisotropy(),
+        MODEL_ANISOTROPY[this.settings.quality],
+      ),
+      onProgress: (fraction) => {
+        assetFraction = fraction;
+        if (assetStage) {
+          report(THREE.MathUtils.lerp(PROGRESS.textures, PROGRESS.assets, fraction));
+        }
+      },
+      isCancelled: () => this.disposed,
+    });
+
     for (let i = 0; i < TEXTURE_WARMUPS.length; i++) {
       await yieldToBrowser();
       if (this.disposed) return;
@@ -851,8 +901,17 @@ export class SceneManager implements ISceneManager {
       );
     }
 
+    assetStage = true;
+    report(THREE.MathUtils.lerp(PROGRESS.textures, PROGRESS.assets, assetFraction));
+    const models = await modelsReady;
+    if (this.disposed) {
+      models.disposeSources();
+      return;
+    }
+    this.models = models;
+
     const built = await this.buildStage((fraction) =>
-      report(THREE.MathUtils.lerp(PROGRESS.textures, PROGRESS.models, fraction)),
+      report(THREE.MathUtils.lerp(PROGRESS.assets, PROGRESS.models, fraction)),
     );
     if (!built || this.disposed) return;
     this.buildMoth();
@@ -917,15 +976,26 @@ export class SceneManager implements ISceneManager {
     );
     this.scene.add(this.runeCircle);
 
+    // Licensed models replace a procedural item where available; the
+    // procedural builder is the fallback (fresh clones, failed loads).
+    const models = this.models;
+    const candle = (): THREE.Group => {
+      const model = models.model("candle");
+      return model ? buildCandleFromModel(model) : buildCandle();
+    };
+    const shield = (): THREE.Group => {
+      const model = models.model("buckler");
+      return model ? buildShieldFromModel(model) : buildShield();
+    };
     const builders: Record<ItemId, () => THREE.Group> = {
       spellbook: buildSpellbook,
       sword: buildSword,
-      shield: buildShield,
+      shield,
       potion: buildPotions,
       scroll: buildScroll,
       dice: buildDice,
       tankard: buildTankard,
-      candle: buildCandle,
+      candle,
     };
 
     const entries = Object.entries(builders) as [ItemId, () => THREE.Group][];
@@ -946,7 +1016,7 @@ export class SceneManager implements ISceneManager {
     }
 
     // Second candle instance shares the "candle" itemId via its own userData.
-    const candleB = buildCandle();
+    const candleB = candle();
     this.makeMaterialsUnique(candleB);
     this.placeOnTable(candleB, LAYOUT.candleB);
     this.interactableRoots.push(candleB);
@@ -978,6 +1048,20 @@ export class SceneManager implements ISceneManager {
       this.lights.attachCandle(parts.flame);
       this.candleStates.set(candle, { clicks: [], snuffed: false });
     }
+
+    // Decorative still life (licensed models only; none when missing).
+    this.tableProps = buildTableProps(models);
+    for (const prop of this.tableProps) this.scene.add(prop);
+
+    // Moth orbits sit just above the actual flame tips.
+    [this.itemGroups.get("candle"), candleB].forEach((root, i) => {
+      const flame = (root?.userData.parts as CandleParts | undefined)?.flame;
+      if (!flame) return;
+      flame.updateWorldMatrix(true, false);
+      flame.getWorldPosition(MOTH_ANCHORS[i]!);
+      MOTH_ANCHORS[i]!.y += 0.03;
+    });
+    this.mothAnchor.copy(MOTH_ANCHORS[0]);
 
     const dice = this.itemGroups.get("dice");
     if (dice) this.createDicePhysics(dice, table, candleB);
@@ -1028,6 +1112,7 @@ export class SceneManager implements ISceneManager {
       for (const bottle of potion.children) add(measureObstacle(potion, "cylinder", bottle));
     }
     for (const c of [candle, candleB]) if (c) add(measureObstacle(c, "cylinder"));
+    for (const prop of this.tableProps) add(measureObstacle(prop, "box"));
 
     let bookClosed: ObstacleSpec | null = null;
     let bookOpen: ObstacleSpec | null = null;
@@ -1162,6 +1247,7 @@ export class SceneManager implements ISceneManager {
       }
     }
     drop(candleB, TABLE_SURFACE_Y + 0.0012, 0.3);
+    for (const prop of this.tableProps) drop(prop, TABLE_SURFACE_Y + 0.0012, 0.25);
     drop(table, 0.0015, 0.2);
   }
 

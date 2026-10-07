@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { ITEM_LABELS } from "../types";
 import { ironDarkMaterial, ironMaterial } from "./materials";
 import { makeCrestTexture } from "./textures";
+import { styleModel } from "../assets";
 
 const RADIUS = 0.31;
 
@@ -93,6 +94,36 @@ export function buildShield(): THREE.Group {
     rivet.position.set(Math.cos(a) * 0.09, 0.055, Math.sin(a) * 0.09);
     group.add(rivet);
   }
+
+  group.userData.itemId = "shield";
+  group.userData.label = ITEM_LABELS.shield.name;
+  return group;
+}
+
+/** Licensed buckler is 0.45 m across; scaled up to hold the shield's spot. */
+const BUCKLER_SCALE = 1.22;
+
+/**
+ * Wood-and-iron buckler from the licensed model, laid face-up on the
+ * table. The model stands upright in XY facing +Z with its pivot at the
+ * bottom of the rim; it is tipped back onto its face's normal (+Z → +Y)
+ * and re-centred so the group pivot is the disc centre on the table.
+ */
+export function buildShieldFromModel(model: THREE.Object3D): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "shield";
+  const holder = new THREE.Group();
+  // Weathered planks read grey-white under the key spot: warm them up;
+  // the iron fittings go near-black without an env map, so soften metal.
+  styleModel(model, { tint: 0xcfb899, metalness: 0.55 });
+  model.rotation.x = -Math.PI / 2;
+  model.scale.setScalar(BUCKLER_SCALE);
+  holder.add(model);
+  holder.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(holder);
+  const center = box.getCenter(new THREE.Vector3());
+  model.position.set(-center.x, -box.min.y, -center.z);
+  group.add(holder);
 
   group.userData.itemId = "shield";
   group.userData.label = ITEM_LABELS.shield.name;
