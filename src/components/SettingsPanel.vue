@@ -183,7 +183,7 @@ const flatUrl = ((): string => {
             @click="settings.quality = opt.value"
             @keydown="onRadioKeydown($event, QUALITY_OPTIONS, settings.quality, (v) => (settings.quality = v))"
           >
-            <span class="block font-heading text-xs uppercase tracking-wider">{{ opt.label }}</span>
+            <span class="opt-label block font-heading uppercase">{{ opt.label }}</span>
             <span class="block font-body text-xs italic text-ink-faint">{{ opt.value }}</span>
           </button>
         </div>
@@ -204,7 +204,7 @@ const flatUrl = ((): string => {
             @click="settings.timeOfDay = opt.value"
             @keydown="onRadioKeydown($event, TIME_OPTIONS, settings.timeOfDay, (v) => (settings.timeOfDay = v))"
           >
-            <span class="block font-heading text-xs uppercase tracking-wider">{{ opt.label }}</span>
+            <span class="opt-label block font-heading uppercase">{{ opt.label }}</span>
             <span class="block font-body text-xs italic text-ink-faint">{{ opt.hint }}</span>
           </button>
         </div>
@@ -324,13 +324,22 @@ const flatUrl = ((): string => {
 
 /* Parchment radio row */
 .quality-opt {
-  padding: 0.5rem 0.25rem;
+  /* min-width:0 lets the grid track shrink below the label's intrinsic
+     width; the horizontal padding then keeps the caps off the border. */
+  min-width: 0;
+  padding: 0.5rem 0.375rem;
   text-align: center;
   border: 1px solid rgba(90, 46, 29, 0.35);
   border-radius: 0.25rem;
   color: var(--ink-soft);
   background: rgba(255, 250, 235, 0.25);
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+.opt-label {
+  /* "Candlelight" is the longest single word: sized so it fits the
+     three-up track at the narrowest panel width without breaking. */
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
 }
 .quality-opt:hover {
   border-color: rgba(90, 46, 29, 0.7);
