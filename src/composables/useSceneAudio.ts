@@ -29,7 +29,7 @@ let litFraction = 1;
 /** Flight time of the last fireball (0 = reduced motion: no flight). */
 let lastFlightMs = 800;
 let lastHoverAt = 0;
-let lastCreakAt = 0;
+let lastCreakAt = -Infinity;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let idleTimer2: ReturnType<typeof setTimeout> | null = null;
 
