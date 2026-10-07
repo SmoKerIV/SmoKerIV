@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { BookSection } from "../three/types";
 import {
   identity,
@@ -123,9 +123,43 @@ function onTouchEnd(event: TouchEvent): void {
   if (target) go(target.id);
 }
 
+/* Bookmark strip: keep the active tab in view, fade the clipped edges. */
+const tabScroll = ref<HTMLElement | null>(null);
+const tabEls = new Map<BookSection, HTMLElement>();
+const fadeStart = ref(false);
+const fadeEnd = ref(false);
+
+function setTabEl(id: BookSection, el: unknown): void {
+  if (el instanceof HTMLElement) tabEls.set(id, el);
+  else tabEls.delete(id);
+}
+
+function updateFades(): void {
+  const el = tabScroll.value;
+  if (!el) return;
+  fadeStart.value = el.scrollLeft > 4;
+  fadeEnd.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+}
+
+function revealActiveTab(): void {
+  const strip = tabScroll.value;
+  const tab = tabEls.get(active.value);
+  if (!strip || !tab || strip.scrollWidth <= strip.clientWidth) return;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Centre the active tab; scrollTo on the strip only, never the page.
+  strip.scrollTo({
+    left: tab.offsetLeft - (strip.clientWidth - tab.offsetWidth) / 2,
+    behavior: reduce ? "auto" : "smooth",
+  });
+}
+watch(active, () => void nextTick(revealActiveTab));
+
 onMounted(() => {
   scrollToSection(props.section);
   onScroll();
+  updateFades();
+  revealActiveTab();
+  window.addEventListener("resize", updateFades);
 });
 watch(
   () => props.section,
@@ -135,6 +169,7 @@ watch(
   },
 );
 onBeforeUnmount(() => {
+  window.removeEventListener("resize", updateFades);
   if (scrollRaf) cancelAnimationFrame(scrollRaf);
 });
 
@@ -321,16 +356,24 @@ const contactLines = [
 
     <!-- Bookmark strip: sticky at the reader's thumb, scrolls to sections -->
     <nav class="tab-strip" aria-label="Tome sections">
-      <button
-        v-for="n in NAV"
-        :key="n.id"
-        class="tab"
-        :class="{ 'tab-active': n.id === active }"
-        :aria-current="n.id === active ? 'page' : undefined"
-        @click="go(n.id)"
+      <div
+        ref="tabScroll"
+        class="tab-scroll"
+        :class="{ 'fade-start': fadeStart, 'fade-end': fadeEnd }"
+        @scroll.passive="updateFades"
       >
-        {{ n.label }}
-      </button>
+        <button
+          v-for="n in NAV"
+          :key="n.id"
+          :ref="(el) => setTabEl(n.id, el)"
+          class="tab"
+          :class="{ 'tab-active': n.id === active }"
+          :aria-current="n.id === active ? 'page' : undefined"
+          @click="go(n.id)"
+        >
+          {{ n.label }}
+        </button>
+      </div>
     </nav>
   </div>
 </template>
@@ -455,15 +498,35 @@ const contactLines = [
   position: sticky;
   bottom: 0;
   z-index: 10;
+  padding: 0.9rem 0 calc(0.5rem + var(--safe-bottom));
+  background: linear-gradient(180deg, transparent, rgba(13, 10, 8, 0.94) 42%);
+}
+.tab-scroll {
   display: flex;
   gap: 0.4rem;
   overflow-x: auto;
-  padding: 0.9rem 0.75rem calc(0.5rem + var(--safe-bottom));
-  background: linear-gradient(180deg, transparent, rgba(13, 10, 8, 0.94) 42%);
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 1.5rem;
+  padding: 0.25rem 0.75rem 0;
   scrollbar-width: none;
 }
-.tab-strip::-webkit-scrollbar {
+.tab-scroll::-webkit-scrollbar {
   display: none;
+}
+/* Edge fades hint that more tabs wait off-screen; they only show on the
+   side that is actually clipped. */
+.tab-scroll.fade-end {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 2rem), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 2rem), transparent);
+}
+.tab-scroll.fade-start {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 2rem);
+  mask-image: linear-gradient(90deg, transparent, #000 2rem);
+}
+.tab-scroll.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 2rem, #000 calc(100% - 2rem), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 2rem, #000 calc(100% - 2rem), transparent);
 }
 /* Auto margins center the tabs when they fit, without clipping the
    start of the row when they overflow (justify-content: center would). */
@@ -477,6 +540,7 @@ const contactLines = [
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+  scroll-snap-align: center;
   min-height: 2.75rem;
   padding: 0.4rem 0.85rem;
   font-family: "Cinzel", serif;
