@@ -90,8 +90,8 @@ export const quests: Quest[] = [
     summary: "Forging oil-sector realms and a SuperQi mini app for 1M+ families.",
   },
   {
-    company: "Freelance",
-    role: "Software Developer",
+    company: "Self-employed",
+    role: "Freelance Software Developer",
     period: "2024 — Present",
     current: true,
     summary: "A wandering sellsword: cafe menus, a clinic CRM, a portfolio.",
