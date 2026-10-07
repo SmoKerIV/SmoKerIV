@@ -195,6 +195,8 @@ const MODEL_ANISOTROPY: Record<Quality, number> = { low: 2, medium: 4, high: 8 }
 const COMPILE_TIMEOUT_MS = 5000;
 /** Delay after the stage is ready before fetching the d20 physics engine. */
 const DICE_PRELOAD_DELAY_MS = 2500;
+/** Peek at the settled die only on screens narrower than this aspect. */
+const PEEK_MAX_ASPECT = 0.8;
 /** Upper bound on a start-up yield when rAF is throttled (hidden tab). */
 const YIELD_FALLBACK_MS = 50;
 
@@ -1187,6 +1189,7 @@ export class SceneManager implements ISceneManager {
       onResult: (value) => {
         this.diceRolling = false;
         this.markShadowsDirty();
+        this.peekAtDie(dice);
         if (!this.disposed) this.events.onDiceResult?.(value);
       },
       onImpact: (strength, hard) => {
@@ -1194,6 +1197,16 @@ export class SceneManager implements ISceneManager {
       },
     });
     this.dicePhysics.setBookOpen(this.bookOpen);
+  }
+
+  /**
+   * Narrow screens: lean in so the settled d20's number is readable, then
+   * return (CameraRig.peekAt skips it under reduced motion / mid-focus).
+   */
+  private peekAtDie(dice: THREE.Group): void {
+    if (this.disposed || this._focused !== null || this.transitioning) return;
+    if (this.rig.camera.aspect >= PEEK_MAX_ASPECT) return;
+    this.rig.peekAt(dice.getWorldPosition(new THREE.Vector3()));
   }
 
   private placeOnTable(group: THREE.Group, placement: Placement): void {

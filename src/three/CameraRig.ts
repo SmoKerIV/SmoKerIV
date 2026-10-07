@@ -35,11 +35,22 @@ const ASPECT_WIDE = 1.25;
 const ASPECT_NARROW = 0.5;
 /** Camera pitch (degrees above horizontal, seen from the table target). */
 const PITCH_BASE = 21;
-const PITCH_NARROW = 42;
-/** Screen-space safe area for the table fit (NDC): sides, top, bottom. */
-const FIT_X = 0.92;
-const FIT_TOP = 0.9;
-const FIT_BOTTOM = 0.8;
+const PITCH_NARROW = 31;
+/**
+ * Screen-space safe area for the table fit (NDC). The layout's lowest
+ * point is pinned to the bottom of the safe area (so the frame holds
+ * table, not floor) and the camera comes in until the items fill the
+ * width; whatever is left above shows the room behind. Phones keep the
+ * bottom clear for the overlay's hint and buttons.
+ */
+const FIT_X_WIDE = 0.93;
+const FIT_X_NARROW = 0.96;
+const FIT_TOP_WIDE = 0.55;
+const FIT_TOP_NARROW = 0.5;
+const FIT_BOTTOM_WIDE = 0.84;
+const FIT_BOTTOM_NARROW = 0.36;
+/** Closest the overview may come (m from the target). */
+const MIN_TABLE_DISTANCE = 1.1;
 /** The camera never rises above the ceiling beams (≈3.03 m). */
 const MAX_CAMERA_Y = 2.95;
 const MAX_CAMERA_Z = 3.2;
@@ -57,13 +68,20 @@ const FOCUS_PRESETS: Record<ItemId, FocusPreset> = {
 };
 
 /** Open spread: cover lands left of the spine; center ≈ x −0.24 off the anchor. */
-const READING_TARGET_OFFSET = v3(-0.24, 0.005, -0.01);
-/** Open book bounds relative to the anchor: both covers + page block. */
-const BOOK_OPEN_HALF_W = 0.5;
+const READING_TARGET_OFFSET = v3(-0.228, 0.005, -0.01);
+/**
+ * Half-width of the two parchment pages (2 x 0.46 m). The reading fit is
+ * driven by the pages, not the covers: the ink panes are 640 CSS px per
+ * 0.46 m page, so filling the width with the pages (covers may run off the
+ * edges) keeps the projected text near its CSS size — at 1440x900 the
+ * pages project above 1:1; a 4:3 1024 px viewport tops out near 0.78.
+ */
+const BOOK_PAGES_HALF_W = 0.46;
+/** Side air beyond the page edges (fraction of the half-width). */
+const BOOK_PAGES_MARGIN = 1.13;
+/** Open book half-depth; the margin leaves room for the section tabs
+ *  above and the page arrows below. */
 const BOOK_OPEN_HALF_D = 0.18;
-/** Margins: sides leave air around the covers; depth leaves room for the
- *  section tabs above and the page arrows below. */
-const BOOK_MARGIN_W = 1.16;
 const BOOK_MARGIN_D = 1.6;
 /**
  * Near-perfect top-down reading pose (≈1° toward the reader — just enough
@@ -75,6 +93,16 @@ const BOOK_MARGIN_D = 1.6;
 const READING_TILT = { y: 0.99995, z: 0.01 };
 
 const FOCUS_DURATION = 1.6;
+/** Post-roll peek at the die on narrow screens (seconds / metres). */
+const PEEK_IN = 0.75;
+const PEEK_HOLD = 1.6;
+const PEEK_OUT = 0.9;
+const PEEK_OFFSET = { y: 0.42, z: 0.3 };
+const xyz = (v: THREE.Vector3): { x: number; y: number; z: number } => ({
+  x: v.x,
+  y: v.y,
+  z: v.z,
+});
 /** Settled-camera ease when the viewport aspect changes. */
 const RETARGET_DURATION = 0.3;
 const REDUCED_DURATION = 0.3;
@@ -314,6 +342,31 @@ export class CameraRig {
     return this.tween !== null;
   }
 
+  /**
+   * Narrow screens: after a roll the d20 is a few pixels across, so lean
+   * in over the settled die, hold so its number can be read, then return
+   * to the table. Only from a settled table view; any focus or resize
+   * cancels it (both kill the tween). No-op under reduced motion.
+   */
+  peekAt(point: THREE.Vector3): void {
+    if (this.reducedMotion || this.currentItem !== null || this.tween) return;
+    const target = point.clone();
+    target.y += 0.01;
+    // Steep, close view from the reader's side.
+    const position = target.clone().add(v3(0, PEEK_OFFSET.y, PEEK_OFFSET.z));
+    const home = this.poseFor(null);
+    this.tween = gsap
+      .timeline({
+        onComplete: () => {
+          this.tween = null;
+        },
+      })
+      .to(this.basePosition, { ...xyz(position), duration: PEEK_IN, ease: FOCUS_EASE }, 0)
+      .to(this.baseTarget, { ...xyz(target), duration: PEEK_IN, ease: FOCUS_EASE }, 0)
+      .to(this.basePosition, { ...xyz(home.position), duration: PEEK_OUT, ease: FOCUS_EASE }, PEEK_IN + PEEK_HOLD)
+      .to(this.baseTarget, { ...xyz(home.target), duration: PEEK_OUT, ease: FOCUS_EASE }, PEEK_IN + PEEK_HOLD);
+  }
+
   /** Freeze idle sway/parallax while the tome is being read. */
   setReading(reading: boolean): void {
     this.swayScale = reading ? 0 : 1;
@@ -338,7 +391,7 @@ export class CameraRig {
       // Fit the open book's bounding box (both covers + margin) into the
       // frustum: the distance must satisfy the horizontal and the vertical
       // half-angle, whichever is tighter for this aspect.
-      const dH = (BOOK_OPEN_HALF_W * BOOK_MARGIN_W) / (tanV * aspect);
+      const dH = (BOOK_PAGES_HALF_W * BOOK_PAGES_MARGIN) / (tanV * aspect);
       const dV = (BOOK_OPEN_HALF_D * BOOK_MARGIN_D) / tanV;
       const d = THREE.MathUtils.clamp(Math.max(dH, dV), 0.6, 1.9);
       const target = anchor.clone().add(READING_TARGET_OFFSET);
@@ -364,16 +417,20 @@ export class CameraRig {
   }
 
   /**
-   * Overview pose: base direction/target from the desktop pose, pitched
-   * steeper on narrow screens, pulled back along that direction until every
-   * corner of the item layout projects inside the safe area (and never past
-   * the room's ceiling/wall).
+   * Overview pose: pitched view from +Z (steeper on narrow screens). For a
+   * candidate distance, the camera is raised/lowered (pitch kept) until the
+   * layout's lowest corner sits on the bottom of the safe area; the closest
+   * distance whose corners then also fit the sides and top wins (never past
+   * the room's ceiling/front wall).
    */
   private tablePose(aspect: number): Pose {
     const t = this.narrowness(aspect);
     const pitch = THREE.MathUtils.degToRad(
       THREE.MathUtils.lerp(PITCH_BASE, PITCH_NARROW, t),
     );
+    const fitX = THREE.MathUtils.lerp(FIT_X_WIDE, FIT_X_NARROW, t);
+    const fitTop = THREE.MathUtils.lerp(FIT_TOP_WIDE, FIT_TOP_NARROW, t);
+    const fitBottom = THREE.MathUtils.lerp(FIT_BOTTOM_WIDE, FIT_BOTTOM_NARROW, t);
     const target = TABLE_POSE.target.clone();
     const dir = v3(0, Math.sin(pitch), Math.cos(pitch));
     const baseDist = TABLE_POSE.position.distanceTo(TABLE_POSE.target);
@@ -397,46 +454,70 @@ export class CameraRig {
     cam.far = this.camera.far;
     cam.updateProjectionMatrix();
     cam.up.copy(WORLD_UP);
-    const fits = (d: number): boolean => {
-      cam.position.copy(target).addScaledVector(dir, d);
-      cam.lookAt(target);
+    const aim = new THREE.Vector3();
+    const extent = { x: 0, minY: 0, maxY: 0 };
+    const ceilingLift = (d: number): number =>
+      MAX_CAMERA_Y - target.y - d * dir.y;
+    // Raise the camera and its aim together (same pitch); once the camera
+    // meets the ceiling only the aim keeps rising (the view tilts up).
+    const place = (d: number, lift: number, out: THREE.Vector3): THREE.Vector3 =>
+      out.copy(target).addScaledVector(dir, d).setY(
+        target.y + d * dir.y + Math.min(lift, ceilingLift(d)),
+      );
+    const measure = (d: number, lift: number): typeof extent => {
+      aim.copy(target);
+      aim.y += lift;
+      place(d, lift, cam.position);
+      cam.lookAt(aim);
       cam.updateMatrixWorld();
+      extent.x = 0;
+      extent.minY = Infinity;
+      extent.maxY = -Infinity;
       for (const c of corners) {
         const p = this.fitPoint.copy(c).project(cam);
-        if (
-          Math.abs(p.x) > FIT_X ||
-          p.y > FIT_TOP ||
-          p.y < -FIT_BOTTOM
-        ) {
-          return false;
-        }
+        extent.x = Math.max(extent.x, Math.abs(p.x));
+        extent.minY = Math.min(extent.minY, p.y);
+        extent.maxY = Math.max(extent.maxY, p.y);
       }
-      return true;
+      return extent;
     };
-    // Largest distance the room allows along this direction.
-    const dMax = Math.max(
-      baseDist,
-      Math.min(
-        (MAX_CAMERA_Y - target.y) / dir.y,
-        (MAX_CAMERA_Z - target.z) / dir.z,
-      ),
-    );
-    let d = baseDist;
-    if (!fits(d)) {
-      let lo = d;
-      let hi = dMax;
-      if (!fits(hi)) {
-        d = hi; // best effort inside the room
-      } else {
-        for (let i = 0; i < 20; i++) {
-          const mid = (lo + hi) / 2;
-          if (fits(mid)) hi = mid;
-          else lo = mid;
-        }
-        d = hi;
+    // Lift (m) that puts the lowest corner on the bottom edge at distance d.
+    const liftFor = (d: number): number => {
+      let lo = -0.6;
+      let hi = 1.2;
+      for (let i = 0; i < 18; i++) {
+        const mid = (lo + hi) / 2;
+        if (measure(d, mid).minY < -fitBottom) hi = mid;
+        else lo = mid;
       }
+      return lo;
+    };
+    const fits = (d: number): boolean => {
+      const lift = liftFor(d);
+      const e = measure(d, lift);
+      return e.x <= fitX && e.maxY <= fitTop && e.minY >= -fitBottom - 0.02;
+    };
+    const dMax = Math.max(
+      MIN_TABLE_DISTANCE,
+      (MAX_CAMERA_Z - target.z) / dir.z,
+    );
+    let d = dMax;
+    if (fits(MIN_TABLE_DISTANCE)) {
+      d = MIN_TABLE_DISTANCE;
+    } else if (fits(dMax)) {
+      let lo = MIN_TABLE_DISTANCE;
+      let hi = dMax;
+      for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(mid)) hi = mid;
+        else lo = mid;
+      }
+      d = hi;
     }
-    return { position: target.clone().addScaledVector(dir, d), target };
+    const lift = liftFor(d);
+    const position = place(d, lift, new THREE.Vector3());
+    target.y += lift;
+    return { position, target };
   }
 
   private killTween(): void {
