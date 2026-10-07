@@ -2,6 +2,7 @@
 import {
   computed,
   defineAsyncComponent,
+  nextTick,
   onBeforeUnmount,
   onMounted,
   ref,
@@ -72,6 +73,14 @@ const hoveredItem = ref<ItemId | null>(null);
 const highlightAnnouncement = ref("");
 /** True after a Tab-cycle keypress, false once the pointer moves again. */
 let keyboardHighlighting = false;
+/** Suppresses hover ticks while the cycle fast-forwards to a target curio. */
+let silentHighlight = false;
+/** Last curio the keyboard cycle highlighted (null once focus leaves the ring). */
+const kbItem = ref<ItemId | null>(null);
+/** Curio that was activated from the keyboard: re-highlighted when the camera returns. */
+let restoreItem: ItemId | null = null;
+/** DOM focus anchor while a curio is highlighted, so the next Tab continues the cycle. */
+const curioProxy = ref<HTMLElement | null>(null);
 const hoverX = ref(0);
 const hoverY = ref(0);
 
@@ -233,10 +242,16 @@ const events: SceneEvents = {
     }
     // A tick when a new curio is hovered (mouse) or highlighted (keyboard);
     // never on touch, where a tap is a select, not a hover.
-    if (item && item !== hoveredItem.value && (!isCoarseDevice.value || keyboardHighlighting)) {
+    if (
+      item &&
+      item !== hoveredItem.value &&
+      !silentHighlight &&
+      (!isCoarseDevice.value || keyboardHighlighting)
+    ) {
       sceneAudio.hover();
     }
     hoveredItem.value = item;
+    if (item && keyboardHighlighting) kbItem.value = item;
     highlightAnnouncement.value =
       item && keyboardHighlighting
         ? `${ITEM_LABELS[item].name}. Press Enter to open.`
@@ -256,12 +271,14 @@ const events: SceneEvents = {
     }
     if (item === "spellbook" && flatBookDevice()) {
       hoveredItem.value = null;
+      restoreItem = keyboardHighlighting ? item : null;
       flatBookOpen.value = true;
       track("book_open", { mode: "flat" });
       return;
     }
     if (item !== "spellbook") track("item_focus", { item });
     hoveredItem.value = null;
+    restoreItem = keyboardHighlighting ? item : null;
     // Re-clicks on the already-focused item (candle snuffing) must not
     // hide the card — focusItem is idempotent and won't settle again.
     const refocus = focusedItem.value === item;
@@ -280,6 +297,7 @@ const events: SceneEvents = {
       focusCardShown.value = false;
       focusedItem.value = null;
       if (appPhase.value === "focused") appPhase.value = "table";
+      restoreCurioFocus();
     } else {
       focusCardShown.value = true;
     }
@@ -461,6 +479,121 @@ function trackKonami(key: string): void {
   showToast("🎮 +30 XP — a hidden path reveals itself", "nat20");
 }
 
+/**
+ * The curios in the scene's own keyboard order (src/three/interaction.ts).
+ * Tab walks these, then the HUD buttons in DOM order, then wraps.
+ */
+const CURIO_ORDER: ItemId[] = [
+  "spellbook",
+  "sword",
+  "shield",
+  "potion",
+  "scroll",
+  "dice",
+  "tankard",
+  "candle",
+];
+
+function hudFocusables(): HTMLElement[] {
+  const hud = document.querySelector<HTMLElement>("[data-hud]");
+  if (!hud) return [];
+  return Array.from(hud.querySelectorAll<HTMLElement>("button, a[href]")).filter(
+    (el) => el.offsetParent !== null,
+  );
+}
+
+/** Drop the 3D highlight (the scene clears it on pointer leave). */
+function clearCurioHighlight(): void {
+  kbItem.value = null;
+  canvasEl.value?.dispatchEvent(
+    new PointerEvent("pointerleave", { pointerType: "mouse" }),
+  );
+}
+
+/** Highlight the curio at `index`, stepping the scene's cycle quietly. */
+function highlightCurio(index: number): void {
+  if (!scene) return;
+  const target = CURIO_ORDER[index]!;
+  keyboardHighlighting = true;
+  silentHighlight = true;
+  try {
+    for (let i = 0; i <= CURIO_ORDER.length; i++) {
+      if (scene.highlightNext(1) === target) break;
+    }
+  } finally {
+    silentHighlight = false;
+  }
+  sceneAudio.hover();
+  curioProxy.value?.focus({ preventScroll: true });
+}
+
+function handleTab(event: KeyboardEvent): void {
+  const target = event.target as HTMLElement | null;
+  const back = event.shiftKey;
+  // Shift+Tab from the skip link leaves the page, as it should.
+  if (back && target?.closest(".skip-link")) return;
+  // Nothing focused yet (fresh page): the DOM's first stop is the skip link.
+  const nothingFocused = !target || target === document.body;
+  if (!back && nothingFocused && !hoveredItem.value && !kbItem.value) return;
+
+  const hud = hudFocusables();
+  const hudIndex = target ? hud.indexOf(target) : -1;
+  if (hudIndex >= 0) {
+    // Inside the HUD native Tab order does the work; only its ends wrap.
+    if (back ? hudIndex > 0 : hudIndex < hud.length - 1) return;
+    event.preventDefault();
+    highlightCurio(back ? CURIO_ORDER.length - 1 : 0);
+    return;
+  }
+
+  event.preventDefault();
+  keyboardHighlighting = true;
+  const current = hoveredItem.value ?? kbItem.value;
+  const at = current ? CURIO_ORDER.indexOf(current) : -1;
+  if (at < 0) {
+    highlightCurio(back ? CURIO_ORDER.length - 1 : 0);
+  } else if (back ? at === 0 : at === CURIO_ORDER.length - 1) {
+    // Off the end of the curios: into the HUD, or round again without one.
+    const edge = hud[back ? hud.length - 1 : 0];
+    if (edge) {
+      clearCurioHighlight();
+      edge.focus();
+    } else {
+      highlightCurio(back ? CURIO_ORDER.length - 1 : 0);
+    }
+  } else {
+    scene?.highlightNext(back ? -1 : 1);
+    curioProxy.value?.focus({ preventScroll: true });
+  }
+}
+
+/** Focus moved onto a HUD button: the 3D highlight steps aside. */
+function onFocusIn(event: FocusEvent): void {
+  if (appPhase.value !== "table") return;
+  if ((event.target as HTMLElement | null)?.closest("[data-hud]")) {
+    if (hoveredItem.value || kbItem.value) clearCurioHighlight();
+  }
+}
+
+/**
+ * After a curio opened from the keyboard is closed again, put the highlight
+ * and DOM focus back on it so the next Tab carries on round the cycle.
+ */
+function restoreCurioFocus(): void {
+  const item = restoreItem;
+  restoreItem = null;
+  if (!item || !keyboardHighlighting || !scene) return;
+  void nextTick(() => {
+    if (appPhase.value !== "table" || bookOpen.value || settingsOpen.value) return;
+    highlightCurio(CURIO_ORDER.indexOf(item));
+  });
+}
+
+/** The skip link: straight to the tome without cycling the curios. */
+function skipToTome(): void {
+  openBookAt("cover");
+}
+
 function onPointerMove(): void {
   keyboardHighlighting = false;
 }
@@ -508,15 +641,16 @@ function onKeydown(event: KeyboardEvent): void {
   }
 
   if (event.key === "Tab") {
-    if (scene && appPhase.value === "table") {
-      event.preventDefault();
-      keyboardHighlighting = true;
-      scene.highlightNext(event.shiftKey ? -1 : 1);
-    }
+    if (scene && appPhase.value === "table") handleTab(event);
     return;
   }
-  if (event.key === "Enter") {
-    if (scene && appPhase.value === "table") scene.activateHighlighted();
+  if (event.key === "Enter" || event.key === " ") {
+    // Buttons and links (HUD, skip link) keep their native activation.
+    if (target?.closest("button, a[href], [role='button']")) return;
+    if (scene && appPhase.value === "table" && (hoveredItem.value || kbItem.value)) {
+      event.preventDefault();
+      scene.activateHighlighted();
+    }
     return;
   }
   if (event.key === "Escape" && focusedItem.value) {
@@ -583,7 +717,21 @@ watch(() => settings.sfxOn, (on) => audio.setSfxOn(on));
 /* Flat tome (small screens): the same book thump on open and close. */
 watch(flatBookOpen, (open, wasOpen) => {
   if (open && !wasOpen) void audio.play("book-open");
-  else if (!open && wasOpen) sceneAudio.bookClose();
+  else if (!open && wasOpen) {
+    sceneAudio.bookClose();
+    restoreCurioFocus();
+  }
+});
+/* The console and ledger hand focus back to what held it; if that was
+   nothing (typed `sudo`), land on the highlighted curio instead of BODY. */
+watch([consoleOpen, settingsOpen], ([consoleNow, settingsNow], [consoleWas, settingsWas]) => {
+  if ((consoleNow && !consoleWas) || (settingsNow && !settingsWas)) return;
+  void nextTick(() => {
+    const active = document.activeElement;
+    if ((!active || active === document.body) && kbItem.value && appPhase.value === "table") {
+      curioProxy.value?.focus({ preventScroll: true });
+    }
+  });
 });
 watch(consoleOpen, (open) => {
   if (!open) return;
@@ -654,6 +802,7 @@ onMounted(async () => {
     settings.reducedMotion,
   );
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("focusin", onFocusIn);
   window.addEventListener("pointermove", onPointerMove, { passive: true });
   window.addEventListener("hashchange", applyHash);
   window.addEventListener("popstate", applyHash);
@@ -690,6 +839,7 @@ function teardown(): void {
   uninstallUiHover = null;
   sceneAudio.cancelIdle();
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("focusin", onFocusIn);
   window.removeEventListener("pointermove", onPointerMove);
   window.removeEventListener("hashchange", applyHash);
   window.removeEventListener("popstate", applyHash);
@@ -711,6 +861,21 @@ import.meta.hot?.dispose(() => teardown());
     <FallbackView v-if="useFallback" v-model:section="bookSection" />
 
     <template v-else>
+      <!-- first stop for keyboard users: straight to the tome -->
+      <a href="#/book/cover" class="skip-link" @click.prevent="skipToTome">
+        Skip to the tome (book)
+      </a>
+
+      <!-- DOM focus anchor for the Tab-cycled 3D curios -->
+      <div
+        ref="curioProxy"
+        tabindex="-1"
+        role="group"
+        aria-label="Table curios"
+        class="sr-only"
+        style="outline: none"
+      />
+
       <canvas
         ref="canvasEl"
         class="absolute inset-0 block h-full w-full"

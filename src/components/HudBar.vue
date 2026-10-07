@@ -19,6 +19,7 @@ const emit = defineEmits<{
 
 <template>
   <div
+    data-hud
     class="fixed inset-x-0 bottom-0 z-20 items-end justify-between"
     :class="bookOpen ? 'hidden md:flex' : 'flex'"
     style="

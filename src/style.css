@@ -501,3 +501,24 @@ textarea {
 .flat-tome main {
   margin-top: calc(3.5rem + var(--safe-top));
 }
+
+/* Skip link: invisible until it takes keyboard focus. */
+.skip-link {
+  position: fixed;
+  top: calc(0.75rem + var(--safe-top));
+  left: calc(0.75rem + var(--safe-left));
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  background: var(--parchment);
+  color: var(--ink);
+  font-family: "Cinzel", serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  transform: translateY(-250%);
+}
+.skip-link:focus {
+  transform: none;
+}
