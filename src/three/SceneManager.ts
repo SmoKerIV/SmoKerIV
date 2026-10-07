@@ -183,6 +183,17 @@ export class SceneManager implements ISceneManager {
     new THREE.Vector3(0.23, 0, 0.165), // bottom-right
   ];
   private readonly cornerScratch = new THREE.Vector3();
+  /** Preallocated screen-space corners (tl, tr, bl, br) for projectPage. */
+  private readonly cornerScreen = Array.from({ length: 4 }, () => ({
+    x: 0,
+    y: 0,
+  }));
+  /**
+   * Camera matrixWorld + projectionMatrix, left/right page matrixWorld
+   * (16 each) and canvas width/height as of the last projection.
+   */
+  private readonly pageInputCache = new Float64Array(16 * 4 + 2);
+  private pageInputValid = false;
   /** Last emitted matrices — identical frames are skipped so the DOM ink
    *  layer stays untouched (and rock-solid) once the camera settles. */
   private lastPageTransforms: { left: string; right: string } | null = null;
@@ -1207,6 +1218,7 @@ export class SceneManager implements ISceneManager {
     this.rig.setReading(reading);
     if (!reading) {
       this.lastPageTransforms = null;
+      this.pageInputValid = false;
       this.events.onBookPageTransforms?.(null);
     }
   }
@@ -1217,7 +1229,83 @@ export class SceneManager implements ISceneManager {
     this.readingPages.right.visible = visible;
   }
 
-  /** Project both reading pages to screen space and hand the UI transforms. */
+  /**
+   * Has anything the page projection depends on changed since the last
+   * emit? Compares (and refreshes) the cached camera world/projection
+   * matrices, both page world matrices and the canvas size. Allocation-free.
+   */
+  private pageInputsChanged(
+    left: THREE.Mesh,
+    right: THREE.Mesh,
+    width: number,
+    height: number,
+  ): boolean {
+    const cache = this.pageInputCache;
+    const camera = this.rig.camera;
+    let changed = !this.pageInputValid;
+    let o = 0;
+    const sync = (elements: ArrayLike<number>): void => {
+      for (let i = 0; i < 16; i++, o++) {
+        if (cache[o] !== elements[i]) {
+          cache[o] = elements[i];
+          changed = true;
+        }
+      }
+    };
+    sync(camera.matrixWorld.elements);
+    sync(camera.projectionMatrix.elements);
+    sync(left.matrixWorld.elements);
+    sync(right.matrixWorld.elements);
+    if (cache[o] !== width || cache[o + 1] !== height) {
+      cache[o] = width;
+      cache[o + 1] = height;
+      changed = true;
+    }
+    this.pageInputValid = true;
+    return changed;
+  }
+
+  /**
+   * Fit a flat 2D CSS matrix to one page's four projected corners.
+   * The reading camera looks (almost) straight down at the flat page, so
+   * its projection is affine to within ~1px: pin the ink with a flat 2D
+   * matrix least-squares-fit over the four projected corners. This follows
+   * the book's slight rotation exactly and never uses matrix3d —
+   * perspective-transformed text layers made Chromium blank the ink.
+   */
+  private projectPage(mesh: THREE.Mesh, width: number, height: number): string {
+    const pts = this.cornerScreen;
+    for (let i = 0; i < 4; i++) {
+      this.cornerScratch
+        .copy(this.cornerLocal[i]!)
+        .applyMatrix4(mesh.matrixWorld)
+        .project(this.rig.camera);
+      pts[i]!.x = ((this.cornerScratch.x + 1) / 2) * width;
+      pts[i]!.y = ((1 - this.cornerScratch.y) / 2) * height;
+    }
+    const tl = pts[0]!;
+    const tr = pts[1]!;
+    const bl = pts[2]!;
+    const br = pts[3]!;
+    const a = (tr.x - tl.x + (br.x - bl.x)) / (2 * PAGE_CSS_W);
+    const b = (tr.y - tl.y + (br.y - bl.y)) / (2 * PAGE_CSS_W);
+    const c = (bl.x - tl.x + (br.x - tr.x)) / (2 * PAGE_CSS_H);
+    const d = (bl.y - tl.y + (br.y - tr.y)) / (2 * PAGE_CSS_H);
+    // Anchor at the centroid so the residual splits evenly across corners.
+    const cx = (tl.x + tr.x + bl.x + br.x) / 4;
+    const cy = (tl.y + tr.y + bl.y + br.y) / 4;
+    const e = cx - (a * PAGE_CSS_W + c * PAGE_CSS_H) / 2;
+    const f = cy - (b * PAGE_CSS_W + d * PAGE_CSS_H) / 2;
+    return `matrix(${a.toFixed(6)}, ${b.toFixed(6)}, ${c.toFixed(6)}, ${d.toFixed(6)}, ${e.toFixed(2)}, ${f.toFixed(2)})`;
+  }
+
+  /**
+   * Project both reading pages to screen space and hand the UI transforms.
+   * Runs after render (world/projection matrices are fresh). With a settled
+   * camera nothing changes, so the whole projection is skipped; the only
+   * allocation is the emitted strings/object when the result does change
+   * (a fresh object, so the App's ref sees the update).
+   */
   private emitPageTransforms(): void {
     const pages = this.readingPages;
     const handler = this.events.onBookPageTransforms;
@@ -1225,46 +1313,14 @@ export class SceneManager implements ISceneManager {
     const canvas = this.renderer.domElement;
     const width = canvas.clientWidth || window.innerWidth;
     const height = canvas.clientHeight || window.innerHeight;
+    if (!this.pageInputsChanged(pages.left, pages.right, width, height)) return;
 
-    const projectPage = (mesh: THREE.Mesh): string => {
-      mesh.updateWorldMatrix(true, false);
-      const pts = this.cornerLocal.map((corner) => {
-        this.cornerScratch
-          .copy(corner)
-          .applyMatrix4(mesh.matrixWorld)
-          .project(this.rig.camera);
-        return {
-          x: ((this.cornerScratch.x + 1) / 2) * width,
-          y: ((1 - this.cornerScratch.y) / 2) * height,
-        };
-      });
-      // The reading camera looks (almost) straight down at the flat page,
-      // so its projection is affine to within ~1px: pin the ink with a flat
-      // 2D matrix least-squares-fit over the four projected corners. This
-      // follows the book's slight rotation exactly and never uses matrix3d —
-      // perspective-transformed text layers made Chromium blank the ink.
-      const tl = pts[0]!;
-      const tr = pts[1]!;
-      const bl = pts[2]!;
-      const br = pts[3]!;
-      const a = (tr.x - tl.x + (br.x - bl.x)) / (2 * PAGE_CSS_W);
-      const b = (tr.y - tl.y + (br.y - bl.y)) / (2 * PAGE_CSS_W);
-      const c = (bl.x - tl.x + (br.x - tr.x)) / (2 * PAGE_CSS_H);
-      const d = (bl.y - tl.y + (br.y - tr.y)) / (2 * PAGE_CSS_H);
-      // Anchor at the centroid so the residual splits evenly across corners.
-      const cx = (tl.x + tr.x + bl.x + br.x) / 4;
-      const cy = (tl.y + tr.y + bl.y + br.y) / 4;
-      const e = cx - (a * PAGE_CSS_W + c * PAGE_CSS_H) / 2;
-      const f = cy - (b * PAGE_CSS_W + d * PAGE_CSS_H) / 2;
-      return `matrix(${a.toFixed(6)}, ${b.toFixed(6)}, ${c.toFixed(6)}, ${d.toFixed(6)}, ${e.toFixed(2)}, ${f.toFixed(2)})`;
-    };
-
-    const left = projectPage(pages.left);
-    const right = projectPage(pages.right);
+    const left = this.projectPage(pages.left, width, height);
+    const right = this.projectPage(pages.right, width, height);
     const last = this.lastPageTransforms;
     if (last && last.left === left && last.right === right) return;
     this.lastPageTransforms = { left, right };
-    handler({ left, right });
+    handler(this.lastPageTransforms);
   }
 
   private playBookOpen(): Promise<void> {
