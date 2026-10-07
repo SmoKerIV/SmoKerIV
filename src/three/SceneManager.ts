@@ -86,6 +86,15 @@ const MAX_AUTO_DOWNGRADES = 2;
 /** Skip measuring right after ready — shader warmup skews deltas. */
 const WARMUP_SECONDS = 3;
 
+/**
+ * gsap's stock lag smoothing (gsap.ticker has no getter, so the documented
+ * defaults are restored). Ref-counted so an HMR remount that briefly
+ * overlaps two managers can't restore it under a live one.
+ */
+const GSAP_LAG_THRESHOLD = 500;
+const GSAP_ADJUSTED_LAG = 33;
+let lagSmoothingOwners = 0;
+
 interface Placement {
   x: number;
   z: number;
@@ -237,6 +246,7 @@ export class SceneManager implements ISceneManager {
     // Time-accurate animations even on weak GPUs: without this, gsap's lag
     // smoothing stretches every tween into slow motion at low frame rates.
     gsap.ticker.lagSmoothing(0);
+    lagSmoothingOwners++;
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -625,6 +635,10 @@ export class SceneManager implements ISceneManager {
     clearTextureCache();
     this.scene.clear();
     this.renderer.dispose();
+
+    if (--lagSmoothingOwners === 0) {
+      gsap.ticker.lagSmoothing(GSAP_LAG_THRESHOLD, GSAP_ADJUSTED_LAG);
+    }
   }
 
   // ----------------------------------------------------------------- private
