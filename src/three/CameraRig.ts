@@ -14,9 +14,16 @@ const FOCUS_FILL = 0.84;
 interface FocusPreset {
   offset: THREE.Vector3;
   targetOffset: THREE.Vector3;
+  /**
+   * Extra pose shift on wide / tall-phone screens (blended by narrowness):
+   * slides a long item clear of the payoff card that covers the bottom.
+   */
+  wideShift?: THREE.Vector3;
+  narrowShift?: THREE.Vector3;
 }
 
 const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const ZERO = v3(0, 0, 0);
 
 /** Seated-at-the-table overview, looking from +Z toward the tabletop. */
 const TABLE_POSE: Pose = {
@@ -58,7 +65,15 @@ const MAX_CAMERA_Z = 3.2;
 const FOCUS_PRESETS: Record<ItemId, FocusPreset> = {
   // spellbook uses a computed aspect-aware reading pose (see poseFor).
   spellbook: { offset: v3(0, 0.85, 0.42), targetOffset: v3(0, 0.02, -0.02) },
-  sword: { offset: v3(0.05, 0.45, 0.72), targetOffset: v3(0, 0.04, 0) },
+  // The longsword runs back-left to front-right: aim it into the
+  // upper-right on wide screens and the top half on phones so the card
+  // (bottom-center) never covers the hilt.
+  sword: {
+    offset: v3(0, 1.5, 0.3),
+    targetOffset: v3(0, 0, 0.08),
+    wideShift: v3(-0.26, 0, -0.06),
+    narrowShift: v3(0, 0, 0.62),
+  },
   shield: { offset: v3(-0.06, 0.5, 0.62), targetOffset: v3(0, 0.03, 0) },
   potion: { offset: v3(0.08, 0.42, 0.72), targetOffset: v3(0, 0.12, 0) },
   scroll: { offset: v3(0, 0.42, 0.5), targetOffset: v3(0, 0.02, 0) },
@@ -495,9 +510,13 @@ export class CameraRig {
       const len = offset.length();
       if (need > len) offset.multiplyScalar(need / len);
     }
+    // Slide the whole pose (camera and aim) so the view angle holds.
+    const shift = (preset.wideShift ?? ZERO)
+      .clone()
+      .lerp(preset.narrowShift ?? ZERO, this.narrowness(aspect));
     return {
-      position: anchor.clone().add(offset),
-      target: anchor.clone().add(preset.targetOffset),
+      position: anchor.clone().add(offset).add(shift),
+      target: anchor.clone().add(preset.targetOffset).add(shift),
     };
   }
 
