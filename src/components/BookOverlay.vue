@@ -173,18 +173,23 @@ const indexStyle = computed<Record<string, string> | null>(() => {
   const M = parseMatrix(matrix);
   if (!M) return null;
   const scale = Math.max(0.2, Math.hypot(M.a, M.b));
-  // Keep the pulled-out tab (~36 rendered px) inside the viewport: when the
-  // page's outer edge is too close to the screen edge, tuck the whole index
-  // inward over the page margin instead of clipping it.
-  const TAB_EXTENT = 44;
-  const GUTTER = 4;
+  // Keep the whole index (tab + pulled-out nudge + shadow) inside the
+  // viewport: when the page's outer edge sits too close to the screen
+  // edge, tuck the index inward over the page margin instead of clipping
+  // it. Solved on the page's affine matrix, so the book's tilt (the skew
+  // `c` term) counts: x_rendered = a*X + c*Y + e, taken at the index's top
+  // and bottom ends and checked against the viewport margin.
+  const TAB_REACH = 38; // rendered px the tab sticks out past the page edge
+  const GUTTER = 8;
   let shift = 0;
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && M.a > 0) {
+    const reach = TAB_REACH / scale;
     if (indexSide.value === "right") {
-      const edge = M.a * PAGE_CSS_W + M.e;
-      shift = Math.min(0, (window.innerWidth - GUTTER - edge - TAB_EXTENT) / scale);
+      const edge = M.a * PAGE_CSS_W + M.e + Math.max(0, M.c * PAGE_CSS_H);
+      shift = Math.min(0, (window.innerWidth - GUTTER - edge) / M.a - reach);
     } else {
-      shift = Math.max(0, (TAB_EXTENT + GUTTER - M.e) / scale);
+      const edge = M.e + Math.min(0, M.c * PAGE_CSS_H);
+      shift = Math.max(0, (GUTTER - edge) / M.a + reach);
     }
   }
   return {
@@ -917,7 +922,6 @@ watch(spread, () => {
           :key="s.id"
           class="thumb-tab"
           :class="{ 'thumb-active': s.id === section }"
-          :style="{ flexGrow: s.tab.length + 3 }"
           :aria-current="s.id === section ? 'page' : undefined"
           @click="navigate(s.id)"
         >
@@ -1062,10 +1066,11 @@ watch(spread, () => {
 .thumb-right .thumb-index { left: 100%; }
 .thumb-left .thumb-index { right: 100%; }
 .thumb-tab {
-  --pull: calc(8px / var(--s));
-  flex: 1 1 0;
-  min-height: 0;
-  width: calc(26px / var(--s));
+  --pull: calc(7px / var(--s));
+  /* Natural text length first, spare height shared equally: the label is
+     never clipped or squeezed against its neighbour. */
+  flex: 1 1 auto;
+  width: calc(25px / var(--s));
   padding: 0;
   display: flex;
   align-items: center;
@@ -1073,9 +1078,9 @@ watch(spread, () => {
   pointer-events: auto;
   writing-mode: vertical-rl;
   font-family: "Cinzel", serif;
-  font-size: calc(12.5px / var(--s));
+  font-size: calc(12.2px / var(--s));
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
