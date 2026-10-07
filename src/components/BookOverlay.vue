@@ -681,6 +681,12 @@ watch(spread, () => {
                 >{{ line.label }}</a>
               </li>
             </ul>
+            <!-- colophon sits here: the right page has no room for both it and the credits -->
+            <div class="mt-4 flex justify-center">
+              <p class="m-0 max-w-[40ch] border-t border-gold/50 pt-2 text-center font-body text-xs italic leading-relaxed text-ink-faint">
+                {{ colophon }}
+              </p>
+            </div>
           </template>
         </div>
       </div>
@@ -848,7 +854,7 @@ watch(spread, () => {
                 <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M4 8l8 5 8-5M4 8v9h16V8M4 8l8-4 8 4" />
                 </svg>
-                <span class="text-xs leading-tight">Send<br />the Raven</span>
+                <span class="text-xs leading-tight tracking-[0.04em]">Send<br />the Raven</span>
               </a>
               <a
                 v-if="cvUrl"
@@ -860,10 +866,7 @@ watch(spread, () => {
               >
                 Take the Adventurer's Contract (CV)
               </a>
-              <p class="m-0 max-w-[40ch] border-t border-gold/50 pt-2 font-body text-xs italic leading-relaxed text-ink-faint">
-                {{ colophon }}
-              </p>
-              <ul class="m-0 max-w-[44ch] list-none p-0 font-body text-xs leading-snug text-ink-faint">
+              <ul class="m-0 max-w-[44ch] list-none border-t border-gold/50 p-0 pt-2 font-body text-xs leading-snug text-ink-faint">
                 <li v-for="credit in credits" :key="credit">{{ credit }}</li>
               </ul>
             </div>
