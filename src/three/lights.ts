@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Quality } from "./types";
+import { FIRE_POS } from "./roomLayout";
 
 interface Flicker {
   light: THREE.PointLight;
@@ -26,7 +27,9 @@ const HEMI_INTENSITY_DAY = 0.45;
 /** Candles and fire fall to this fraction in full daylight. */
 const FLAME_DAY_DIM = 0.6;
 
-const FIRE_BASE = 7;
+const FIRE_BASE = 7.5;
+/** Hanging lantern: a small warm light that sways with the lantern. */
+const LANTERN_BASE = 2.2;
 const GUTTER_DURATION = 1.2;
 const FLARE_DURATION = 0.4;
 /** Candle light fade in/out on snuff/relight (seconds). */
@@ -53,6 +56,10 @@ export class Lights {
   /** Dormant fireball-impact flash, repositioned per cast. */
   private readonly impactFlash: THREE.PointLight;
   private readonly candleFlickers: Flicker[] = [];
+  /** Created with the rest (stable light count), re-parented onto the lantern. */
+  private readonly lantern: THREE.PointLight;
+  /** Fire flicker relative to its base (≈ 0.9..1.4); drives the flame shader. */
+  private fireFlicker = 1;
 
   private quality: Quality;
   private arcaneLevel = 0;
@@ -71,10 +78,14 @@ export class Lights {
   constructor(quality: Quality) {
     this.quality = quality;
 
-    // Fireplace glow from the -X wall recess, flickers in update().
-    this.fire = new THREE.PointLight(0xff7a30, 7, 9, 2);
-    this.fire.position.set(-3.0, 1.3, 0);
+    // The hearth on the back wall: just in front of the grate, so the
+    // light spills out of the firebox onto the floor, wall and table.
+    this.fire = new THREE.PointLight(0xff7a30, FIRE_BASE, 9, 2);
+    this.fire.position.set(FIRE_POS.x, FIRE_POS.y + 0.3, FIRE_POS.z + 0.42);
     this.group.add(this.fire);
+
+    this.lantern = new THREE.PointLight(0xffa860, LANTERN_BASE, 4.5, 2);
+    this.group.add(this.lantern);
 
     // The one shadow caster: warm soft spot from above-left of the table.
     // Kept dim and tight — the room should read candle-lit, not floodlit.
@@ -136,6 +147,17 @@ export class Lights {
       lit: 1,
       litTarget: 1,
     });
+  }
+
+  /** Move the lantern light onto the (swaying) lantern. */
+  attachLantern(anchor: THREE.Object3D): void {
+    anchor.add(this.lantern);
+    this.lantern.position.set(0, 0, 0);
+  }
+
+  /** Fire brightness relative to its base, for the flame shader. */
+  get fireLevel(): number {
+    return this.fireFlicker;
   }
 
   /** Snuff (lit=false) or relight a candle; the light fades over 0.4 s. */
@@ -219,6 +241,11 @@ export class Lights {
       else fireBase *= 1 + 0.4 * Math.sin(Math.PI * t);
     }
     this.fire.intensity = fireBase * (1 + 0.1 * fireMix);
+    this.fireFlicker = this.fire.intensity / (FIRE_BASE * flameDim);
+
+    const lanternMix =
+      Math.sin(elapsed * 5.1 + 0.4) * 0.6 + Math.sin(elapsed * 11.7) * 0.4;
+    this.lantern.intensity = LANTERN_BASE * flameDim * (1 + 0.07 * lanternMix);
 
     if (this.impactFlashStart >= 0) {
       const t = (elapsed - this.impactFlashStart) / IMPACT_FLASH_DURATION;
@@ -269,6 +296,7 @@ export class Lights {
     this.quality = quality;
     const candlesOn = quality !== "low";
     for (const { light } of this.candleFlickers) light.visible = candlesOn;
+    this.lantern.visible = candlesOn;
     this.lowFill.visible = !candlesOn;
     this.keySpot.castShadow = candlesOn;
     if (!candlesOn) this.cancelGutter();
@@ -278,6 +306,7 @@ export class Lights {
     this.keySpot.shadow.dispose();
     for (const { light } of this.candleFlickers) light.removeFromParent();
     this.candleFlickers.length = 0;
+    this.lantern.removeFromParent();
   }
 
   // ----------------------------------------------------------------- private

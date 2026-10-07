@@ -54,6 +54,17 @@ import { DicePhysics, measureObstacle } from "./dicePhysics";
 import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
 import { loadModels, ModelLibrary, type ModelKey } from "./assets";
+import type { RoomRig } from "./models/room";
+import {
+  clearRoomTextures,
+  cloudTexture,
+  floorMaps,
+  hearthStoneMaps,
+  moonTexture,
+  setRoomTextureSize,
+  skyTexture,
+  wallMaps,
+} from "./models/roomTextures";
 
 const PIXEL_RATIO_CAP: Record<Quality, number> = {
   low: 1,
@@ -164,9 +175,19 @@ const PROGRESS = {
 const MODEL_KEYS: ModelKey[] = [
   "candle",
   "buckler",
+  "fireplace",
+  "chair",
   "ink",
   "bookStack",
   "scroll1",
+  "barrel1",
+  "barrel2",
+  "barrel4",
+  "crate",
+  "chest",
+  "bookClosed1",
+  "bookClosed2",
+  "scroll3",
 ];
 
 /** Texture anisotropy for the glTF props, per quality. */
@@ -196,6 +217,12 @@ const TEXTURE_WARMUPS: (() => unknown)[] = [
   makeBladeRuneTexture,
   makeRuneCircleTexture,
   makeDotTexture,
+  wallMaps,
+  floorMaps,
+  hearthStoneMaps,
+  skyTexture,
+  moonTexture,
+  cloudTexture,
 ];
 
 /**
@@ -280,6 +307,8 @@ export class SceneManager implements ISceneManager {
   private readonly interactableRoots: THREE.Group[] = [];
   private runeCircle: THREE.Group | null = null;
   private spellbookParts: SpellbookParts | null = null;
+  /** Room shell + background dressing (fire, lantern, window sky). */
+  private room: RoomRig | null = null;
   /** Non-interactive tabletop props (dice colliders, contact shadows). */
   private tableProps: THREE.Group[] = [];
   /** Licensed glTF props (empty when the models folder is missing). */
@@ -432,6 +461,8 @@ export class SceneManager implements ISceneManager {
     this.scene.background = new THREE.Color(FOG_COLOR);
     this.scene.fog = new THREE.FogExp2(FOG_COLOR, 0.055);
 
+    // Room canvases are the biggest paint jobs: halve them on low.
+    setRoomTextureSize(settings.quality === "low" ? 512 : 1024);
     this.rig = new CameraRig(1, settings.reducedMotion);
     this.lights = new Lights(settings.quality);
     this.lights.setReducedMotion(settings.reducedMotion);
@@ -733,6 +764,7 @@ export class SceneManager implements ISceneManager {
     }
     this.lights.setQuality(quality);
     this.particles.setQuality(quality);
+    this.room?.setQuality(quality);
     this.updateMothVisibility();
     this.markShadowsDirty();
     this.renderSoon = true;
@@ -848,6 +880,7 @@ export class SceneManager implements ISceneManager {
     });
     for (const texture of textures) texture.dispose();
     clearTextureCache();
+    clearRoomTextures();
     this.scene.clear();
     this.renderer.dispose();
 
@@ -954,8 +987,11 @@ export class SceneManager implements ISceneManager {
   private async buildStage(
     onProgress: (fraction: number) => void,
   ): Promise<boolean> {
-    const room = buildRoom();
+    const roomRig = buildRoom(this.models, this.settings.quality);
+    this.room = roomRig;
+    const room = roomRig.group;
     this.scene.add(room);
+    this.lights.attachLantern(roomRig.lanternLightAnchor);
 
     // Day mode repaints the window's sky quad, which room.ts names.
     const sky = room.getObjectByName(WINDOW_SKY_NAME) as THREE.Mesh | undefined;
@@ -1304,6 +1340,7 @@ export class SceneManager implements ISceneManager {
   private readonly applyMood = (): void => {
     const f = this.moodProxy.v;
     this.lights.setDayFactor(f);
+    this.room?.setDayFactor(f);
     if (this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.density = THREE.MathUtils.lerp(
         FOG_DENSITY_NIGHT,
@@ -1913,6 +1950,7 @@ export class SceneManager implements ISceneManager {
 
     this.rig.update(elapsed, delta);
     this.lights.update(elapsed);
+    this.room?.update(elapsed, delta, this.lights.fireLevel, this.settings.reducedMotion);
     this.particles.update(delta, elapsed);
     this.dicePhysics?.update(delta);
     this.updateIdleLife(elapsed);

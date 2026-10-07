@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { Quality } from "./types";
 import { TABLE_SURFACE_Y } from "./types";
 import { makeDotTexture } from "./models/textures";
+import { FIREBOX, FIRE_POS } from "./roomLayout";
 
 const DUST_COUNT: Record<Quality, number> = { low: 60, medium: 120, high: 240 };
 const EMBER_COUNT: Record<Quality, number> = { low: 15, medium: 30, high: 30 };
@@ -254,11 +255,12 @@ export class Particles {
       this.burstMaxLife[i] = THREE.MathUtils.randFloat(0.9, 1.5);
       this.burstLife[i] = this.burstMaxLife[i];
       this.burstSpeed[i] = THREE.MathUtils.randFloat(0.9, 1.5);
-      this.burstDriftX[i] = THREE.MathUtils.randFloat(0.05, 0.3);
-      this.burstDriftZ[i] = THREE.MathUtils.randFloat(-0.15, 0.15);
-      positions[i * 3] = THREE.MathUtils.randFloat(-3.25, -3.0);
-      positions[i * 3 + 1] = THREE.MathUtils.randFloat(0.35, 0.6);
-      positions[i * 3 + 2] = THREE.MathUtils.randFloat(-0.45, 0.45);
+      // Pop out of the firebox toward the room.
+      this.burstDriftX[i] = THREE.MathUtils.randFloat(-0.12, 0.12);
+      this.burstDriftZ[i] = THREE.MathUtils.randFloat(0.1, 0.35);
+      positions[i * 3] = FIRE_POS.x + THREE.MathUtils.randFloat(-0.4, 0.4) * FIREBOX.w;
+      positions[i * 3 + 1] = FIRE_POS.y + THREE.MathUtils.randFloat(0.05, 0.25);
+      positions[i * 3 + 2] = FIRE_POS.z + THREE.MathUtils.randFloat(0.0, 0.18);
     }
     posAttr.needsUpdate = true;
     this.burstPoints.visible = true;
@@ -432,14 +434,15 @@ export class Particles {
     data: EmberData,
     i: number,
   ): void {
-    data.baseX[i] = THREE.MathUtils.randFloat(-3.3, -2.95);
-    data.baseZ[i] = THREE.MathUtils.randFloat(-0.55, 0.55);
-    data.maxLife[i] = THREE.MathUtils.randFloat(1.5, 3.2);
+    // Inside the firebox; they rise and vanish up the flue.
+    data.baseX[i] = FIRE_POS.x + THREE.MathUtils.randFloat(-0.4, 0.4) * FIREBOX.w;
+    data.baseZ[i] = FIRE_POS.z + THREE.MathUtils.randFloat(-0.1, 0.16);
+    data.maxLife[i] = THREE.MathUtils.randFloat(0.9, 1.8);
     data.life[i] = data.maxLife[i];
     data.speed[i] = THREE.MathUtils.randFloat(0.25, 0.55);
     data.wigglePhase[i] = Math.random() * Math.PI * 2;
     positions[i * 3] = data.baseX[i];
-    positions[i * 3 + 1] = THREE.MathUtils.randFloat(0.25, 0.6);
+    positions[i * 3 + 1] = FIRE_POS.y + THREE.MathUtils.randFloat(0.02, 0.2);
     positions[i * 3 + 2] = data.baseZ[i];
   }
 
