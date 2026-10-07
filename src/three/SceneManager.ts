@@ -4,6 +4,7 @@ import {
   TABLE_SURFACE_Y,
   PAGE_CSS_W,
   PAGE_CSS_H,
+  type BookPageScreenTransforms,
   type CandleParts,
   type ISceneManager,
   type ItemId,
@@ -56,6 +57,7 @@ import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
 import { loadModels, ModelLibrary, type ModelKey } from "./assets";
 import { PostFX } from "./postprocessing";
+import { bookReading } from "./bookReading";
 import type { RoomRig } from "./models/room";
 import {
   clearRoomTextures,
@@ -427,7 +429,8 @@ export class SceneManager implements ISceneManager {
   private pageInputValid = false;
   /** Last emitted matrices — identical frames are skipped so the DOM ink
    *  layer stays untouched (and rock-solid) once the camera settles. */
-  private lastPageTransforms: { left: string; right: string } | null = null;
+  private lastPageTransforms: BookPageScreenTransforms | null = null;
+  private unregisterBookReading: (() => void) | null = null;
 
   private diceRolling = false;
   private dicePhysics: DicePhysics | null = null;
@@ -502,6 +505,10 @@ export class SceneManager implements ISceneManager {
   ) {
     this.events = events;
     this.settings = { ...settings };
+    this.unregisterBookReading = bookReading.register({
+      setPage: (page) => this.rig.setReadingPage(page),
+      flip: (direction) => this.flipBookPage(direction),
+    });
     // Time-accurate animations even on weak GPUs: without this, gsap's lag
     // smoothing stretches every tween into slow motion at low frame rates.
     gsap.ticker.lagSmoothing(0);
@@ -930,6 +937,7 @@ export class SceneManager implements ISceneManager {
   }
 
   dispose(): void {
+    this.unregisterBookReading?.();
     if (this.disposed) return;
     this.disposed = true;
     this.setReading(false);
@@ -1901,9 +1909,12 @@ export class SceneManager implements ISceneManager {
 
     const left = this.projectPage(pages.left, width, height);
     const right = this.projectPage(pages.right, width, height);
+    const single = this.rig.readingSingle();
     const last = this.lastPageTransforms;
-    if (last && last.left === left && last.right === right) return;
-    this.lastPageTransforms = { left, right };
+    if (last && last.left === left && last.right === right && last.single === single) {
+      return;
+    }
+    this.lastPageTransforms = { left, right, single };
     handler(this.lastPageTransforms);
   }
 

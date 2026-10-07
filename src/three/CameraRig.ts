@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import gsap from "gsap";
-import type { ItemId } from "./types";
+import { PAGE_CSS_W, type ItemId } from "./types";
 
 interface Pose {
   position: THREE.Vector3;
@@ -83,6 +83,26 @@ const BOOK_PAGES_MARGIN = 1.13;
  *  above and the page arrows below. */
 const BOOK_OPEN_HALF_D = 0.18;
 const BOOK_MARGIN_D = 1.6;
+/** World width of one parchment page (m); its ink pane is PAGE_CSS_W px. */
+const BOOK_PAGE_W = 0.46;
+/** Parchment sits this far (m) above the camera's aim point (measured:
+ *  1024x768 two-page scale 0.78, 1280x800 0.99), so it is nearer than d. */
+const BOOK_PAGE_RISE = 0.09;
+/**
+ * One-page reading. When framing both pages would project the ink below
+ * this fraction of its CSS size (small text), the camera frames a single
+ * page instead and glides between pages.
+ */
+const SINGLE_PAGE_BELOW = 0.95;
+/** Projected scale the single-page frame aims for (1 = CSS size). */
+const SINGLE_PAGE_SCALE = 1;
+/** Side air beyond the page edge (fraction of the page's half-width). */
+const SINGLE_PAGE_MARGIN_W = 1.1;
+/** Page half-depth (m) and the air kept above/below it for tabs + arrows. */
+const BOOK_PAGE_HALF_D = 0.165;
+const SINGLE_PAGE_MARGIN_D = 1.45;
+/** Glide between pages (seconds). */
+const PAGE_GLIDE_DURATION = 0.6;
 /**
  * Near-perfect top-down reading pose (≈1° toward the reader — just enough
  * for lookAt's up vector to stay stable). Straight-down matters: the page
@@ -149,6 +169,10 @@ export class CameraRig {
   private readonly parallax = new THREE.Vector2();
 
   private reducedMotion: boolean;
+  /** Viewport height (px), for the projected-scale estimate of the pages. */
+  private viewHeight = 800;
+  /** Page the reading camera frames when only one page fits. */
+  private readingPage: "left" | "right" = "left";
   /**
    * 0 while reading — a fully static camera means the page 2D matrix
    * transforms stop changing, so the browser never re-rasterizes the ink
@@ -200,6 +224,7 @@ export class CameraRig {
   focusTo(item: ItemId | null): Promise<void> {
     this.killTween();
     this.currentItem = item;
+    if (item !== "spellbook") this.readingPage = "left";
     const duration = this.reducedMotion ? REDUCED_DURATION : FOCUS_DURATION;
 
     return new Promise<void>((resolve) => {
@@ -261,6 +286,7 @@ export class CameraRig {
 
   setSize(width: number, height: number): void {
     this.camera.aspect = width / height;
+    this.viewHeight = height;
     this.camera.fov = this.fovFor(this.camera.aspect);
     this.camera.updateProjectionMatrix();
   }
@@ -375,6 +401,64 @@ export class CameraRig {
     window.removeEventListener("pointermove", this.onPointerMove);
   }
 
+  /**
+   * Which page the reading camera frames (only matters when the two-page
+   * fit is too small, see readingSingle). Glides there; instant under
+   * reduced motion.
+   */
+  setReadingPage(page: "left" | "right"): void {
+    if (page === this.readingPage) return;
+    this.readingPage = page;
+    if (this.currentItem !== "spellbook" || !this.readingSingle()) return;
+    if (this.reducedMotion) {
+      this.snapOrEase();
+      return;
+    }
+    if (this.tween && this.resolveActive) {
+      this.retarget(); // a focus flight keeps its promise, re-aimed
+      return;
+    }
+    this.tween?.kill();
+    this.tween = null;
+    this.tweenToCurrent(PAGE_GLIDE_DURATION, FOCUS_EASE);
+  }
+
+  /** True when the reading pose frames one page at a time. */
+  readingSingle(): boolean {
+    const aspect = this.camera.aspect || 1.6;
+    const tanV = Math.tan((this.camera.fov * Math.PI) / 360);
+    return this.pagesScale(this.spreadDistance(aspect, tanV), tanV) < SINGLE_PAGE_BELOW;
+  }
+
+  /** Camera distance that frames both pages (and the open book's depth). */
+  private spreadDistance(aspect: number, tanV: number): number {
+    const dH = (BOOK_PAGES_HALF_W * BOOK_PAGES_MARGIN) / (tanV * aspect);
+    const dV = (BOOK_OPEN_HALF_D * BOOK_MARGIN_D) / tanV;
+    return THREE.MathUtils.clamp(Math.max(dH, dV), 0.6, 1.9);
+  }
+
+  /** Projected size of a page's ink relative to its CSS size at distance d. */
+  private pagesScale(d: number, tanV: number): number {
+    return (
+      (BOOK_PAGE_W * this.viewHeight) /
+      (2 * (d - BOOK_PAGE_RISE) * tanV * PAGE_CSS_W)
+    );
+  }
+
+  /** Camera distance for the single-page frame. */
+  private singleDistance(aspect: number, tanV: number): number {
+    const dW = (BOOK_PAGE_W / 2 * SINGLE_PAGE_MARGIN_W) / (tanV * aspect);
+    const dV = (BOOK_PAGE_HALF_D * SINGLE_PAGE_MARGIN_D) / tanV;
+    const dScale =
+      (BOOK_PAGE_W * this.viewHeight) /
+      (2 * tanV * PAGE_CSS_W * SINGLE_PAGE_SCALE);
+    return THREE.MathUtils.clamp(
+      Math.max(dW, dV, dScale) + BOOK_PAGE_RISE,
+      0.4,
+      1.9,
+    );
+  }
+
   private upFor(item: ItemId | null): THREE.Vector3 {
     return item === "spellbook" ? READING_UP : WORLD_UP;
   }
@@ -386,13 +470,16 @@ export class CameraRig {
 
     const anchor = this.anchors.get(item) ?? TABLE_POSE.target;
     if (item === "spellbook") {
-      // Fit the open book's bounding box (both covers + margin) into the
-      // frustum: the distance must satisfy the horizontal and the vertical
-      // half-angle, whichever is tighter for this aspect.
-      const dH = (BOOK_PAGES_HALF_W * BOOK_PAGES_MARGIN) / (tanV * aspect);
-      const dV = (BOOK_OPEN_HALF_D * BOOK_MARGIN_D) / tanV;
-      const d = THREE.MathUtils.clamp(Math.max(dH, dV), 0.6, 1.9);
+      // Two pages when they project near their CSS size; otherwise one page
+      // at a time (the distance then follows that page alone).
+      const single = this.readingSingle();
+      const d = single
+        ? this.singleDistance(aspect, tanV)
+        : this.spreadDistance(aspect, tanV);
       const target = anchor.clone().add(READING_TARGET_OFFSET);
+      if (single) {
+        target.x += (this.readingPage === "left" ? -1 : 1) * (BOOK_PAGE_W / 2);
+      }
       const position = target
         .clone()
         .add(v3(0, d * READING_TILT.y, d * READING_TILT.z));

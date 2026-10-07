@@ -45,6 +45,12 @@ export const PAGE_CSS_H = 460;
 export interface BookPageScreenTransforms {
   left: string;
   right: string;
+  /**
+   * True when the camera frames one page at a time (the two-page fit would
+   * project the ink too small); only the page set via bookReading is on
+   * screen.
+   */
+  single?: boolean;
 }
 
 export interface SceneSettings {
