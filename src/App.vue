@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  computed,
+  defineAsyncComponent,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 import type {
   BookPageScreenTransforms,
   BookSection,
@@ -17,12 +24,19 @@ import LoaderScreen from "./components/LoaderScreen.vue";
 import ItemTooltip from "./components/ItemTooltip.vue";
 import ItemFocusCard from "./components/ItemFocusCard.vue";
 import BookOverlay from "./components/BookOverlay.vue";
-import SettingsPanel from "./components/SettingsPanel.vue";
 import HudBar from "./components/HudBar.vue";
 import DiceToast from "./components/DiceToast.vue";
 import type { ToastPayload } from "./components/DiceToast.vue";
-import IncantationConsole from "./components/IncantationConsole.vue";
-import FallbackView from "./components/FallbackView.vue";
+
+/* Not needed for the first frame: each streams in as its own chunk the first
+   time it renders (console / ledger on open, parchment page for flat mode). */
+const loadConsole = () => import("./components/IncantationConsole.vue");
+const loadSettings = () => import("./components/SettingsPanel.vue");
+const IncantationConsole = defineAsyncComponent(loadConsole);
+const SettingsPanel = defineAsyncComponent(loadSettings);
+const FallbackView = defineAsyncComponent(
+  () => import("./components/FallbackView.vue"),
+);
 
 const settings = useSettings();
 const audio = useAudio();
@@ -200,6 +214,14 @@ const events: SceneEvents = {
   },
   onReady: () => {
     sceneReady.value = true;
+    // Warm the on-demand panels once the scene is up so the first open
+    // doesn't wait on the network.
+    const warm = () => {
+      void loadSettings().catch(() => undefined);
+      void loadConsole().catch(() => undefined);
+    };
+    if ("requestIdleCallback" in window) requestIdleCallback(warm);
+    else setTimeout(warm, 2000);
   },
   onHover: (item, screen) => {
     if (appPhase.value !== "table") {
