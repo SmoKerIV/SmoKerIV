@@ -18,6 +18,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   "update:section": [section: BookSection];
+  /** Reading direction, so a host's floating chrome can get out of the way. */
+  "scroll-direction": [direction: "up" | "down"];
 }>();
 
 const rootEl = ref<HTMLElement | null>(null);
@@ -73,7 +75,12 @@ function go(id: BookSection): void {
 
 /* Track the section under the reader (top third of the viewport). */
 let scrollRaf = 0;
+let lastScrollTop = 0;
 function onScroll(): void {
+  const top = rootEl.value?.scrollTop ?? 0;
+  if (top < 48 || top < lastScrollTop - 6) emit("scroll-direction", "up");
+  else if (top > lastScrollTop + 6) emit("scroll-direction", "down");
+  if (Math.abs(top - lastScrollTop) > 6 || top < 48) lastScrollTop = top;
   if (scrollRaf) return;
   scrollRaf = requestAnimationFrame(() => {
     scrollRaf = 0;

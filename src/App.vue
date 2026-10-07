@@ -92,6 +92,9 @@ const consoleOpen = ref(false);
 const pageTransforms = ref<BookPageScreenTransforms | null>(null);
 /** Mobile / coarse pointer: the tome opens as a plain scrollable page. */
 const flatBookOpen = ref(false);
+/** The flat tome's "Back" strap slides away while reading down the page. */
+const flatBackHidden = ref(false);
+watch(flatBookOpen, () => (flatBackHidden.value = false));
 
 /**
  * Small screens: the pinned 3D ink can't stay readable — serve the flat
@@ -800,9 +803,10 @@ import.meta.hot?.dispose(() => teardown());
 
       <!-- the boring version (mobile / coarse pointers) -->
       <Transition name="book-fade">
-        <div v-if="flatBookOpen" class="fixed inset-0 z-50 overflow-y-auto bg-night">
+        <div v-if="flatBookOpen" class="flat-tome fixed inset-0 z-50 overflow-y-auto bg-night">
           <button
-            class="btn-leather fixed z-10 rounded px-4 py-2 text-xs"
+            class="btn-leather flat-back fixed z-10 rounded px-4 py-2 text-xs"
+            :class="{ 'flat-back-hidden': flatBackHidden }"
             style="
               top: calc(0.75rem + var(--safe-top));
               right: calc(0.75rem + var(--safe-right));
@@ -811,7 +815,10 @@ import.meta.hot?.dispose(() => teardown());
           >
             ⟨ Back to the table
           </button>
-          <FallbackView v-model:section="bookSection" />
+          <FallbackView
+            v-model:section="bookSection"
+            @scroll-direction="flatBackHidden = $event === 'down'"
+          />
         </div>
       </Transition>
 

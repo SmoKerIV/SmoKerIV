@@ -485,3 +485,19 @@ textarea {
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+/* Flat tome's "Back to the table" strap: tucks away while reading down the
+   page (so it never sits on the text) and returns on scroll up. Keyboard
+   focus always brings it back. */
+.flat-back {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.flat-back-hidden:not(:focus-visible) {
+  transform: translateY(-160%);
+  opacity: 0;
+  pointer-events: none;
+}
+/* ...and at the top of the page the page starts below the strap. */
+.flat-tome main {
+  margin-top: calc(3.5rem + var(--safe-top));
+}
