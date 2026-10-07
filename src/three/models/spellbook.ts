@@ -39,6 +39,7 @@ const SPINE_INNER_X = SPINE_X + 0.012;
  * sized/centered to match so the ink always sits on paper edge-to-edge.
  */
 const PAGE_W = 0.46;
+const ONE = new THREE.Vector3(1, 1, 1);
 const PAGE_D = 0.33;
 
 /** Thin, slightly warped page plane; left edge at local x = 0 (the spine). */
@@ -81,69 +82,71 @@ export function buildSpellbook(): THREE.Group {
   backCover.receiveShadow = true;
   group.add(backCover);
 
-  // --- Page block: fills the boards' inner height ---------------------------
-  // Real books: the boards overhang the text block by a small "square"
-  // (~3-4 mm here) and the leaves fill the space between them. The block's
-  // top face stays at y = 0.066 under the loose pages; a U-shaped top
-  // course (open at the spine) carries the head, tail and fore-edge on up
-  // to just under the front board and squashes flat as the cover opens,
-  // so nothing rises around the reading spread.
+  // --- Page block -----------------------------------------------------------
+  // Core text block: the original 0.46 x 0.33 block under the reading
+  // spread (the open book's right page sits exactly on it).
   const blockH = 0.054;
   const BLOCK_Y0 = 0.012;
-  const BLOCK_TOP = BLOCK_Y0 + blockH; // 0.066, under the loose pages
   const STACK_TOP = 0.0715; // front board underside is 0.073
   const STACK_H = STACK_TOP - BLOCK_Y0;
   const BLOCK_X0 = SPINE_X + 0.01; // −0.24, against the spine
-  const BLOCK_X1 = W / 2 - 0.0045; // fore-edge square 4.5 mm (clasp clearance)
-  const BLOCK_Z = D / 2 - 0.003; // head/tail square 3 mm
+  const CORE_X1 = BLOCK_X0 + 0.46;
+  const CORE_Z = 0.33 / 2;
   const edge = pageEdge();
   const pageSide = pageBlockMaterial();
-  const blockGeo = pageBlockGeometry(BLOCK_X1 - BLOCK_X0, blockH, BLOCK_Z * 2);
+  const coreGeo = pageBlockGeometry(0.46, blockH, CORE_Z * 2);
   {
-    // Edge-map v measured over the whole stack so the leaves continue
-    // into the top course at the same spacing.
-    const pos = blockGeo.getAttribute("position") as THREE.BufferAttribute;
-    const nor = blockGeo.getAttribute("normal") as THREE.BufferAttribute;
-    const uv = blockGeo.getAttribute("uv") as THREE.BufferAttribute;
+    // Edge-map v measured over the whole stack height (see the skirt).
+    const pos = coreGeo.getAttribute("position") as THREE.BufferAttribute;
+    const nor = coreGeo.getAttribute("normal") as THREE.BufferAttribute;
+    const uv = coreGeo.getAttribute("uv") as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
       if (Math.abs(nor.getY(i)) > 0.5) continue;
       uv.setY(i, (pos.getY(i) + blockH / 2) / STACK_H);
     }
   }
   // Groups follow BoxGeometry: +x, −x, +y, −y, +z, −z
-  const pageBlock = new THREE.Mesh(blockGeo, [edge, pageSide, pageSide, pageSide, edge, edge]);
-  pageBlock.position.set((BLOCK_X0 + BLOCK_X1) / 2, BLOCK_Y0 + blockH / 2, 0);
+  const pageBlock = new THREE.Mesh(coreGeo, [edge, pageSide, pageSide, pageSide, edge, edge]);
+  pageBlock.position.set(BLOCK_X0 + 0.23, BLOCK_Y0 + blockH / 2, 0);
   pageBlock.castShadow = true;
   pageBlock.receiveShadow = true;
   group.add(pageBlock);
 
-  const RIM_H = STACK_TOP - BLOCK_TOP;
-  const pageRim = new THREE.Mesh(
-    pageRimGeometry(
-      BLOCK_X0,
-      BLOCK_X1,
-      SPINE_INNER_X + PAGE_W + 0.0015, // clear of the right reading page
-      BLOCK_Z,
-      PAGE_D / 2 + 0.0015,
-      RIM_H,
-      blockH / STACK_H,
-    ),
-    [pageSide, edge],
+  // Closed-book skirt: real leaves fill the boards' inner height and stop
+  // a small "square" (3–4.5 mm) short of the board edges. A U-shaped
+  // collar of leaves (open at the spine) around the core does that while
+  // the book is closed; as the cover swings open it shrinks back inside
+  // the core, so the open spread shows only the page the ink sits on.
+  const BLOCK_X1 = W / 2 - 0.0045; // fore-edge square 4.5 mm (clasp clearance)
+  const BLOCK_Z = D / 2 - 0.003; // head/tail square 3 mm
+  const skirtGeo = pageRimGeometry(
+    BLOCK_X0,
+    BLOCK_X1,
+    CORE_X1 - 0.0015, // overlaps the core; clear of the loose pages
+    BLOCK_Z,
+    CORE_Z - 0.0005,
+    STACK_H,
+    0,
   );
-  pageRim.position.set(0, BLOCK_TOP, 0);
-  pageRim.castShadow = true;
-  pageRim.receiveShadow = true;
-  group.add(pageRim);
-
-  // Old block centre: the parchment top keeps its exact place and size.
-  const BLOCK_TOP_X = SPINE_X + 0.01 + 0.23;
+  skirtGeo.translate(-BLOCK_X0, 0, 0); // pivot on the spine-side edge
+  const skirt = new THREE.Mesh(skirtGeo, [pageSide, edge]);
+  skirt.position.set(BLOCK_X0, BLOCK_Y0, 0);
+  skirt.castShadow = true;
+  skirt.receiveShadow = true;
+  group.add(skirt);
+  // Fully open: outer edges 0.5 mm inside the core, top 0.5 mm below it.
+  const SKIRT_OPEN = new THREE.Vector3(
+    (CORE_X1 - 0.0005 - BLOCK_X0) / (BLOCK_X1 - BLOCK_X0),
+    (blockH - 0.0005) / STACK_H,
+    (CORE_Z - 0.0005) / BLOCK_Z,
+  );
 
   // Written parchment on top of the page block (visible when open)
   const blockTop = new THREE.Mesh(
     new THREE.PlaneGeometry(0.455, 0.325).rotateX(-Math.PI / 2),
     parchmentMaterial(true),
   );
-  blockTop.position.set(BLOCK_TOP_X, 0.012 + blockH + 0.0004, 0);
+  blockTop.position.set(pageBlock.position.x, 0.012 + blockH + 0.0004, 0);
   group.add(blockTop);
 
   // --- Loose flip pages, pivoted at the spine line --------------------------
@@ -303,7 +306,9 @@ export function buildSpellbook(): THREE.Group {
   const spineBack = new THREE.Mesh(
     spineFillGeometry(
       SPINE_CX, SPINE_CY, innerA, innerB,
-      BLOCK_X0 - 0.0002, BLOCK_Y0, STACK_TOP, BLOCK_Z,
+      // Runs 1.5 mm under the skirt and 0.3 mm proud of its ends, so the
+      // skirt's spine-side end wall never shows as a seam.
+      BLOCK_X0 + 0.0015, BLOCK_Y0, STACK_TOP, BLOCK_Z + 0.0003,
       BLOCK_Y0, STACK_H, BLOCK_X1 - BLOCK_X0,
     ),
     edge,
@@ -347,20 +352,21 @@ export function buildSpellbook(): THREE.Group {
     group.add(band);
   }
 
-  // The top course of the page block squashes flat over the first ~35° of
-  // the cover's swing (and rises again as it closes).
-  const syncRim = (): void => {
+  // The skirt retreats inside the core over the first ~35° of the cover's
+  // swing (and returns as it closes).
+  const skirtScale = new THREE.Vector3();
+  const syncSkirt = (): void => {
     const k = 1 - THREE.MathUtils.smoothstep(frontCover.rotation.z, 0.04, 0.6);
-    const visible = k > 0.002;
-    if (pageRim.visible !== visible) pageRim.visible = visible;
-    const sy = Math.max(k, 0.002);
-    if (pageRim.scale.y !== sy) {
-      pageRim.scale.y = sy;
-      pageRim.updateMatrix();
-      pageRim.matrixWorld.multiplyMatrices(group.matrixWorld, pageRim.matrix);
+    skirtScale.copy(SKIRT_OPEN).lerp(ONE, k);
+    const visible = k > 0.001;
+    if (skirt.visible !== visible) skirt.visible = visible;
+    if (!skirt.scale.equals(skirtScale)) {
+      skirt.scale.copy(skirtScale);
+      skirt.updateMatrix();
+      skirt.matrixWorld.multiplyMatrices(group.matrixWorld, skirt.matrix);
     }
   };
-  pageBlock.onBeforeRender = syncRim;
+  pageBlock.onBeforeRender = syncSkirt;
 
   group.userData.itemId = "spellbook";
   group.userData.label = ITEM_LABELS.spellbook.name;
