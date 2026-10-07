@@ -7,6 +7,7 @@ import type {
   SceneEvents,
 } from "./three/types";
 import type { SceneManager as SceneManagerT } from "./three/SceneManager";
+import { ITEM_LABELS } from "./three/types";
 import type { FocusCardItem } from "./data/content";
 import { useSettings } from "./composables/useSettings";
 import { useAudio } from "./composables/useAudio";
@@ -52,6 +53,10 @@ const sceneReady = ref(false);
 
 const focusedItem = ref<ItemId | null>(null);
 const hoveredItem = ref<ItemId | null>(null);
+/** Screen-reader text for the keyboard-highlighted curio (Tab cycling). */
+const highlightAnnouncement = ref("");
+/** True after a Tab-cycle keypress, false once the pointer moves again. */
+let keyboardHighlighting = false;
 const hoverX = ref(0);
 const hoverY = ref(0);
 
@@ -200,6 +205,10 @@ const events: SceneEvents = {
       return;
     }
     hoveredItem.value = item;
+    highlightAnnouncement.value =
+      item && keyboardHighlighting
+        ? `${ITEM_LABELS[item].name}. Press Enter to open.`
+        : "";
     if (item && screen) {
       hoverX.value = screen.x;
       hoverY.value = screen.y;
@@ -399,6 +408,10 @@ function trackKonami(key: string): void {
   showToast("🎮 +30 XP — a hidden path reveals itself", "nat20");
 }
 
+function onPointerMove(): void {
+  keyboardHighlighting = false;
+}
+
 function onKeydown(event: KeyboardEvent): void {
   const target = event.target as HTMLElement | null;
   const typingInField =
@@ -435,6 +448,7 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key === "Tab") {
     if (scene && appPhase.value === "table") {
       event.preventDefault();
+      keyboardHighlighting = true;
       scene.highlightNext(event.shiftKey ? -1 : 1);
     }
     return;
@@ -567,6 +581,7 @@ onMounted(async () => {
     settings.reducedMotion,
   );
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("pointermove", onPointerMove, { passive: true });
   window.addEventListener("hashchange", applyHash);
   window.addEventListener("popstate", applyHash);
   window.addEventListener("pointerdown", unlockAudioOnGesture, { once: true });
@@ -595,6 +610,7 @@ onMounted(async () => {
 
 function teardown(): void {
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("pointermove", onPointerMove);
   window.removeEventListener("hashchange", applyHash);
   window.removeEventListener("popstate", applyHash);
   window.removeEventListener("pointerdown", unlockAudioOnGesture);
@@ -654,7 +670,7 @@ import.meta.hot?.dispose(() => teardown());
           style="top: calc(1rem + var(--safe-top))"
         >
           <button
-            class="btn-leather pointer-events-auto whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-[11px] opacity-90"
+            class="btn-leather pointer-events-auto whitespace-nowrap rounded-b-lg rounded-t-sm px-5 py-2 text-xs opacity-90"
             @click="unfocus"
           >
             ⟨ View the whole table
@@ -710,7 +726,7 @@ import.meta.hot?.dispose(() => teardown());
       <Transition name="book-fade">
         <div v-if="flatBookOpen" class="fixed inset-0 z-50 overflow-y-auto bg-night">
           <button
-            class="btn-leather fixed z-10 rounded px-4 py-2 text-[11px]"
+            class="btn-leather fixed z-10 rounded px-4 py-2 text-xs"
             style="
               top: calc(0.75rem + var(--safe-top));
               right: calc(0.75rem + var(--safe-right));
@@ -744,6 +760,11 @@ import.meta.hot?.dispose(() => teardown());
         @enter="enterInn"
       />
     </template>
+
+    <!-- announces the keyboard-highlighted curio to screen readers -->
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+      {{ highlightAnnouncement }}
+    </p>
 
     <!-- toasts (dice, easter eggs) -->
     <Transition name="toast">
