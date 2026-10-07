@@ -23,7 +23,7 @@ import {
   colophon,
   credits,
 } from "../data/content";
-import { useAudio } from "../composables/useAudio";
+import { sceneAudio } from "../composables/useSceneAudio";
 import { useSettings } from "../composables/useSettings";
 import { track } from "../composables/useAnalytics";
 import { useFocusTrap } from "../composables/useFocusTrap";
@@ -45,7 +45,6 @@ const emit = defineEmits<{
   close: [];
 }>();
 
-const audio = useAudio();
 const settings = useSettings();
 
 const SECTIONS: { id: BookSection; tab: string; title: string }[] = [
@@ -201,7 +200,7 @@ function goSection(
   if (to === props.section) return;
   pendingSpread = landing.spread;
   pendingPage = landing.page;
-  audio.playFlip();
+  sceneAudio.pageTurn();
   emit("update:section", to);
 }
 /** Tabs / TOC: land on the section's first (left) page. */
@@ -211,7 +210,7 @@ function navigate(to: BookSection): void {
 
 /** Move to another spread of this section (cosmetic 3D flip included). */
 function turnSpread(delta: 1 | -1, landOn: BookPage): void {
-  audio.playFlip();
+  sceneAudio.pageTurn();
   spread.value += delta;
   page.value = landOn;
   bookReading.flip(delta);
@@ -219,7 +218,7 @@ function turnSpread(delta: 1 | -1, landOn: BookPage): void {
 
 function next(): void {
   if (single.value && page.value === "left") {
-    audio.playFlip();
+    sceneAudio.pageTurn(true); // single-page glide: quieter than a real flip
     page.value = "right";
   } else if (spread.value < spreadCount.value - 1) {
     turnSpread(1, "left");
@@ -229,7 +228,7 @@ function next(): void {
 }
 function prev(): void {
   if (single.value && page.value === "right") {
-    audio.playFlip();
+    sceneAudio.pageTurn(true);
     page.value = "left";
   } else if (spread.value > 0) {
     turnSpread(-1, single.value ? "right" : "left");

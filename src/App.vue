@@ -11,6 +11,7 @@ import { ITEM_LABELS } from "./three/types";
 import type { FocusCardItem } from "./data/content";
 import { useSettings } from "./composables/useSettings";
 import { useAudio } from "./composables/useAudio";
+import { sceneAudio, installUiHover } from "./composables/useSceneAudio";
 import { track } from "./composables/useAnalytics";
 import LoaderScreen from "./components/LoaderScreen.vue";
 import ItemTooltip from "./components/ItemTooltip.vue";
@@ -167,6 +168,7 @@ function showToast(
   onAction?: () => void,
 ): void {
   toast.value = { id: ++toastId, text, tone, actionLabel };
+  sceneAudio.toast(tone);
   toastAction = onAction ?? null;
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (toast.value = null), 4000);
@@ -179,8 +181,8 @@ function onToastAction(): void {
 
 function handleDiceResult(value: number): void {
   track("dice_roll", { value });
+  sceneAudio.diceResult(value);
   if (value === 20) {
-    void audio.play("nat20");
     showToast("NATURAL 20! The whole tavern erupts in cheers!", "nat20");
   } else if (value === 1) {
     showToast("Natural 1… the die rolls under the table in shame.", "nat1");
@@ -203,6 +205,11 @@ const events: SceneEvents = {
     if (appPhase.value !== "table") {
       hoveredItem.value = null;
       return;
+    }
+    // A tick when a new curio is hovered (mouse) or highlighted (keyboard);
+    // never on touch, where a tap is a select, not a hover.
+    if (item && item !== hoveredItem.value && (!isCoarseDevice.value || keyboardHighlighting)) {
+      sceneAudio.hover();
     }
     hoveredItem.value = item;
     highlightAnnouncement.value =
@@ -230,11 +237,14 @@ const events: SceneEvents = {
     hoveredItem.value = null;
     // Re-clicks on the already-focused item (candle snuffing) must not
     // hide the card — focusItem is idempotent and won't settle again.
-    if (focusedItem.value !== item) focusCardShown.value = false;
+    const refocus = focusedItem.value === item;
+    if (!refocus) {
+      focusCardShown.value = false;
+      sceneAudio.itemFocus(item);
+    }
     focusedItem.value = item;
     appPhase.value = "focused";
     scene?.focusItem(item);
-    if (item === "spellbook") void audio.play("book-open");
   },
   onFocusSettled: (item) => {
     if (item === "spellbook") {
@@ -251,12 +261,24 @@ const events: SceneEvents = {
     pageTransforms.value = t;
   },
   onDiceResult: handleDiceResult,
-  onDiceImpact: (strength, hard) => audio.playClack(strength, hard),
-  onFireballImpact: () => {
+  onDiceImpact: (strength, hard) => sceneAudio.diceImpact(strength, hard),
+  onFireballCast: (flight) => sceneAudio.fireballCast(flight),
+  onFireballImpact: (position) => {
     // The 3D detonation just fired — shake the DOM on the same beat.
     screenShake();
+    sceneAudio.fireballImpact(position);
   },
-  onCandleSnuff: ({ snuffed, bothOut }) => {
+  onLightning: (position) => sceneAudio.lightning(position),
+  onGust: () => sceneAudio.gust(),
+  onObjectHop: (hop) => sceneAudio.objectHop(hop),
+  onEmberPop: () => sceneAudio.emberPop(),
+  onLanternSway: () => sceneAudio.lanternSway(),
+  onTimeOfDay: (resolved) => sceneAudio.timeOfDay(resolved),
+  onSources: (sources) => sceneAudio.sources(sources),
+  onListener: (position, forward) => sceneAudio.listener(position, forward),
+  onCandleSnuff: (state) => {
+    sceneAudio.candleSnuff(state);
+    const { snuffed, bothOut } = state;
     if (!snuffed) {
       showToast("A match flares — light returns.");
     } else if (bothOut) {
@@ -296,7 +318,7 @@ function openBookAt(section: BookSection): void {
 function closeBook(): void {
   if (!bookOpen.value) return;
   bookOpen.value = false; // hide immediately (fade handled by <Transition>)
-  void audio.play("book-close");
+  sceneAudio.bookClose();
   scene?.focusItem(null);
 }
 
@@ -321,6 +343,7 @@ function enterInn(): void {
   audio.setBusVolume("ui", settings.uiVolume);
   audio.setAmbienceOn(settings.ambienceOn);
   audio.unlock();
+  sceneAudio.afterEnter();
   appPhase.value = "entering";
   window.setTimeout(() => {
     appPhase.value = "table";
@@ -407,7 +430,7 @@ function trackKonami(key: string): void {
   konamiIndex = 0;
   track("konami");
   // Fanfare + the natural-20 screen sparkles.
-  void audio.play("fanfare");
+  sceneAudio.konami();
   showToast("🎮 +30 XP — a hidden path reveals itself", "nat20");
 }
 
@@ -488,6 +511,12 @@ function castFireball(): void {
   else screenShake();
 }
 
+function castAnimate(): void {
+  // Under reduced motion nothing hops, so the hop-timed sounds never fire.
+  if (settings.reducedMotion) sceneAudio.animateStill();
+  scene?.castAnimateObjects();
+}
+
 function castDivination(): void {
   // Roll the physical d20 (the result toast arrives via onDiceResult);
   // flat mode falls back to a plain oracle roll.
@@ -515,6 +544,11 @@ watch(() => settings.ambienceVolume, (v) => audio.setBusVolume("ambience", v));
 watch(() => settings.sfxVolume, (v) => audio.setBusVolume("sfx", v));
 watch(() => settings.uiVolume, (v) => audio.setBusVolume("ui", v));
 watch(() => settings.sfxOn, (on) => audio.setSfxOn(on));
+/* Flat tome (small screens): the same book thump on open and close. */
+watch(flatBookOpen, (open, wasOpen) => {
+  if (open && !wasOpen) void audio.play("book-open");
+  else if (!open && wasOpen) sceneAudio.bookClose();
+});
 watch(consoleOpen, (open) => {
   if (!open) return;
   track("console_open");
@@ -589,6 +623,9 @@ onMounted(async () => {
   window.addEventListener("popstate", applyHash);
   window.addEventListener("pointerdown", unlockAudioOnGesture, { once: true });
   window.addEventListener("keydown", unlockAudioOnGesture, { once: true });
+  uninstallUiHover = installUiHover(
+    () => !useFallback && (appPhase.value === "table" || appPhase.value === "focused"),
+  );
   void probeCv();
 
   if (useFallback) {
@@ -610,7 +647,12 @@ onMounted(async () => {
   scene.setTimeOfDay(settings.timeOfDay);
 });
 
+let uninstallUiHover: (() => void) | null = null;
+
 function teardown(): void {
+  uninstallUiHover?.();
+  uninstallUiHover = null;
+  sceneAudio.cancelIdle();
   window.removeEventListener("keydown", onKeydown);
   window.removeEventListener("pointermove", onPointerMove);
   window.removeEventListener("hashchange", applyHash);
@@ -790,7 +832,7 @@ import.meta.hot?.dispose(() => teardown());
         @fireball="castFireball"
         @lightning="scene?.castLightning()"
         @gust="scene?.castGustOfWind()"
-        @animate="scene?.castAnimateObjects()"
+        @animate="castAnimate"
         @divination="castDivination"
         @wish="hireEgg"
       />
