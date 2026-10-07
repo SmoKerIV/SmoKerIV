@@ -89,6 +89,11 @@ function onScroll(): void {
       const el = root.querySelector<HTMLElement>(`#${anchor}`);
       if (el && el.offsetTop <= probe) current = id;
     }
+    // On tall viewports the last section may never reach the probe line even
+    // with the page scrolled to its end; the bottom of the page is Contact.
+    if (root.scrollTop + root.clientHeight >= root.scrollHeight - 2) {
+      current = NAV[NAV.length - 1]!.id;
+    }
     if (current !== active.value) {
       active.value = current;
       emit("update:section", current);
