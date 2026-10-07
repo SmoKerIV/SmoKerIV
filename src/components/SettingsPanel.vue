@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import type { Quality, TimeOfDay } from "../three/types";
 import { useSettings } from "../composables/useSettings";
 import { useFocusTrap } from "../composables/useFocusTrap";
@@ -54,10 +54,20 @@ const TIME_OPTIONS: { value: TimeOfDay; label: string; hint: string }[] = [
   { value: "night", label: "Candlelight", hint: "night" },
 ];
 
-const volumePercent = computed(() => Math.round(settings.musicVolume * 100));
+type VolumeKey = "ambienceVolume" | "sfxVolume" | "uiVolume";
 
-function onVolumeInput(event: Event): void {
-  settings.musicVolume = Number((event.target as HTMLInputElement).value) / 100;
+const SLIDERS: { key: VolumeKey; label: string; aria: string; enabled: () => boolean }[] = [
+  { key: "ambienceVolume", label: "Hearth", aria: "Ambience", enabled: () => settings.ambienceOn },
+  { key: "sfxVolume", label: "Effects", aria: "Sound effects", enabled: () => settings.sfxOn },
+  { key: "uiVolume", label: "Interface", aria: "Interface sounds", enabled: () => settings.sfxOn },
+];
+
+function percent(key: VolumeKey): number {
+  return Math.round(settings[key] * 100);
+}
+
+function onVolumeInput(key: VolumeKey, event: Event): void {
+  settings[key] = Number((event.target as HTMLInputElement).value) / 100;
 }
 
 const flatUrl = ((): string => {
@@ -100,55 +110,62 @@ const flatUrl = ((): string => {
     </header>
 
     <div class="flex flex-1 flex-col gap-6 px-5 py-5">
-      <!-- Music -->
-      <section>
+      <!-- Sound: two mute toggles, three bus volumes -->
+      <section class="flex flex-col gap-4" aria-labelledby="ledger-sound">
+        <h3 id="ledger-sound" class="sr-only">Sound</h3>
         <div class="ledger-row">
-          <span class="ledger-label">The Bard's Tune</span>
+          <span class="ledger-label">Hearth &amp; Wind <em class="ml-1 font-body text-xs not-italic text-ink-faint">(ambience)</em></span>
           <button
             class="toggle"
-            :class="{ 'toggle-on': settings.musicOn }"
+            :class="{ 'toggle-on': settings.ambienceOn }"
             role="switch"
-            :aria-checked="settings.musicOn"
-            aria-label="Toggle music"
-            @click="settings.musicOn = !settings.musicOn"
+            :aria-checked="settings.ambienceOn"
+            aria-label="Toggle ambience"
+            @click="settings.ambienceOn = !settings.ambienceOn"
           >
             <span class="toggle-knob" />
           </button>
         </div>
-        <div class="mt-3 flex items-center gap-3" :class="{ 'opacity-40': !settings.musicOn }">
-          <!-- lute -->
-          <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-leather" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-            <circle cx="8" cy="16" r="5" />
-            <path d="M11.5 12.5 20 4M18 3l3 3" />
-          </svg>
+        <div class="ledger-row">
+          <span class="ledger-label">Tavern Sounds <em class="ml-1 font-body text-xs not-italic text-ink-faint">(effects)</em></span>
+          <button
+            class="toggle"
+            :class="{ 'toggle-on': settings.sfxOn }"
+            role="switch"
+            :aria-checked="settings.sfxOn"
+            aria-label="Toggle sound effects"
+            @click="settings.sfxOn = !settings.sfxOn"
+          >
+            <span class="toggle-knob" />
+          </button>
+        </div>
+        <div
+          v-for="slider in SLIDERS"
+          :key="slider.key"
+          class="flex items-center gap-3"
+          :class="{ 'opacity-40': !slider.enabled() }"
+        >
+          <label :for="`vol-${slider.key}`" class="w-20 shrink-0 font-body text-xs italic text-ink-soft">
+            {{ slider.label }}
+          </label>
           <input
+            :id="`vol-${slider.key}`"
             type="range"
             min="0"
             max="100"
-            :value="volumePercent"
-            class="ale-meter flex-1"
-            :style="{ '--fill': volumePercent + '%' }"
-            :disabled="!settings.musicOn"
-            aria-label="Music volume"
-            @input="onVolumeInput"
+            step="1"
+            :value="percent(slider.key)"
+            class="ale-meter min-w-0 flex-1"
+            :style="{ '--fill': percent(slider.key) + '%' }"
+            :disabled="!slider.enabled()"
+            :aria-label="`${slider.aria} volume`"
+            :aria-valuetext="`${percent(slider.key)}%`"
+            @input="onVolumeInput(slider.key, $event)"
           />
-          <span class="w-9 text-right font-heading text-xs text-ink-soft">{{ volumePercent }}%</span>
+          <span class="w-9 text-right font-heading text-xs tabular-nums text-ink-soft" aria-hidden="true">
+            {{ percent(slider.key) }}%
+          </span>
         </div>
-      </section>
-
-      <!-- SFX -->
-      <section class="ledger-row">
-        <span class="ledger-label">Tavern Sounds <em class="ml-1 font-body text-xs not-italic text-ink-faint">(page flips &amp; thumps)</em></span>
-        <button
-          class="toggle"
-          :class="{ 'toggle-on': settings.sfxOn }"
-          role="switch"
-          :aria-checked="settings.sfxOn"
-          aria-label="Toggle sound effects"
-          @click="settings.sfxOn = !settings.sfxOn"
-        >
-          <span class="toggle-knob" />
-        </button>
       </section>
 
       <!-- Quality -->

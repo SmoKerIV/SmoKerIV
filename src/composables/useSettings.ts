@@ -2,11 +2,16 @@ import { reactive, watch } from "vue";
 import type { Quality, TimeOfDay } from "../three/types";
 
 export interface AppSettings {
-  /** Ambient music/soundscape on. Off by default (autoplay etiquette). */
-  musicOn: boolean;
-  /** 0..1 */
-  musicVolume: number;
+  /** Inn ambience (fire, room tone, wind) on. Off by default (autoplay etiquette). */
+  ambienceOn: boolean;
+  /** Ambience bus volume 0..1. */
+  ambienceVolume: number;
+  /** Sound effects (and UI ticks) on. */
   sfxOn: boolean;
+  /** SFX bus volume 0..1. */
+  sfxVolume: number;
+  /** UI bus volume 0..1 (hover ticks). */
+  uiVolume: number;
   quality: Quality;
   reducedMotion: boolean;
   /** Inn mood lighting: "auto" follows the visitor's clock. */
@@ -36,13 +41,27 @@ function prefersReducedMotion(): boolean {
 
 function defaults(): AppSettings {
   return {
-    musicOn: false,
-    musicVolume: 0.6,
+    ambienceOn: false,
+    ambienceVolume: 0.6,
     sfxOn: true,
+    sfxVolume: 0.8,
+    uiVolume: 0.5,
     quality: autoQuality(),
     reducedMotion: prefersReducedMotion(),
     timeOfDay: "auto",
   };
+}
+
+/** Fields from the first settings version, migrated on load. */
+interface LegacySettings {
+  musicOn?: unknown;
+  musicVolume?: unknown;
+}
+
+function volume(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(1, Math.max(0, value))
+    : fallback;
 }
 
 function load(): AppSettings {
@@ -50,12 +69,14 @@ function load(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const saved = JSON.parse(raw) as Partial<AppSettings>;
-      if (typeof saved.musicOn === "boolean") base.musicOn = saved.musicOn;
-      if (typeof saved.musicVolume === "number") {
-        base.musicVolume = Math.min(1, Math.max(0, saved.musicVolume));
-      }
+      const saved = JSON.parse(raw) as Partial<AppSettings> & LegacySettings;
+      // v1 stored the ambience toggle/volume as musicOn/musicVolume.
+      const ambienceOn = saved.ambienceOn ?? saved.musicOn;
+      if (typeof ambienceOn === "boolean") base.ambienceOn = ambienceOn;
+      base.ambienceVolume = volume(saved.ambienceVolume ?? saved.musicVolume, base.ambienceVolume);
       if (typeof saved.sfxOn === "boolean") base.sfxOn = saved.sfxOn;
+      base.sfxVolume = volume(saved.sfxVolume, base.sfxVolume);
+      base.uiVolume = volume(saved.uiVolume, base.uiVolume);
       if (saved.quality && QUALITIES.includes(saved.quality)) {
         base.quality = saved.quality;
       }

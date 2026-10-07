@@ -316,8 +316,10 @@ function enterInn(): void {
   // gesture); returning visitors auto-enter, so the AudioContext may start
   // suspended and resumes on the first click/keypress (see onMounted).
   audio.setSfxOn(settings.sfxOn);
-  audio.setBusVolume("ambience", settings.musicVolume);
-  audio.setAmbienceOn(settings.musicOn);
+  audio.setBusVolume("ambience", settings.ambienceVolume);
+  audio.setBusVolume("sfx", settings.sfxVolume);
+  audio.setBusVolume("ui", settings.uiVolume);
+  audio.setAmbienceOn(settings.ambienceOn);
   audio.unlock();
   appPhase.value = "entering";
   window.setTimeout(() => {
@@ -505,11 +507,13 @@ watch(
     document.documentElement.classList.toggle("reduce-motion", reduced);
   },
 );
-watch(() => settings.musicOn, (on) => {
+watch(() => settings.ambienceOn, (on) => {
   audio.setAmbienceOn(on);
   track(on ? "music_on" : "music_off");
 });
-watch(() => settings.musicVolume, (v) => audio.setBusVolume("ambience", v));
+watch(() => settings.ambienceVolume, (v) => audio.setBusVolume("ambience", v));
+watch(() => settings.sfxVolume, (v) => audio.setBusVolume("sfx", v));
+watch(() => settings.uiVolume, (v) => audio.setBusVolume("ui", v));
 watch(() => settings.sfxOn, (on) => audio.setSfxOn(on));
 watch(consoleOpen, (open) => {
   if (!open) return;
@@ -648,10 +652,10 @@ import.meta.hot?.dispose(() => teardown());
       <!-- corner chrome (hidden while reading — the table should be bare) -->
       <HudBar
         v-if="(appPhase === 'table' || appPhase === 'focused') && !bookOpen && !flatBookOpen"
-        :music-on="settings.musicOn"
+        :music-on="settings.ambienceOn"
         :book-open="bookOpen"
         :cv-url="cvUrl"
-        @toggle-music="settings.musicOn = !settings.musicOn"
+        @toggle-music="settings.ambienceOn = !settings.ambienceOn"
         @open-settings="settingsOpen = true"
         @open-console="consoleOpen = true"
       />
