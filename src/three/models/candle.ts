@@ -205,6 +205,59 @@ export function makeCandleFlame(): THREE.Mesh {
   return flame;
 }
 
+/**
+ * The licensed holder is one mesh with one material (brass + wax, split by
+ * its metalness map). The candle's own point light sits a centimetre above
+ * the wax, so the wax sides only ever see it at grazing angles: with the
+ * full-strength normal map that broke the lit wax into hard black/white
+ * blotches and left the stem under the cup pitch black, which read as
+ * broken shadows (the normal map is toned down below). Real wax
+ * glows from inside (the flame light scatters through it), so the
+ * non-metal texels get a warm, height-faded glow driven by the flame
+ * flicker (Lights.attachCandle) — a separate uniform, so the hover emissive
+ * snapshot/restore never fights it. Subclassed (not onBeforeCompile on an
+ * instance) so SceneManager's per-interactable material.clone() keeps the
+ * patch; clones share the glow uniform, so flicker reaches them too.
+ */
+class CandleWaxMaterial extends THREE.MeshStandardMaterial {
+  waxGlow = { value: 1 };
+  /** Model-space y range over which the glow fades in (bottom → top). */
+  waxRange = { value: new THREE.Vector2(0, 1) };
+
+  override copy(source: CandleWaxMaterial): this {
+    super.copy(source);
+    if (source.waxGlow) this.waxGlow = source.waxGlow;
+    if (source.waxRange) this.waxRange = source.waxRange;
+    return this;
+  }
+
+  override onBeforeCompile(shader: THREE.WebGLProgramParametersWithUniforms): void {
+    shader.uniforms.waxGlow = this.waxGlow;
+    shader.uniforms.waxRange = this.waxRange;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vWaxY;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWaxY = position.y;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nvarying float vWaxY;\nuniform float waxGlow;\nuniform vec2 waxRange;",
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        float waxMask = ( 1.0 - metalnessFactor ) * smoothstep( waxRange.x, waxRange.y, vWaxY );
+        totalEmissiveRadiance += diffuseColor.rgb * vec3( 1.0, 0.66, 0.36 ) * waxGlow * waxMask;`,
+      );
+  }
+
+  override customProgramCacheKey(): string {
+    return "candleWax";
+  }
+}
+
+/** Wax glow at full flame (scaled by the flicker in Lights.update). */
+export const CANDLE_WAX_GLOW = 1.2;
+
 /** Licensed holder is 0.25 m tall; a touch smaller sits better by the props. */
 const MODEL_CANDLE_SCALE = 0.88;
 
@@ -257,8 +310,35 @@ export function buildCandleFromModel(model: THREE.Object3D): THREE.Group {
   flame.position.set(tip.x, tip.y - 0.006, tip.z);
   group.add(flame);
 
+  // Swap in the glowing-wax variant of the (already styled) material.
+  // Glow fades in over the top ~13 cm of the wax (model units are
+  // unscaled, the group's are scaled by MODEL_CANDLE_SCALE).
+  const topModel = tip.y / MODEL_CANDLE_SCALE;
+  let waxGlow: { value: number } | undefined;
+  const swapped = new Map<THREE.Material, CandleWaxMaterial>();
+  model.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+    let wax = swapped.get(mesh.material);
+    if (!wax) {
+      wax = new CandleWaxMaterial().copy(
+        mesh.material as THREE.MeshStandardMaterial as CandleWaxMaterial,
+      );
+      // The shipped normal map is far too strong for a light this close:
+      // at full scale it carved the wax and stem into black/white facets.
+      wax.normalScale.multiplyScalar(0.2);
+      wax.waxGlow = { value: CANDLE_WAX_GLOW };
+      wax.waxRange = {
+        value: new THREE.Vector2(topModel - 0.15 / MODEL_CANDLE_SCALE, topModel - 0.01),
+      };
+      swapped.set(mesh.material, wax);
+    }
+    mesh.material = wax;
+    waxGlow = wax.waxGlow;
+  });
+
   group.userData.itemId = "candle";
   group.userData.label = ITEM_LABELS.candle.name;
-  group.userData.parts = { flame } satisfies CandleParts;
+  group.userData.parts = { flame, waxGlow } satisfies CandleParts;
   return group;
 }

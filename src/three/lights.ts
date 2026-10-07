@@ -11,6 +11,9 @@ interface Flicker {
   /** 0 = snuffed, 1 = burning; eased toward litTarget in update(). */
   lit: number;
   litTarget: number;
+  /** Wax inner-glow uniform and its full-flame value (licensed holder). */
+  waxGlow: { value: number } | null;
+  waxGlowBase: number;
 }
 
 // Night = the hand-tuned baseline; day lerps toward these targets.
@@ -131,7 +134,7 @@ export class Lights {
    * The light sits beside the flame (same parent), not under it, so the
    * flame mesh can be hidden on snuff while the light fades out on its own.
    */
-  attachCandle(flame: THREE.Mesh): void {
+  attachCandle(flame: THREE.Mesh, waxGlow?: { value: number }): void {
     const light = new THREE.PointLight(0xffb46b, 2.4, 2.5, 2);
     const parent = flame.parent ?? flame;
     light.position.copy(flame.position);
@@ -146,6 +149,8 @@ export class Lights {
       speed: 6 + Math.random() * 3,
       lit: 1,
       litTarget: 1,
+      waxGlow: waxGlow ?? null,
+      waxGlowBase: waxGlow?.value ?? 0,
     });
   }
 
@@ -286,6 +291,8 @@ export class Lights {
         }
       }
       f.light.intensity = intensity * f.lit;
+      // The wax glows with its flame (and goes dark when snuffed).
+      if (f.waxGlow) f.waxGlow.value = (f.waxGlowBase * intensity * f.lit) / f.baseIntensity;
     }
 
     const pulse = 1 + 0.08 * Math.sin(elapsed * 2.1);

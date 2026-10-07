@@ -243,6 +243,8 @@ export interface SpellbookParts {
 export interface CandleParts {
   /** Emissive flame mesh; SceneManager attaches the flickering light here. */
   flame: THREE.Mesh;
+  /** Wax inner-glow uniform (licensed holder only); follows the flame. */
+  waxGlow?: { value: number };
 }
 
 export const TABLE_SURFACE_Y = 0.95;

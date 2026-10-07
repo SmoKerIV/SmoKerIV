@@ -1298,7 +1298,7 @@ export class SceneManager implements ISceneManager {
     for (const candle of [this.itemGroups.get("candle"), candleB]) {
       const parts = candle?.userData.parts as CandleParts | undefined;
       if (!candle || !parts?.flame) continue;
-      this.lights.attachCandle(parts.flame);
+      this.lights.attachCandle(parts.flame, parts.waxGlow);
       this.candleStates.set(candle, { clicks: [], snuffed: false });
     }
 
