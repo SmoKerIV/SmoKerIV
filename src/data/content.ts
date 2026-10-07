@@ -2,7 +2,7 @@
  * All portfolio content, rethemed for the fantasy spellbook.
  * This is the single file to edit when facts change.
  */
-import type { ItemId } from "../three/types";
+import type { BookSection, ItemId } from "../three/types";
 
 export const identity = {
   name: "Baker Alazzawi",
@@ -254,6 +254,69 @@ export const loadingLines = [
 export const colophon =
   "Bound in Baghdad. Written in TypeScript. Powered by caffeine. " +
   "No goblins were harmed in the making of this website.";
+
+/* ------------------------------------------------------------------ */
+/* Tome copy — the words shared by the 3D book and the flat page       */
+/* ------------------------------------------------------------------ */
+
+/** The tome's sections in reading order: tab label, page title, TOC folio. */
+export const tomeSections: { id: BookSection; tab: string; title: string }[] = [
+  { id: "cover", tab: "Cover", title: "Cover" },
+  { id: "whoami", tab: "Who Am I", title: "The Character Sheet" },
+  { id: "skills", tab: "Spells", title: "Spells Known" },
+  { id: "career", tab: "Quests", title: "The Quest Log" },
+  { id: "projects", tab: "Artifacts", title: "Artifacts Forged" },
+  { id: "runes", tab: "Runes", title: "Forbidden Appendix" },
+  { id: "contact", tab: "Raven", title: "Send a Raven" },
+];
+
+/** D&D ability modifier, formatted +N / −N / ±0. */
+export function statModifier(value: number): string {
+  const m = Math.floor((value - 10) / 2);
+  if (m === 0) return "±0";
+  return m > 0 ? `+${m}` : `−${Math.abs(m)}`;
+}
+
+export const tomeCopy = {
+  attributesNote: "* rolled honestly; the dungeon master was not bribed",
+  spellsIntro:
+    "Spells mastered across long campaigns — cast daily, in production, without a saving throw.",
+  spellsFootnote: "new spells learned nightly, usually instead of sleeping",
+  artifactsIntro:
+    "Relics recovered from past expeditions. Handle with clean hands and a stable connection.",
+  contactIntro:
+    "Quests, contracts, collaborations, or a simple hail — the ravens know the way to Baghdad, and the inbox is always watched.",
+  cvLabel: "Take the Adventurer's Contract (CV)",
+  sealLabel: "Send the Raven",
+  tocHint: "— turn the pages with the arrows, the arrow keys, or the index tabs —",
+};
+
+/** Contact rows with the tome's labels, in the tome's order. */
+export const contactLines = [
+  { kind: "By raven (email)", label: contact.email, href: `mailto:${contact.email}` },
+  { kind: "By speaking-horn", label: contact.phone.label, href: `tel:${contact.phone.tel}` },
+  { kind: "Grimoire repository", label: contact.github.label, href: contact.github.url },
+  { kind: "Guild registry", label: contact.linkedin.label, href: contact.linkedin.url },
+  { kind: "Scrying mirror", label: contact.instagram.label, href: contact.instagram.url },
+];
+
+/** The decorative rune page ("Forbidden Appendix"). */
+export const runesPage = {
+  circle: "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛈᛇᛉᛊ",
+  caption: "fig. 1 — the summoning circle, as drawn by the author at 3 a.m.",
+  text: [
+    "ᚦᚨ ᛊᛖᚱᚡᛖᚱ ᛁᛊ ᛞᛟᚹᚾ ᚨᚷᚨᛁᚾ᛫ ᚺᚨᚡᛖ ᚤᛟᚢ ᛏᚱᛁᛖᛞ ᛏᚢᚱᚾᛁᚾᚷ ᛁᛏ ᛟᚠᚠ ᚨᚾᛞ ᛟᚾ ᚨᚷᚨᛁᚾ᛬",
+    "ᚾᛖᚡᛖᚱ ᛞᛖᛈᛚᛟᚤ ᛟᚾ ᚨ ᚠᚱᛁᛞᚨᚤ᛫ ᚦᛖ ᛖᛚᛞᛖᚱ ᛞᛖᚡᛊ ᚹᚨᚱᚾᛖᛞ ᚢᛊ᛫ ᚨᚾᛞ ᛊᛏᛁᛚᛚ ᚹᛖ ᛞᛁᛞ᛬",
+    "ᚦᛁᛊ ᛈᚨᚱᚨᚷᚱᚨᛈᚺ ᛁᛊ ᛞᛖᚲᛟᚱᚨᛏᛁᚡᛖ᛫ ᛁᚠ ᚤᛟᚢ ᚲᚨᚾ ᚱᛖᚨᛞ ᛁᛏ᛫ ᛈᛚᛖᚨᛊᛖ ᚨᛈᛈᛚᚤ ᚹᛁᚦᛁᚾ᛬",
+  ],
+  translation: "translation withheld by order of the Archmage of Legal.",
+  scribbles: [
+    "do not summon in prod",
+    "works on my grimoire",
+    "TODO: refactor this ritual",
+    "here be segfaults →",
+  ],
+};
 
 /* ------------------------------------------------------------------ */
 /* Focus cards — parchment scrap shown when zoomed on a table item     */
