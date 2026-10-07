@@ -293,20 +293,20 @@ export function agedBrassMaps(): PbrMaps {
     const h = new Float32Array(S * S);
     const rough = new Float32Array(S * S);
     for (let i = 0; i < S * S; i++) {
-      // Warm, slightly orange brass (a yellow-green albedo turns teal-green
-      // under the arcane light) with soft darker tarnish in the noise lows.
-      const tarnish = Math.max(0, n[i]! - 0.5) * 1.4;
-      img.data[i * 4] = 186 - tarnish * 70;
-      img.data[i * 4 + 1] = 132 - tarnish * 56;
-      img.data[i * 4 + 2] = 62 - tarnish * 26;
+      // Warm yellow brass (kept a little away from green so the teal
+      // arcane light doesn't turn it olive), tarnish toward dull brown.
+      const tarnish = Math.max(0, n[i]! - 0.5) * 1.2;
+      img.data[i * 4] = 200 - tarnish * 62;
+      img.data[i * 4 + 1] = 160 - tarnish * 58;
+      img.data[i * 4 + 2] = 84 - tarnish * 34;
       img.data[i * 4 + 3] = 255;
-      h[i] = dents[i]! * 0.3;
-      rough[i] = 0.42 + tarnish * 0.3;
+      h[i] = dents[i]! * 0.12;
+      rough[i] = 0.4 + tarnish * 0.25;
     }
     ctx.putImageData(img, 0, 0);
     return {
       map: toTexture(canvas),
-      normalMap: heightToNormalMap(h, S, S, 1.5),
+      normalMap: heightToNormalMap(h, S, S, 0.8),
       roughnessMap: fieldToTexture(rough, S, S),
     };
   });
@@ -375,7 +375,7 @@ export function agedBrass(): THREE.MeshStandardMaterial {
     // and the teal arcane light over the book tinted it green. Half metal
     // keeps a warm diffuse body under the candles plus a soft sheen.
     roughness: 1,
-    metalness: 0.5,
+    metalness: 0.55,
   });
 }
 
@@ -502,8 +502,12 @@ export function cornerGuardGeometry(leg: number, boardT: number): THREE.BufferGe
     extrude(band, boardT + 2 * e, boardT + e), // edge band
     extrude(plate(leg * 0.42), e, 0), // lip under the board
   ];
-  const geo = mergeGeometries(parts)!;
+  const merged = mergeGeometries(parts)!;
   for (const part of parts) part.dispose();
+  // Smooth the band around the rounded corner (flat facets read as a
+  // dark stripe on the metal), keep the sheet's folded edges crisp.
+  const geo = toCreasedNormals(merged, Math.PI / 4);
+  merged.dispose();
   geo.clearGroups();
   return brassUVs(geo);
 }

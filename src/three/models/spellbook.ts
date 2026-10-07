@@ -286,12 +286,12 @@ export function buildSpellbook(): THREE.Group {
   // as the open book's gutter ridge) stops flush with the block instead.
   const SPINE_SPLIT = 1.25;
   const spine = new THREE.Mesh(
-    spineShellGeometry(SPINE_CX, SPINE_CY, SPINE_A, SPINE_B, SPINE_WALL, D + 0.004, SPINE_SPLIT),
+    spineShellGeometry(SPINE_CX, SPINE_CY, SPINE_A, SPINE_B, SPINE_WALL, BLOCK_Z * 2 + 0.003, SPINE_SPLIT),
     spineLeather,
   );
   const spineInner = new THREE.Mesh(
     spineShellGeometry(
-      SPINE_CX, SPINE_CY, SPINE_A, SPINE_B, SPINE_WALL, (D / 2 - 0.0035) * 2, 0.45,
+      SPINE_CX, SPINE_CY, SPINE_A, SPINE_B, SPINE_WALL, (BLOCK_Z - 0.0005) * 2, 0.45,
       SPINE_SPLIT + 0.05,
     ),
     spineLeather,
@@ -318,20 +318,20 @@ export function buildSpellbook(): THREE.Group {
     spineFillGeometry(
       SPINE_CX, SPINE_CY, innerA, innerB,
       BLOCK_X0 - 0.0002, SPINE_CY - innerB + 0.0004, SPINE_CY + innerB - 0.0004,
-      D / 2 - 0.005, 0, 0.5,
+      BLOCK_Z - 0.0005, 0, 0.5,
     ),
     leather,
   );
   group.add(joint);
 
   // Head and tail caps: leather rolled over the headbands, just past the
-  // spine's ends. They set the closed book's outer extents (x −0.277,
+  // spine's ends. They set the closed book's outer extents (x −0.2767,
   // z ±0.183) exactly as before.
   for (const z of [-(0.183 - 0.0025), 0.183 - 0.0025]) {
     const cap = new THREE.Mesh(
       spineCordGeometry(
         SPINE_CX, SPINE_CY, SPINE_A, SPINE_B, z,
-        1.72, 4.32, 0.0034, 0.0025, 0.0008, 0.3,
+        1.72, 4.32, 0.0031, 0.0025, 0.0008, 0.3,
       ),
       spineLeather,
     );
