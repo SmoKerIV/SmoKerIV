@@ -20,6 +20,7 @@ import {
   artifacts,
   contact,
   colophon,
+  credits,
 } from "../data/content";
 import { useAudio } from "../composables/useAudio";
 import { useSettings } from "../composables/useSettings";
@@ -790,6 +791,9 @@ watch(spread, () => {
               <p class="m-0 max-w-[40ch] border-t border-gold/50 pt-2 font-body text-[11px] italic leading-relaxed text-ink-faint">
                 {{ colophon }}
               </p>
+              <ul class="m-0 max-w-[44ch] list-none p-0 font-body text-[11px] leading-snug text-ink-faint opacity-80">
+                <li v-for="credit in credits" :key="credit">{{ credit }}</li>
+              </ul>
             </div>
           </template>
         </div>
