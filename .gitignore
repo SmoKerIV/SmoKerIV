@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Licensed 3D models (Envato) — never commit, deploy only
+public/models/
