@@ -6,6 +6,37 @@ import * as THREE from "three";
 import { TABLE_SURFACE_Y } from "../types";
 import { woodDarkMaterial, woodLightMaterial } from "./materials";
 
+/**
+ * Breadboard end cap with its grain running along its length (Z) at the
+ * planks' texel scale. A plain box squeezed the whole wood texture onto a
+ * 9 cm strip with the grain across it: under the nearby candles that read
+ * as a bright zigzag moiré beside each candle.
+ */
+function capGeometry(
+  height: number,
+  length: number,
+  plankLength: number,
+  plankWidth: number,
+): THREE.BoxGeometry {
+  const geo = new THREE.BoxGeometry(0.09, height, length);
+  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  const normal = geo.getAttribute("normal") as THREE.BufferAttribute;
+  const uv = geo.getAttribute("uv") as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    if (Math.abs(normal.getZ(i)) > 0.5) {
+      uv.setXY(i, x / plankWidth, y / plankWidth);
+    } else {
+      // Top/bottom and the long sides: grain (texture U) along Z.
+      const across = Math.abs(normal.getY(i)) > 0.5 ? x : y;
+      uv.setXY(i, z / plankLength + 0.5, across / plankWidth);
+    }
+  }
+  return geo;
+}
+
 export function buildTable(): THREE.Group {
   const group = new THREE.Group();
   group.name = "table";
@@ -41,10 +72,7 @@ export function buildTable(): THREE.Group {
   }
   // Breadboard end caps
   for (const sx of [-1, 1]) {
-    const cap = new THREE.Mesh(
-      new THREE.BoxGeometry(0.09, TOP_T + 0.01, TOP_D + 0.02),
-      frameWood,
-    );
+    const cap = new THREE.Mesh(capGeometry(TOP_T + 0.01, TOP_D + 0.02, TOP_W, plankD), frameWood);
     cap.position.set(sx * (TOP_W / 2 + 0.03), TABLE_SURFACE_Y - TOP_T / 2 - 0.002, 0);
     cap.castShadow = true;
     cap.receiveShadow = true;
