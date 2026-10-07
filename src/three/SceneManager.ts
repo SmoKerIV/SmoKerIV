@@ -77,6 +77,7 @@ const FIREBALL_FLIGHT_DURATION = 0.8;
 const FIREBALL_TRAIL_STEP = 0.06;
 /** How far ahead of the camera the bead detonates (before clamping). */
 const FIREBALL_THROW_DISTANCE = 1.7;
+const FIREBALL_LIGHT_INTENSITY = 3;
 
 // --- Auto quality fail-down --------------------------------------------------
 const FRAME_WINDOW = 90;
@@ -104,6 +105,11 @@ interface Placement {
 /** Reusable fireball projectile (emissive core + layered glow sprites). */
 interface FireballRig {
   group: THREE.Group;
+  /**
+   * Traveling warm light. Lives outside the (hidden-when-idle) group and
+   * sits at intensity 0 between casts, so the light count is constant.
+   */
+  light: THREE.PointLight;
   /** Sprite materials — not reached by the dispose() mesh traverse. */
   spriteMaterials: THREE.SpriteMaterial[];
 }
@@ -201,7 +207,7 @@ export class SceneManager implements ISceneManager {
   private diceRolling = false;
   private dicePhysics: DicePhysics | null = null;
 
-  /** Lazily-built reusable fireball projectile (sphere + glow sprites). */
+  /** Reusable fireball projectile, built with the stage. */
   private fireball: FireballRig | null = null;
   private fireballTween: gsap.core.Tween | null = null;
 
@@ -219,7 +225,7 @@ export class SceneManager implements ISceneManager {
 
   /** Call Lightning: strobe drive (0..1) + the bolt light by the window. */
   private readonly lightningProxy = { v: 0 };
-  private lightningLight: THREE.PointLight | null = null;
+  private readonly lightningLight: THREE.PointLight;
   /** Gust of Wind: pending "a match relights the table" beat. */
   private gustRelightTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -246,6 +252,8 @@ export class SceneManager implements ISceneManager {
   private disposed = false;
   private progressFrame = 0;
   private readyFired = false;
+  /** Every program warmed up by compileAsync (no first-cast hitches). */
+  private shadersReady = false;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -264,7 +272,10 @@ export class SceneManager implements ISceneManager {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = settings.quality !== "low";
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // r185 deprecates PCFSoftShadowMap and swaps it for PCFShadowMap on the
+    // first shadow render — a type change that flags every material for
+    // recompile right after the warm-up. Ask for PCF directly.
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.setPixelRatio(
       Math.min(window.devicePixelRatio, PIXEL_RATIO_CAP[settings.quality]),
     );
@@ -279,8 +290,15 @@ export class SceneManager implements ISceneManager {
     this.particles = new Particles(settings.quality);
     this.scene.add(this.particles.group);
 
+    // Cool bolt light just inside the -Z window; dormant (intensity 0, but
+    // visible so the light count is stable) between casts.
+    this.lightningLight = new THREE.PointLight(0xbfd8ff, 0, 10, 1.8);
+    this.lightningLight.position.set(0.4, 2.2, -2.6);
+    this.scene.add(this.lightningLight);
+
     this.buildStage();
     this.buildMoth();
+    this.ensureFireball();
     this.applyRune();
 
     // Default mood: "auto", applied instantly so first paint is correct.
@@ -300,6 +318,13 @@ export class SceneManager implements ISceneManager {
     this.resizeObserver.observe(canvas);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
     this.handleResize();
+    // Compile every program (lights are all present and visible now) before
+    // ready, so nothing compiles mid-interaction.
+    void this.renderer
+      .compileAsync(this.scene, this.rig.camera)
+      .then(() => {
+        this.shadersReady = true;
+      });
     this.updateRunning();
     // Dev-only escape hatch for debugging camera/scene state in the console.
     if (import.meta.env.DEV) {
@@ -409,6 +434,8 @@ export class SceneManager implements ISceneManager {
     const fb = this.ensureFireball();
     fb.group.position.copy(spawn);
     fb.group.visible = true;
+    fb.light.position.copy(spawn);
+    fb.light.intensity = FIREBALL_LIGHT_INTENSITY;
     const state = { t: 0, lastTrail: 0 };
     this.fireballTween = gsap.to(state, {
       t: 1,
@@ -417,6 +444,7 @@ export class SceneManager implements ISceneManager {
       onUpdate: () => {
         fb.group.position.lerpVectors(spawn, impact, state.t);
         fb.group.position.y += Math.sin(Math.PI * state.t) * arc;
+        fb.light.position.copy(fb.group.position);
         // t drives position linearly, so fixed t steps = even trail spacing.
         while (state.t - state.lastTrail >= FIREBALL_TRAIL_STEP) {
           state.lastTrail += FIREBALL_TRAIL_STEP;
@@ -426,22 +454,18 @@ export class SceneManager implements ISceneManager {
       onComplete: () => {
         this.fireballTween = null;
         fb.group.visible = false;
+        fb.light.intensity = 0;
         this.detonateFireball(impact);
       },
       onInterrupt: () => {
         fb.group.visible = false;
+        fb.light.intensity = 0;
       },
     });
   }
 
   castLightning(): void {
     if (this.disposed) return;
-    if (!this.lightningLight) {
-      // Cool bolt light just inside the -Z window; dormant between casts.
-      this.lightningLight = new THREE.PointLight(0xbfd8ff, 0, 10, 1.8);
-      this.lightningLight.position.set(0.4, 2.2, -2.6);
-      this.scene.add(this.lightningLight);
-    }
     gsap.killTweensOf(this.lightningProxy);
     const tl = gsap.timeline({
       onUpdate: this.applyLightning,
@@ -1047,7 +1071,10 @@ export class SceneManager implements ISceneManager {
     },
   };
 
-  /** Build the reusable projectile once: emissive core + layered glow. */
+  /**
+   * Build the reusable projectile once: emissive core + layered glow.
+   * Called after buildStage's shadow traverse, so nothing in it casts.
+   */
   private ensureFireball(): FireballRig {
     if (this.fireball) return this.fireball;
     const texture = makeDotTexture();
@@ -1080,13 +1107,14 @@ export class SceneManager implements ISceneManager {
     );
     innerGlow.scale.setScalar(0.16);
     // A traveling warm light sells the projectile against the dark room.
-    const light = new THREE.PointLight(0xff9040, 3, 3.5, 2);
+    const light = new THREE.PointLight(0xff9040, 0, 3.5, 2);
 
-    group.add(core, halo, innerGlow, light);
+    group.add(core, halo, innerGlow);
     group.visible = false;
-    this.scene.add(group);
+    this.scene.add(group, light);
     this.fireball = {
       group,
+      light,
       spriteMaterials: [halo.material, innerGlow.material],
     };
     return this.fireball;
@@ -1104,7 +1132,10 @@ export class SceneManager implements ISceneManager {
   private killFireball(): void {
     this.fireballTween?.kill();
     this.fireballTween = null;
-    if (this.fireball) this.fireball.group.visible = false;
+    if (this.fireball) {
+      this.fireball.group.visible = false;
+      this.fireball.light.intensity = 0;
+    }
   }
 
   /** Snuff easter egg: 5 quick clicks put a candle out; one click relights. */
@@ -1148,7 +1179,7 @@ export class SceneManager implements ISceneManager {
    */
   private readonly applyLightning = (): void => {
     const v = this.lightningProxy.v;
-    if (this.lightningLight) this.lightningLight.intensity = v * 26;
+    this.lightningLight.intensity = v * 26;
     this.applyMood();
     if (this.windowSky && v > 0) {
       this.windowSky.emissive.lerp(LIGHTNING_SKY, Math.min(v * 0.85, 1));
@@ -1461,7 +1492,7 @@ export class SceneManager implements ISceneManager {
       this.emitPageTransforms();
     }
 
-    if (!this.readyFired && this.progressFrame >= 4) {
+    if (!this.readyFired && this.shadersReady && this.progressFrame >= 4) {
       this.readyFired = true;
       this.warmupUntil = elapsed + WARMUP_SECONDS;
       this.events.onReady?.();

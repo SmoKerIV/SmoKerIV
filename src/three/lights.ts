@@ -106,9 +106,10 @@ export class Lights {
     this.arcane.position.set(0, 1.45, -0.05);
     this.group.add(this.arcane);
 
-    // Fireball impact flash, dormant until flashAt() is called.
+    // Fireball impact flash, dormant (intensity 0) until flashAt(). It stays
+    // visible so the scene's light count never changes: toggling a light's
+    // visibility recompiles every lit material on the first cast.
     this.impactFlash = new THREE.PointLight(0xff8a3d, 0, 7, 2);
-    this.impactFlash.visible = false;
     this.group.add(this.impactFlash);
 
     this.setQuality(quality);
@@ -186,7 +187,6 @@ export class Lights {
   flashAt(position: THREE.Vector3, elapsed: number): void {
     this.impactFlash.position.copy(position);
     this.impactFlashStart = elapsed;
-    this.impactFlash.visible = true;
   }
 
   update(elapsed: number): void {
@@ -213,7 +213,6 @@ export class Lights {
       if (t >= 1) {
         this.impactFlashStart = -1;
         this.impactFlash.intensity = 0;
-        this.impactFlash.visible = false;
       } else {
         this.impactFlash.intensity = IMPACT_FLASH_PEAK * (1 - t) * (1 - t);
       }
