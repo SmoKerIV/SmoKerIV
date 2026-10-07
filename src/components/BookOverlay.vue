@@ -954,7 +954,7 @@ watch(spread, () => {
   pointer-events: auto;
   width: 100%;
   height: 100%;
-  padding: 30px 42px 34px;
+  padding: 28px 42px 30px;
   /* NEVER a scroll container: scrollable boxes inside a transformed
      layer break compositing (blank pages). Content must fit —
      .fit-wrap shrinks anything that would overflow. */
@@ -997,7 +997,7 @@ watch(spread, () => {
 }
 /* One vertical rhythm for every repeated block on a page. */
 .ink-pad {
-  --rhythm: 0.85rem;
+  --rhythm: 0.7rem;
 }
 
 
