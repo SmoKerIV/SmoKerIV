@@ -492,8 +492,17 @@ function onKeydown(event: KeyboardEvent): void {
     flatBookOpen.value = false;
     return;
   }
-  // While the book is open, BookOverlay owns Escape/Tab/arrows.
-  if (bookOpen.value || typingInField || useFallback) return;
+  // While the book is open, BookOverlay owns Escape/Tab/arrows; the ledger
+  // and the flat tome are ordinary pages whose Tab/Enter must stay native.
+  if (
+    bookOpen.value ||
+    settingsOpen.value ||
+    flatBookOpen.value ||
+    typingInField ||
+    useFallback
+  ) {
+    return;
+  }
 
   if (event.key === "Tab") {
     if (scene && appPhase.value === "table") {
