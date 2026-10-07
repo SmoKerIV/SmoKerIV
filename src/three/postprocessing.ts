@@ -168,7 +168,9 @@ export class PostFX {
       .replace(
         "vec4 texel = texture2D( tDiffuse, vUv );",
         "vec4 texel = texture2D( tDiffuse, vUv );\n" +
-          "texel = vec4( min( texel.rgb * clamp( texel.a, 0.0, 1.0 ), vec3( bloomClamp ) ), 1.0 );",
+          "vec3 glow = texel.rgb * clamp( texel.a, 0.0, 1.0 );\n" +
+          // Scale, don't clip per channel: clipping turns orange flames yellow-green.
+          "texel = vec4( glow * min( 1.0, bloomClamp / max( max( glow.r, glow.g ), max( glow.b, 1e-4 ) ) ), 1.0 );",
       );
     highPass.uniforms.bloomClamp = { value: BLOOM_CLAMP };
     highPass.uniforms.smoothWidth.value = BLOOM_KNEE;
