@@ -29,7 +29,24 @@ import {
 import { CameraRig } from "./CameraRig";
 import { Lights } from "./lights";
 import { Particles } from "./particles";
-import { clearTextureCache, makeDotTexture } from "./models/textures";
+import {
+  clearTextureCache,
+  makeBladeRuneTexture,
+  makeCrestTexture,
+  makeDotTexture,
+  makeRuneCircleTexture,
+} from "./models/textures";
+import {
+  leatherMaterial,
+  parchmentMaterial,
+  plasterMaterial,
+  scrollEndMaterial,
+  stoneMaterial,
+  waxMaterial,
+  woodDarkMaterial,
+  woodLightMaterial,
+  woodStaveMaterial,
+} from "./models/materials";
 import { DicePhysics } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
 
@@ -96,6 +113,58 @@ const GSAP_LAG_THRESHOLD = 500;
 const GSAP_ADJUSTED_LAG = 33;
 let lagSmoothingOwners = 0;
 
+/** Loader progress at the end of each start-up stage (first frame = 1). */
+const PROGRESS = {
+  start: 0.04,
+  textures: 0.5,
+  models: 0.8,
+  shaders: 0.95,
+} as const;
+const COMPILE_TIMEOUT_MS = 5000;
+/** Upper bound on a start-up yield when rAF is throttled (hidden tab). */
+const YIELD_FALLBACK_MS = 50;
+
+/**
+ * Canvas textures painted up front, one per task, so start-up never blocks
+ * the main thread in one long go (the builders then hit the caches).
+ */
+const TEXTURE_WARMUPS: (() => unknown)[] = [
+  woodDarkMaterial,
+  woodLightMaterial,
+  woodStaveMaterial,
+  leatherMaterial,
+  () => parchmentMaterial(false),
+  () => parchmentMaterial(true),
+  plasterMaterial,
+  stoneMaterial,
+  waxMaterial,
+  scrollEndMaterial,
+  makeCrestTexture,
+  makeBladeRuneTexture,
+  makeRuneCircleTexture,
+  makeDotTexture,
+];
+
+/**
+ * Give the browser a turn between start-up chunks: wait for the next frame
+ * and then a task, so the loader ring actually repaints (scheduler.yield()
+ * continuations outrank rendering and timers, so they don't). Hidden tabs
+ * never fire rAF — the timeout keeps start-up going there.
+ */
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (): void => {
+      if (done) return;
+      done = true;
+      clearTimeout(fallback);
+      resolve();
+    };
+    const fallback = setTimeout(finish, YIELD_FALLBACK_MS);
+    requestAnimationFrame(() => setTimeout(finish, 0));
+  });
+}
+
 interface Placement {
   x: number;
   z: number;
@@ -144,7 +213,8 @@ export class SceneManager implements ISceneManager {
   private readonly rig: CameraRig;
   private readonly lights: Lights;
   private readonly particles: Particles;
-  private readonly interaction: Interaction;
+  /** Created once the stage exists (it snapshots the pickable roots). */
+  private interaction: Interaction | null = null;
   private readonly resizeObserver: ResizeObserver;
 
   private readonly settings: SceneSettings;
@@ -250,10 +320,9 @@ export class SceneManager implements ISceneManager {
   private resizeRaf: number | null = null;
   private userPaused = false;
   private disposed = false;
-  private progressFrame = 0;
   private readyFired = false;
-  /** Every program warmed up by compileAsync (no first-cast hitches). */
-  private shadersReady = false;
+  /** Stage built and every program compiled; the render loop may run. */
+  private stageReady = false;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -296,21 +365,9 @@ export class SceneManager implements ISceneManager {
     this.lightningLight.position.set(0.4, 2.2, -2.6);
     this.scene.add(this.lightningLight);
 
-    this.buildStage();
-    this.buildMoth();
-    this.ensureFireball();
-    this.applyRune();
-
     // Default mood: "auto", applied instantly so first paint is correct.
     this.moodProxy.v = this.resolveTimeOfDay("auto") === "day" ? 1 : 0;
     this.applyMood();
-
-    this.interaction = new Interaction(
-      canvas,
-      this.rig.camera,
-      this.interactableRoots,
-      this.interactionEvents,
-    );
 
     // Single resize source, coalesced to one rAF (mobile URL-bar show/hide
     // and window drags fire bursts).
@@ -318,14 +375,8 @@ export class SceneManager implements ISceneManager {
     this.resizeObserver.observe(canvas);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
     this.handleResize();
-    // Compile every program (lights are all present and visible now) before
-    // ready, so nothing compiles mid-interaction.
-    void this.renderer
-      .compileAsync(this.scene, this.rig.camera)
-      .then(() => {
-        this.shadersReady = true;
-      });
-    this.updateRunning();
+    this.events.onProgress?.(PROGRESS.start);
+    void this.init(canvas);
     // Dev-only escape hatch for debugging camera/scene state in the console.
     if (import.meta.env.DEV) {
       (window as unknown as { __scene?: SceneManager }).__scene = this;
@@ -363,7 +414,7 @@ export class SceneManager implements ISceneManager {
     this.focusedCandleRoot = candleRoot;
     // While focused, hover stops but the focused item stays clickable
     // (candle snuffing counts clicks even in the close-up).
-    this.interaction.setFocus(item);
+    this.interaction?.setFocus(item);
     this.particles.setBookActive(item === "spellbook");
 
     if (candleRoot) this.registerAnchor("candle", candleRoot);
@@ -383,11 +434,11 @@ export class SceneManager implements ISceneManager {
   }
 
   highlightNext(direction: 1 | -1): ItemId {
-    return this.interaction.highlightNext(direction);
+    return this.interaction?.highlightNext(direction) ?? "spellbook";
   }
 
   activateHighlighted(): void {
-    this.interaction.activateHighlighted();
+    this.interaction?.activateHighlighted();
   }
 
   rollDice(): void {
@@ -397,7 +448,7 @@ export class SceneManager implements ISceneManager {
   }
 
   castFireball(): void {
-    if (this.disposed) return;
+    if (this.disposed || !this.stageReady) return;
     const camera = this.rig.camera;
     camera.updateMatrixWorld();
     const dir = camera.getWorldDirection(new THREE.Vector3());
@@ -649,7 +700,7 @@ export class SceneManager implements ISceneManager {
       gsap.killTweensOf(group.position);
       gsap.killTweensOf(group.rotation);
     }
-    this.interaction.dispose();
+    this.interaction?.dispose();
     this.rig.dispose();
     this.lights.dispose();
     this.particles.dispose();
@@ -678,7 +729,68 @@ export class SceneManager implements ISceneManager {
 
   // ----------------------------------------------------------------- private
 
-  private buildStage(): void {
+  /**
+   * Staged, yielding start-up so the loader ring keeps animating and reports
+   * real progress: paint the canvas textures, build the models, compile
+   * every shader program, then start the loop (ready fires after the first
+   * rendered frame). Bails out quietly if disposed mid-way.
+   */
+  private async init(canvas: HTMLCanvasElement): Promise<void> {
+    const report = (value: number): void => {
+      if (!this.disposed) this.events.onProgress?.(value);
+    };
+
+    for (let i = 0; i < TEXTURE_WARMUPS.length; i++) {
+      await yieldToBrowser();
+      if (this.disposed) return;
+      TEXTURE_WARMUPS[i]!();
+      report(
+        THREE.MathUtils.lerp(
+          PROGRESS.start,
+          PROGRESS.textures,
+          (i + 1) / TEXTURE_WARMUPS.length,
+        ),
+      );
+    }
+
+    const built = await this.buildStage((fraction) =>
+      report(THREE.MathUtils.lerp(PROGRESS.textures, PROGRESS.models, fraction)),
+    );
+    if (!built || this.disposed) return;
+    this.buildMoth();
+    this.ensureFireball();
+    this.applyRune();
+    this.applyMood();
+    this.interaction = new Interaction(
+      canvas,
+      this.rig.camera,
+      this.interactableRoots,
+      this.interactionEvents,
+    );
+    // Re-fit the camera now that the layout bounds and anchors exist.
+    this.handleResize();
+    report(PROGRESS.models);
+
+    // Compile every program (all lights present and visible) before the
+    // first frame, so nothing compiles mid-interaction. Capped so a driver
+    // that never reports ready can't hold the loader forever.
+    await yieldToBrowser();
+    if (this.disposed) return;
+    this.rig.camera.updateMatrixWorld();
+    await Promise.race([
+      this.renderer.compileAsync(this.scene, this.rig.camera),
+      new Promise((resolve) => setTimeout(resolve, COMPILE_TIMEOUT_MS)),
+    ]);
+    if (this.disposed) return;
+    report(PROGRESS.shaders);
+
+    this.stageReady = true;
+    this.updateRunning();
+  }
+
+  private async buildStage(
+    onProgress: (fraction: number) => void,
+  ): Promise<boolean> {
     const room = buildRoom();
     this.scene.add(room);
 
@@ -712,10 +824,12 @@ export class SceneManager implements ISceneManager {
       candle: buildCandle,
     };
 
-    for (const [id, build] of Object.entries(builders) as [
-      ItemId,
-      () => THREE.Group,
-    ][]) {
+    const entries = Object.entries(builders) as [ItemId, () => THREE.Group][];
+    let step = 0;
+    for (const [id, build] of entries) {
+      await yieldToBrowser();
+      if (this.disposed) return false;
+      onProgress(++step / (entries.length + 1));
       const group = build();
       // Interactables must own their materials: the hover emissive boost
       // would otherwise light up every mesh sharing a cached material
@@ -781,6 +895,8 @@ export class SceneManager implements ISceneManager {
 
     // After the shadow traverse, so the quads never cast/receive real shadows.
     this.addContactShadows(table, candleB);
+    onProgress(1);
+    return true;
   }
 
   private placeOnTable(group: THREE.Group, placement: Placement): void {
@@ -1466,11 +1582,6 @@ export class SceneManager implements ISceneManager {
   private readonly loop = (): void => {
     this.rafId = requestAnimationFrame(this.loop);
 
-    if (this.progressFrame < 4) {
-      this.progressFrame++;
-      this.events.onProgress?.(this.progressFrame / 4);
-    }
-
     // Clamp delta so a resumed tab doesn't jump the simulation.
     const delta = Math.min(this.clock.getDelta(), 0.1);
     const elapsed = this.clock.elapsedTime;
@@ -1480,7 +1591,7 @@ export class SceneManager implements ISceneManager {
     this.particles.update(delta, elapsed);
     this.dicePhysics?.update(delta);
     this.updateIdleLife(elapsed);
-    this.interaction.update();
+    this.interaction?.update();
 
     this.renderer.render(this.scene, this.rig.camera);
     // After render so the camera's world/projection matrices are fresh.
@@ -1492,8 +1603,9 @@ export class SceneManager implements ISceneManager {
       this.emitPageTransforms();
     }
 
-    if (!this.readyFired && this.shadersReady && this.progressFrame >= 4) {
+    if (!this.readyFired) {
       this.readyFired = true;
+      this.events.onProgress?.(1);
       this.warmupUntil = elapsed + WARMUP_SECONDS;
       this.events.onReady?.();
     }
@@ -1526,7 +1638,8 @@ export class SceneManager implements ISceneManager {
   };
 
   private updateRunning(): void {
-    const shouldRun = !this.userPaused && !document.hidden && !this.disposed;
+    const shouldRun =
+      this.stageReady && !this.userPaused && !document.hidden && !this.disposed;
     if (shouldRun && this.rafId === null) {
       this.clock.getDelta(); // Swallow the paused interval.
       this.rafId = requestAnimationFrame(this.loop);
