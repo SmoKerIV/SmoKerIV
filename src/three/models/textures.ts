@@ -27,14 +27,37 @@ export function cachedTexture<T extends THREE.Texture>(
   return texture;
 }
 
+/**
+ * Cached set of related maps painted together (colour + normal + roughness
+ * from one height field). Each texture is also registered in the texture
+ * cache so clearTextureCache() disposes it.
+ */
+const mapSetCache = new Map<string, Record<string, THREE.Texture>>();
+
+export function cachedMaps<T extends Record<string, THREE.Texture>>(
+  key: string,
+  make: () => T,
+): T {
+  let set = mapSetCache.get(key) as T | undefined;
+  if (!set) {
+    set = make();
+    mapSetCache.set(key, set);
+    for (const [name, texture] of Object.entries(set)) {
+      textureCache.set(`${key}#${name}`, texture);
+    }
+  }
+  return set;
+}
+
 /** Dispose every cached texture once and forget them. */
 export function clearTextureCache(): void {
   for (const texture of textureCache.values()) texture.dispose();
   textureCache.clear();
+  mapSetCache.clear();
 }
 
 /** Tiny deterministic PRNG (mulberry32). */
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let t = seed >>> 0;
   return () => {
     t += 0x6d2b79f5;
@@ -55,7 +78,7 @@ function createCanvas(
   return [canvas, ctx];
 }
 
-function toTexture(canvas: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
+export function toTexture(canvas: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -65,7 +88,7 @@ function toTexture(canvas: HTMLCanvasElement, srgb = true): THREE.CanvasTexture 
 }
 
 /** Draws a small angular rune glyph centered at (x, y), size s. */
-function drawRune(
+export function drawRune(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
@@ -764,3 +787,147 @@ export function makeMothWingTexture(): THREE.CanvasTexture {
     return texture;
   });
 }
+
+// --- Shared helpers for the procedural props' PBR map sets -------------------
+
+/** A w x h 2d canvas (non-square allowed). */
+export function makeCanvas(
+  width: number,
+  height: number,
+): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Could not acquire 2d canvas context");
+  return [canvas, ctx];
+}
+
+/**
+ * Tileable fractal value noise in [0, 1] (row-major, width x height).
+ * cellsX/cellsY: lattice cells of the first octave across the image;
+ * each further octave doubles them at half the amplitude.
+ */
+export function noiseField(
+  width: number,
+  height: number,
+  seed: number,
+  cellsX: number,
+  cellsY = cellsX,
+  octaves = 4,
+): Float32Array {
+  const out = new Float32Array(width * height);
+  const rand = mulberry32(seed);
+  let amp = 1;
+  let total = 0;
+  for (let o = 0; o < octaves; o++) {
+    const cx = Math.max(1, Math.round(cellsX * 2 ** o));
+    const cy = Math.max(1, Math.round(cellsY * 2 ** o));
+    const lattice = new Float32Array(cx * cy);
+    for (let i = 0; i < lattice.length; i++) lattice[i] = rand();
+    for (let y = 0; y < height; y++) {
+      const fy = (y / height) * cy;
+      const y0 = Math.floor(fy);
+      const ty = fy - y0;
+      const sy = ty * ty * (3 - 2 * ty);
+      const r0 = (y0 % cy) * cx;
+      const r1 = ((y0 + 1) % cy) * cx;
+      for (let x = 0; x < width; x++) {
+        const fx = (x / width) * cx;
+        const x0 = Math.floor(fx);
+        const tx = fx - x0;
+        const sx = tx * tx * (3 - 2 * tx);
+        const c0 = x0 % cx;
+        const c1 = (x0 + 1) % cx;
+        const a = lattice[r0 + c0] + (lattice[r0 + c1] - lattice[r0 + c0]) * sx;
+        const b = lattice[r1 + c0] + (lattice[r1 + c1] - lattice[r1 + c0]) * sx;
+        out[y * width + x] += (a + (b - a) * sy) * amp;
+      }
+    }
+    total += amp;
+    amp *= 0.5;
+  }
+  for (let i = 0; i < out.length; i++) out[i] /= total;
+  return out;
+}
+
+/** Read a canvas' luminance (0..1) as a height field. */
+export function canvasHeight(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): Float32Array {
+  const data = ctx.getImageData(0, 0, width, height).data;
+  const out = new Float32Array(width * height);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = (data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114) / 255;
+  }
+  return out;
+}
+
+/**
+ * Tangent-space normal map (OpenGL convention, +Y up in the image) from a
+ * height field; strength scales the slopes. Wraps at the edges.
+ */
+export function heightToNormalMap(
+  heightField: Float32Array,
+  width: number,
+  height: number,
+  strength: number,
+  wrap = true,
+): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(width, height);
+  const img = ctx.createImageData(width, height);
+  const d = img.data;
+  const at = (x: number, y: number): number => {
+    if (wrap) {
+      x = (x + width) % width;
+      y = (y + height) % height;
+    } else {
+      x = Math.min(width - 1, Math.max(0, x));
+      y = Math.min(height - 1, Math.max(0, y));
+    }
+    return heightField[y * width + x];
+  };
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+      // Image rows grow downward; tangent-space +Y points up the texture.
+      const dy = (at(x, y - 1) - at(x, y + 1)) * strength;
+      const len = Math.hypot(dx, dy, 1);
+      const i = (y * width + x) * 4;
+      d[i] = ((-dx / len) * 0.5 + 0.5) * 255;
+      d[i + 1] = ((-dy / len) * 0.5 + 0.5) * 255;
+      d[i + 2] = ((1 / len) * 0.5 + 0.5) * 255;
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTexture(canvas, false);
+}
+
+/** Grey-scale data texture (roughness / metalness / alpha) from a 0..1 field. */
+export function fieldToTexture(
+  field: Float32Array,
+  width: number,
+  height: number,
+): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(width, height);
+  const img = ctx.createImageData(width, height);
+  for (let i = 0; i < field.length; i++) {
+    const v = Math.max(0, Math.min(255, field[i] * 255));
+    img.data[i * 4] = v;
+    img.data[i * 4 + 1] = v;
+    img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTexture(canvas, false);
+}
+
+/** Colour / normal / roughness set for a MeshStandardMaterial. */
+export type PbrMaps = {
+  map: THREE.Texture;
+  normalMap: THREE.Texture;
+  roughnessMap: THREE.Texture;
+};
