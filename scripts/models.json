@@ -39,6 +39,7 @@
         "metres": 0.25
       },
       "texture_size": 512,
+      "decimate_ratio": 0.24,
       "materials": {
         "*": {
           "base": "Antique_Brass_Candle_Holder/Candle_Holder_diffuse.png",
