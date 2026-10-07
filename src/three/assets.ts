@@ -12,8 +12,6 @@
  * pivot at the bottom centre, Draco-compressed geometry, JPEG textures.
  */
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 
 const BASE = `${import.meta.env.BASE_URL}models/`;
 
@@ -107,6 +105,19 @@ export async function loadModels(options: LoadModelsOptions): Promise<ModelLibra
     return new ModelLibrary(roots);
   }
 
+  // The loaders (GLTF + Draco, ~100 kB) stream in only when models are
+  // actually fetched, in parallel with the first texture stage.
+  let loaders;
+  try {
+    loaders = await Promise.all([
+      import("three/examples/jsm/loaders/GLTFLoader.js"),
+      import("three/examples/jsm/loaders/DRACOLoader.js"),
+    ]);
+  } catch {
+    onProgress?.(1);
+    return new ModelLibrary(roots);
+  }
+  const [{ GLTFLoader }, { DRACOLoader }] = loaders;
   const draco = new DRACOLoader();
   draco.setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
   const loader = new GLTFLoader();

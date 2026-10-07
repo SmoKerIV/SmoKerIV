@@ -57,7 +57,7 @@ import { DicePhysics, measureObstacle } from "./dicePhysics";
 import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
 import { loadModels, ModelLibrary, type ModelKey } from "./assets";
-import { PostFX } from "./postprocessing";
+import type { PostFX } from "./postprocessing";
 import { bookReading } from "./bookReading";
 import { FIRE_POS, WINDOW_POS, LANTERN_ANCHOR, LANTERN_DROP } from "./roomLayout";
 import type { RoomRig } from "./models/room";
@@ -370,6 +370,10 @@ export class SceneManager implements ISceneManager {
   private readonly resizeObserver: ResizeObserver;
   /** Bloom/vignette/grain chain (medium/high); null = direct render (low). */
   private post: PostFX | null = null;
+  /** Lazily imported post chain (see loadPostFx). */
+  private postFxClass: typeof PostFX | null = null;
+  private postFxLoad: Promise<void> | null = null;
+  private postFxFailed = false;
   /** Low quality's stand-in vignette: a CSS overlay beside the canvas. */
   private cssVignette: HTMLDivElement | null = null;
   /** Frames actually rendered (dev: verifies the idle throttle). */
@@ -919,9 +923,41 @@ export class SceneManager implements ISceneManager {
     this.post?.dispose();
     this.post = null;
     if (quality !== "low") {
-      this.post = new PostFX(this.renderer, this.scene, this.rig.camera, quality);
+      if (this.postFxClass) {
+        this.post = new this.postFxClass(
+          this.renderer,
+          this.scene,
+          this.rig.camera,
+          quality,
+        );
+      } else {
+        // First time the chain is needed: stream the post chunk in. Until it
+        // lands the scene renders straight to the canvas.
+        void this.loadPostFx().then(() => {
+          if (this.disposed || this.post || this.settings.quality === "low") return;
+          this.applyPostQuality();
+          this.renderSoon = true;
+        });
+      }
     }
-    this.setCssVignette(quality === "low");
+    this.setCssVignette(quality === "low" || this.postFxFailed);
+  }
+
+  /**
+   * Fetch the post-processing chunk (EffectComposer + bloom/output passes,
+   * ~60 kB) on demand: low quality never needs it. Cached; never rejects.
+   */
+  private loadPostFx(): Promise<void> {
+    this.postFxLoad ??= import("./postprocessing").then(
+      (mod) => {
+        this.postFxClass = mod.PostFX;
+      },
+      () => {
+        this.postFxFailed = true;
+        this.setCssVignette(true);
+      },
+    );
+    return this.postFxLoad;
   }
 
   private setCssVignette(on: boolean): void {
@@ -1137,6 +1173,14 @@ export class SceneManager implements ISceneManager {
     this.handleResize();
     this.markShadowsDirty();
     report(PROGRESS.models);
+
+    // The post chunk was requested with the first stage (constructor); make
+    // sure the chain exists so the warm-up below compiles through it.
+    if (this.settings.quality !== "low") {
+      await this.loadPostFx();
+      if (this.disposed) return;
+      if (!this.post) this.applyPostQuality();
+    }
 
     // Compile every program (all lights present and visible) before the
     // first frame, so nothing compiles mid-interaction. Capped so a driver
