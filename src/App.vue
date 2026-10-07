@@ -180,7 +180,7 @@ function onToastAction(): void {
 function handleDiceResult(value: number): void {
   track("dice_roll", { value });
   if (value === 20) {
-    audio.playChime();
+    void audio.play("nat20");
     showToast("NATURAL 20! The whole tavern erupts in cheers!", "nat20");
   } else if (value === 1) {
     showToast("Natural 1… the die rolls under the table in shame.", "nat1");
@@ -234,7 +234,7 @@ const events: SceneEvents = {
     focusedItem.value = item;
     appPhase.value = "focused";
     scene?.focusItem(item);
-    if (item === "spellbook") audio.playThump();
+    if (item === "spellbook") void audio.play("book-open");
   },
   onFocusSettled: (item) => {
     if (item === "spellbook") {
@@ -296,7 +296,7 @@ function openBookAt(section: BookSection): void {
 function closeBook(): void {
   if (!bookOpen.value) return;
   bookOpen.value = false; // hide immediately (fade handled by <Transition>)
-  audio.playThump();
+  void audio.play("book-close");
   scene?.focusItem(null);
 }
 
@@ -315,10 +315,10 @@ function enterInn(): void {
   // First visits arrive here from the "Enter the Inn" click (a real user
   // gesture); returning visitors auto-enter, so the AudioContext may start
   // suspended and resumes on the first click/keypress (see onMounted).
-  audio.unlock();
   audio.setSfxOn(settings.sfxOn);
-  audio.setMusicVolume(settings.musicVolume);
-  audio.setMusicOn(settings.musicOn);
+  audio.setBusVolume("ambience", settings.musicVolume);
+  audio.setAmbienceOn(settings.musicOn);
+  audio.unlock();
   appPhase.value = "entering";
   window.setTimeout(() => {
     appPhase.value = "table";
@@ -404,8 +404,8 @@ function trackKonami(key: string): void {
   if (konamiIndex < KONAMI.length) return;
   konamiIndex = 0;
   track("konami");
-  // Same celebration as a natural 20: chime + screen sparkles.
-  audio.playChime();
+  // Fanfare + the natural-20 screen sparkles.
+  void audio.play("fanfare");
   showToast("🎮 +30 XP — a hidden path reveals itself", "nat20");
 }
 
@@ -506,13 +506,15 @@ watch(
   },
 );
 watch(() => settings.musicOn, (on) => {
-  audio.setMusicOn(on);
+  audio.setAmbienceOn(on);
   track(on ? "music_on" : "music_off");
 });
-watch(() => settings.musicVolume, (volume) => audio.setMusicVolume(volume));
+watch(() => settings.musicVolume, (v) => audio.setBusVolume("ambience", v));
 watch(() => settings.sfxOn, (on) => audio.setSfxOn(on));
 watch(consoleOpen, (open) => {
-  if (open) track("console_open");
+  if (!open) return;
+  track("console_open");
+  audio.prefetch("spells");
 });
 
 /* Hash sync (#/book/<section> while the tome is open) + book analytics */
