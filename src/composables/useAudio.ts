@@ -38,9 +38,16 @@
  *   duck(amount 0..1, ms)            lower ambience, then recover
  *   prefetch(slots[] | category)     e.g. prefetch('spells') on console open
  *   configureSlot(slot, tuning)      pitch/gain jitter, latency, voices
+ *   playLayer(kind, opts?)           synthesized layer for weak slots: kinds
+ *                                    "gust-swell", "metal-clink" (sfx bus;
+ *                                    same pan/position/source/gain/delay opts)
  *   playFlip/playThump/playChime/playClack  legacy helpers
  *
- * Dev builds expose window.__audio = { engine, state(), rms() }.
+ * Nothing plays until the page has had a user activation (the Enter click),
+ * so a context created early can't flush queued sounds later.
+ *
+ * Dev builds expose window.__audio = { engine, state(), rms(), log(), clearLog() };
+ * log() is a ring buffer of the last 300 play() / playLayer() calls.
  */
 
 /* ------------------------------------------------------------------ */
@@ -855,6 +862,7 @@ async function playVoice(
   opts: PlayOptions,
   synthStrength: number,
 ): Promise<SoundHandle | null> {
+  if (!hasUserActivation()) return null;
   const c = ensureContext();
   if (!c || !buses) return null;
   const bus = slotBus(slot);
@@ -890,6 +898,7 @@ async function playVoice(
     const handle = makeHandle(slot, "sample", g, [src]);
     registerVoice(slot, handle, handle.ended, tune.maxVoices);
     stats.samples++;
+    logPlay(slot, "sample", baseGain * (def?.gain ?? 1), opts);
     const duck = opts.duck ?? (SLOT_CATEGORY[slot] === "spells" ? { amount: 0.45, ms: Math.min(4000, (buffer.duration / rate) * 800) } : false);
     if (duck) duckAmbience(duck.amount, duck.ms, opts.delay ?? 0);
     return handle;
@@ -899,13 +908,118 @@ async function playVoice(
   stats.fallbacks[slot] = (stats.fallbacks[slot] ?? 0) + 1;
   if (!synth) {
     stats.dropped++;
+    logPlay(slot, "dropped", baseGain, opts);
     return null;
   }
   const g = voiceChain(c, dest, baseGain, pan);
   const handle = makeHandle(slot, "synth", g, synth(c, g, when, synthStrength));
   registerVoice(slot, handle, handle.ended, tune.maxVoices);
   stats.synth++;
+  logPlay(slot, "synth", baseGain, opts);
   return handle;
+}
+
+/** False until the visitor has clicked/pressed a key: no early sound. */
+function hasUserActivation(): boolean {
+  const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } })
+    .userActivation;
+  return ua ? ua.hasBeenActive : true;
+}
+
+/* ------------------------------------------------------------------ */
+/* Synth layers (reinforce weak slots)                                  */
+/* ------------------------------------------------------------------ */
+
+export type LayerKind = "gust-swell" | "metal-clink";
+
+/** Low brown-noise swell under the gust sample (the sample is only a whistle). */
+const layerGustSwell: SynthVoice = (c, out, t) => {
+  const src = c.createBufferSource();
+  src.buffer = noiseBuffer(c, 2.4, true);
+  const filter = c.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.Q.value = 0.8;
+  filter.frequency.setValueAtTime(160, t);
+  filter.frequency.exponentialRampToValueAtTime(620, t + 0.9);
+  filter.frequency.exponentialRampToValueAtTime(150, t + 2.2);
+  const env = c.createGain();
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.exponentialRampToValueAtTime(0.5, t + 0.8);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + 2.3);
+  src.connect(filter).connect(env).connect(out);
+  src.start(t);
+  src.stop(t + 2.4);
+  return [src];
+};
+
+/** Two inharmonic sine partials, ~120 ms decay: pewter on pewter. */
+const layerMetalClink: SynthVoice = (c, out, t) => {
+  const base = rand(0.97, 1.03);
+  return [2100 * base, 3370 * base].map((freq, i) => {
+    const osc = c.createOscillator();
+    osc.frequency.value = freq;
+    const env = c.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(i === 0 ? 0.22 : 0.14, t + 0.002);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    osc.connect(env).connect(out);
+    osc.start(t);
+    osc.stop(t + 0.14);
+    return osc;
+  });
+};
+
+const LAYERS: Record<LayerKind, SynthVoice> = {
+  "gust-swell": layerGustSwell,
+  "metal-clink": layerMetalClink,
+};
+
+/** Play a synthesized layer on the sfx bus (honours the SFX toggle). */
+async function playLayer(
+  kind: LayerKind,
+  opts: Pick<PlayOptions, "gain" | "delay" | "pan" | "position" | "source"> = {},
+): Promise<SoundHandle | null> {
+  if (!hasUserActivation()) return null;
+  const c = ensureContext();
+  if (!c || !buses || !enabled.sfx) return null;
+  const placement = resolvePlacement(opts);
+  const when = c.currentTime + Math.max(0, opts.delay ?? 0);
+  const gain = (opts.gain ?? 1) * (placement?.gain ?? 1);
+  const g = voiceChain(c, buses.sfx, gain, placement?.pan ?? null);
+  const handle = makeHandle(kind === "gust-swell" ? "gust" : "tankard", "synth", g, LAYERS[kind](c, g, when, 1));
+  stats.synth++;
+  logPlay(`layer:${kind}`, "synth", gain, opts);
+  return handle;
+}
+
+/* dev-only play log */
+interface PlayLogEntry {
+  t: number;
+  slot: string;
+  kind: "sample" | "synth" | "dropped";
+  gain: number;
+  variant?: number;
+  delay: number;
+  where?: string;
+}
+const playLog: PlayLogEntry[] = [];
+function logPlay(
+  slot: string,
+  kind: PlayLogEntry["kind"],
+  gain: number,
+  opts: Pick<PlayOptions, "variant" | "delay" | "source" | "position" | "pan">,
+): void {
+  if (!import.meta.env.DEV) return;
+  playLog.push({
+    t: Number((ctx?.currentTime ?? 0).toFixed(3)),
+    slot,
+    kind,
+    gain: Number(gain.toFixed(3)),
+    variant: opts.variant,
+    delay: opts.delay ?? 0,
+    where: opts.source ?? (opts.position ? "pos" : typeof opts.pan === "number" ? "pan" : undefined),
+  });
+  if (playLog.length > 300) playLog.shift();
 }
 
 /* ------------------------------------------------------------------ */
@@ -1056,7 +1170,8 @@ function scheduleCreak(): void {
   creakTimer = setTimeout(() => {
     creakTimer = null;
     if (!ambienceRunning || document.hidden) return;
-    void play("creak", { gain: rand(0.25, 0.4), pan: rand(-0.6, 0.6) });
+    const at = sourcePositions.has("lantern") ? { source: "lantern" } : { pan: rand(-0.6, 0.6) };
+    void play("creak", { gain: rand(0.25, 0.4), ...at });
     scheduleCreak();
   }, rand(20000, 60000));
 }
@@ -1097,13 +1212,16 @@ const CLACK_GAP = 0.045;
 
 /** Dice clatter; strength 0..1, hard = struck an item rather than wood. */
 function playClack(strength: number, hard = false): void {
+  if (!hasUserActivation()) return;
   if (!ctx) ensureContext();
   if (!ctx) return;
   const now = ctx.currentTime;
   if (now - lastClackAt < CLACK_GAP) return;
   lastClackAt = now;
   const s = clamp(strength, 0, 1);
-  void playVoice("dice", { gain: 0.2 + 0.8 * s * s, rate: hard ? 1.12 : 1 }, hard ? 1 + s : s);
+  // soft taps sit a little darker, items ring brighter
+  const detune = hard ? 300 : -180 * (1 - s);
+  void playVoice("dice", { gain: 0.2 + 0.8 * s * s, detune }, hard ? 1 + s : s);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1114,6 +1232,10 @@ export interface AudioEngine {
   /** Create/resume the context; call inside a user gesture. */
   unlock: () => void;
   play: (slot: SlotName, opts?: PlayOptions) => Promise<SoundHandle | null>;
+  playLayer: (
+    kind: LayerKind,
+    opts?: Pick<PlayOptions, "gain" | "delay" | "pan" | "position" | "source">,
+  ) => Promise<SoundHandle | null>;
   startLoop: (slot: SlotName, opts?: LoopOptions) => Promise<boolean>;
   stopLoop: (slot: SlotName, fadeMs?: number) => void;
   startAmbience: () => void;
@@ -1155,6 +1277,7 @@ const engine: AudioEngine = {
     if (enabled.ambience && !ambienceRunning) startAmbience();
   },
   play,
+  playLayer,
   startLoop,
   stopLoop,
   startAmbience,
@@ -1300,6 +1423,10 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
     engine,
     state: debugState,
     rms: debugRms,
+    log: () => playLog.slice(),
+    clearLog: () => {
+      playLog.length = 0;
+    },
   };
 }
 
