@@ -9,7 +9,7 @@ import {
   watch,
 } from "vue";
 import type { BookPageScreenTransforms, BookSection } from "../three/types";
-import type { Quest } from "../data/content";
+import type { Artifact, Quest } from "../data/content";
 import { PAGE_CSS_W, PAGE_CSS_H } from "../three/types";
 import {
   identity,
@@ -74,8 +74,25 @@ const questPages: Quest[][] = [
   quests.slice(6),
 ];
 
+/** Artifacts per page; the first page also carries the section intro. */
+const ARTIFACT_PAGE_SIZES = [2, 3, 2, 2];
+const artifactPages: Artifact[][] = [];
+{
+  let at = 0;
+  for (const size of ARTIFACT_PAGE_SIZES) {
+    artifactPages.push(artifacts.slice(at, at + size));
+    at += size;
+  }
+  // Anything added beyond the plan still gets pages (two per page).
+  while (at < artifacts.length) {
+    artifactPages.push(artifacts.slice(at, at + 2));
+    at += 2;
+  }
+}
+
 function spreadCountFor(section: BookSection): number {
   if (section === "career") return Math.ceil(questPages.length / 2);
+  if (section === "projects") return Math.ceil(artifactPages.length / 2);
   return 1;
 }
 const spreadCount = computed(() => spreadCountFor(props.section));
@@ -322,6 +339,10 @@ const contactLines = [
   },
 ];
 
+const artifactsLeft = computed(() => artifactPages[spread.value * 2] ?? []);
+const artifactsRight = computed(
+  () => artifactPages[spread.value * 2 + 1] ?? [],
+);
 const questsLeft = computed(() => questPages[spread.value * 2] ?? []);
 const questsRight = computed(() => questPages[spread.value * 2 + 1] ?? []);
 
@@ -398,6 +419,14 @@ watch(
     spread.value = pendingSpread;
     pendingSpread = 0;
     void nextTick(fitPages);
+  },
+);
+// The panes are display:none until the scene streams the first transforms,
+// so the mount-time fit measured nothing — refit once they become visible.
+watch(
+  () => props.transforms !== null,
+  (visible) => {
+    if (visible) void nextTick(fitPages);
   },
 );
 watch(spread, () => {
@@ -508,12 +537,15 @@ watch(spread, () => {
 
           <!-- projects -->
           <template v-else-if="section === 'projects'">
-            <h2>Artifacts Forged</h2>
-            <p class="dropcap">
+            <h2>Artifacts Forged<span v-if="spread > 0" class="continued"> · continued</span></h2>
+            <p v-if="spread === 0" class="dropcap">
               Relics recovered from past expeditions. Handle with clean hands and a stable connection.
             </p>
-            <div v-for="artifact in artifacts.slice(0, 2)" :key="artifact.name" class="artifact">
-              <p class="artifact-kind">{{ artifact.kind }}</p>
+            <div v-for="artifact in artifactsLeft" :key="artifact.name" class="artifact">
+              <p class="artifact-kind">
+                {{ artifact.kind }}
+                <span v-if="artifact.badge" class="artifact-badge" :data-badge="artifact.badge">{{ artifact.badge }}</span>
+              </p>
               <h3 class="artifact-name">{{ artifact.name }}</h3>
               <p class="artifact-desc">{{ artifact.description }}</p>
               <div class="flex flex-wrap items-center gap-1.5">
@@ -678,8 +710,11 @@ watch(spread, () => {
 
           <!-- projects: remaining artifacts -->
           <template v-else-if="section === 'projects'">
-            <div v-for="artifact in artifacts.slice(2)" :key="artifact.name" class="artifact">
-              <p class="artifact-kind">{{ artifact.kind }}</p>
+            <div v-for="artifact in artifactsRight" :key="artifact.name" class="artifact">
+              <p class="artifact-kind">
+                {{ artifact.kind }}
+                <span v-if="artifact.badge" class="artifact-badge" :data-badge="artifact.badge">{{ artifact.badge }}</span>
+              </p>
               <h3 class="artifact-name">{{ artifact.name }}</h3>
               <p class="artifact-desc">{{ artifact.description }}</p>
               <div class="flex flex-wrap items-center gap-1.5">
@@ -693,6 +728,9 @@ watch(spread, () => {
                 >Inspect ↗</a>
               </div>
             </div>
+          <p v-if="spreadCount > 1" class="folio">
+              folio {{ spread + 1 }} of {{ spreadCount }}
+            </p>
           </template>
 
           <!-- runes: forbidden appendix -->
@@ -1049,6 +1087,23 @@ watch(spread, () => {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-faint);
+}
+.artifact-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0 0.4rem;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-size: 0.85em;
+  letter-spacing: 0.12em;
+  vertical-align: 1px;
+  color: var(--ink-faint);
+}
+.artifact-badge[data-badge="Live"] {
+  color: #2a796e;
+}
+.artifact-badge[data-badge="Work"] {
+  color: #5a2e1d;
 }
 .continued {
   font-weight: 400;

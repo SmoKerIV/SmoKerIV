@@ -254,6 +254,7 @@ const contactLines = [
         >
           <p class="m-0 font-heading text-[10px] font-semibold uppercase tracking-[0.24em] text-gold">
             {{ artifact.kind }}
+            <span v-if="artifact.badge" class="badge ml-2 align-middle">{{ artifact.badge }}</span>
           </p>
           <h3 class="m-0 mt-1 font-heading text-base font-bold text-ink">{{ artifact.name }}</h3>
           <p class="m-0 mt-1.5 text-ink-soft">{{ artifact.description }}</p>

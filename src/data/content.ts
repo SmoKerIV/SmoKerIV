@@ -134,30 +134,46 @@ export const quests: Quest[] = [
   },
 ];
 
+/** How an artifact can be met: live on the web, a desktop install, or client/employer work. */
+export type ArtifactBadge = "Live" | "Desktop" | "Work";
+
 export interface Artifact {
   name: string;
   kind: string;
   description: string;
+  /** Only set for public products; private and work projects have no link. */
   url?: string;
+  badge?: ArtifactBadge;
   tech: string[];
 }
 
-/** Published projects — live product links only, no repo links. */
+/** Projects: live product links where public, no repo links; private/work ones carry no link. */
 export const artifacts: Artifact[] = [
+  {
+    name: "Spellscene",
+    kind: "Cartographer's Table",
+    description:
+      "A 3D tabletop and campaign-prep tool for DMs running TTRPGs: maps, miniatures, campaigns and notes. English-first, with Arabic support.",
+    url: "https://spellscene.com",
+    badge: "Live",
+    tech: ["React", "TypeScript", "Three.js", "Vite"],
+  },
   {
     name: "Hook Menu",
     kind: "Merchant's Grimoire",
     description:
       "HOOK.iq — a digital menu platform for the café Hook: browse, order.",
     url: "https://hookiraq.com",
+    badge: "Live",
     tech: ["Vue", "Vite", "Node.js"],
-    },
+  },
   {
     name: "Healthy Don",
     kind: "Alchemist's Codex",
     description:
       "Dr. Zaid's healthy recipe book online — wholesome cooking, served as a web app.",
     url: "https://healthydon.com",
+    badge: "Live",
     tech: ["Nuxt", "Vue"],
   },
   {
@@ -166,6 +182,46 @@ export const artifacts: Artifact[] = [
     description:
       "The 3D inn you are sitting in right now. Three.js, Vue and far too many candles.",
     tech: ["Three.js", "Vue", "TypeScript", "GSAP"],
+  },
+  {
+    name: "Booking System",
+    kind: "Innkeeper's Ledger",
+    description:
+      "An offline concert table-booking app for a club cashier. The Windows installer is built in CI.",
+    badge: "Desktop",
+    tech: ["Electron", "Vue", "SQLite"],
+  },
+  {
+    name: "Asset Maintenance Hub",
+    kind: "Armorer's Workshop",
+    description:
+      "A desktop app tracking devices, maintenance records and parts inventory on a local SQLite database, with a stats dashboard.",
+    badge: "Desktop",
+    tech: ["Electron", "React", "SQLite"],
+  },
+  {
+    name: "Dr.Lab",
+    kind: "Apothecary's Ledger",
+    description:
+      "An Electron desktop app for medical lab management, with serial-key licensing and barcode label printing. Built at PureTik.",
+    badge: "Work",
+    tech: ["Electron"],
+  },
+  {
+    name: "Oil Coupon",
+    kind: "Royal Decree Engine",
+    description:
+      "Built at Enjaz: the admin dashboard and the SuperQi citizen mini app for kerosene and LPG allocations, serving over a million families.",
+    badge: "Work",
+    tech: ["Vue 3", "Svelte 5", "TypeScript"],
+  },
+  {
+    name: "Alrabiaa Ticketing",
+    kind: "Arena Gatekeeper",
+    description:
+      "Event ticketing with interactive Seats.io seat maps: an admin dashboard, a booking site and a Node/Express API.",
+    badge: "Work",
+    tech: ["Seats.io", "Node.js", "Express"],
   },
 ];
 
