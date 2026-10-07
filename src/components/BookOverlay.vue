@@ -25,6 +25,7 @@ import {
 import { useAudio } from "../composables/useAudio";
 import { useSettings } from "../composables/useSettings";
 import { track } from "../composables/useAnalytics";
+import { useFocusTrap } from "../composables/useFocusTrap";
 
 /**
  * The diegetic tome: no backdrop, no frame — just two transparent "ink"
@@ -97,6 +98,16 @@ function spreadCountFor(section: BookSection): number {
   return 1;
 }
 const spreadCount = computed(() => spreadCountFor(props.section));
+
+const pageAnnouncement = computed(() => {
+  const current = SECTIONS[sectionIndex.value];
+  if (!current) return "";
+  const folio =
+    spreadCount.value > 1
+      ? `, spread ${spread.value + 1} of ${spreadCount.value}`
+      : "";
+  return `${current.title}. Section ${sectionIndex.value + 1} of ${SECTIONS.length}${folio}.`;
+});
 
 const canPrev = computed(() => sectionIndex.value > 0 || spread.value > 0);
 const canNext = computed(
@@ -183,44 +194,18 @@ function prev(): void {
 /* ------------------------------------------------------------------ */
 const rootEl = ref<HTMLElement | null>(null);
 const closeBtn = ref<HTMLButtonElement | null>(null);
-let previouslyFocused: HTMLElement | null = null;
-
-function focusables(): HTMLElement[] {
-  if (!rootEl.value) return [];
-  return Array.from(
-    rootEl.value.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    ),
-  ).filter((el) => el.offsetParent !== null);
-}
-
-function trapTab(event: KeyboardEvent): void {
-  const els = focusables();
-  if (els.length === 0) return;
-  const first = els[0]!;
-  const last = els[els.length - 1]!;
-  const active = document.activeElement;
-  if (event.shiftKey) {
-    if (active === first || !rootEl.value?.contains(active)) {
-      event.preventDefault();
-      last.focus();
-    }
-  } else if (active === last || !rootEl.value?.contains(active)) {
-    event.preventDefault();
-    first.focus();
-  }
-}
+/** `active` is false while a modal (the spell console) sits on the tome. */
+const { active: trapActive } = useFocusTrap(rootEl, {
+  initialFocus: () => closeBtn.value,
+});
 
 function onKeydown(event: KeyboardEvent): void {
+  if (!trapActive.value) return;
   if (event.key === "Escape") {
     if (!event.defaultPrevented) {
       event.preventDefault();
       emit("close");
     }
-    return;
-  }
-  if (event.key === "Tab") {
-    trapTab(event);
     return;
   }
   const target = event.target as HTMLElement | null;
@@ -249,6 +234,7 @@ function onTouchStart(event: TouchEvent): void {
 }
 
 function onTouchEnd(event: TouchEvent): void {
+  if (!trapActive.value) return;
   const t = event.changedTouches[0];
   if (!t || performance.now() - touchStartAt > SWIPE_MAX_MS) return;
   const dx = t.clientX - touchStartX;
@@ -260,14 +246,10 @@ function onTouchEnd(event: TouchEvent): void {
 }
 
 onMounted(() => {
-  previouslyFocused = document.activeElement as HTMLElement | null;
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("touchstart", onTouchStart, { passive: true });
   window.addEventListener("touchend", onTouchEnd, { passive: true });
-  void nextTick(() => {
-    closeBtn.value?.focus();
-    fitPages();
-  });
+  void nextTick(fitPages);
   // Late font swaps change line wrapping — refit once the faces settle.
   void document.fonts?.ready.then(fitPages);
 });
@@ -276,7 +258,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
   window.removeEventListener("touchstart", onTouchStart);
   window.removeEventListener("touchend", onTouchEnd);
-  previouslyFocused?.focus?.();
 });
 
 /* ------------------------------------------------------------------ */
@@ -443,6 +424,11 @@ watch(spread, () => {
     role="document"
     aria-label="The Tome of Baker Alazzawi"
   >
+    <!-- Page-turn announcement: just the title + folio, never the page -->
+    <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+      {{ pageAnnouncement }}
+    </p>
+
     <!-- LEFT INK PANE -------------------------------------------------- -->
     <div
       v-show="transforms"
@@ -454,7 +440,6 @@ watch(spread, () => {
         ref="leftPadEl"
         class="ink-pad book-page"
         :class="{ 'ink-inscribe': inscribe }"
-        aria-live="polite"
       >
         <div class="fit-wrap" :style="fitStyle('left')">
           <!-- cover -->

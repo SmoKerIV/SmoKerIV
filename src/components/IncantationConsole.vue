@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from "vue";
+import { onUnmounted, ref } from "vue";
 import { useSettings } from "../composables/useSettings";
+import { useFocusTrap } from "../composables/useFocusTrap";
 
 /**
  * The wizard's prepared-spell page: a parchment sheet of proper D&D spells,
@@ -40,8 +41,12 @@ const lastCast = ref(
   "The page hums faintly, waiting. Touch a spell to cast it.",
 );
 const closeBtn = ref<HTMLButtonElement | null>(null);
+const rootEl = ref<HTMLElement | null>(null);
+useFocusTrap(rootEl, { initialFocus: () => closeBtn.value });
 
+/** The in-app "Calm the Magics" toggle, or the OS-level preference. */
 const reducedMotion = (): boolean =>
+  settings.reducedMotion ||
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Add a one-shot animation class to #app, removed when it ends. */
@@ -235,10 +240,6 @@ function cast(spell: Spell): void {
   if (spell.closes) setTimeout(() => emit("close"), 500);
 }
 
-onMounted(() => {
-  void nextTick(() => closeBtn.value?.focus());
-});
-
 onUnmounted(() => {
   fallingRunesCleanup?.();
 });
@@ -246,6 +247,7 @@ onUnmounted(() => {
 
 <template>
   <div
+    ref="rootEl"
     class="fixed inset-0 z-70 flex items-center justify-center p-4"
     role="dialog"
     aria-modal="true"
@@ -334,7 +336,7 @@ onUnmounted(() => {
 }
 .spell-school {
   font-family: "Cinzel", serif;
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;

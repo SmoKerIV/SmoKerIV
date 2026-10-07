@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { Quality, TimeOfDay } from "../three/types";
 import { useSettings } from "../composables/useSettings";
+import { useFocusTrap } from "../composables/useFocusTrap";
 
 const emit = defineEmits<{
   close: [];
@@ -9,6 +10,37 @@ const emit = defineEmits<{
 }>();
 
 const settings = useSettings();
+
+const rootEl = ref<HTMLElement | null>(null);
+const closeBtn = ref<HTMLButtonElement | null>(null);
+useFocusTrap(rootEl, { initialFocus: () => closeBtn.value });
+
+/**
+ * Roving radio group: arrows move the selection (and focus) between
+ * options, wrapping at the ends; only the checked radio is in the tab order.
+ */
+function onRadioKeydown<T>(
+  event: KeyboardEvent,
+  options: { value: T }[],
+  current: T,
+  select: (value: T) => void,
+): void {
+  const delta =
+    event.key === "ArrowRight" || event.key === "ArrowDown"
+      ? 1
+      : event.key === "ArrowLeft" || event.key === "ArrowUp"
+        ? -1
+        : 0;
+  if (!delta) return;
+  event.preventDefault();
+  const index = options.findIndex((o) => o.value === current);
+  const next = (index + delta + options.length) % options.length;
+  select(options[next]!.value);
+  const radios = (event.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLElement>(
+    '[role="radio"]',
+  );
+  radios?.[next]?.focus();
+}
 
 const QUALITY_OPTIONS: { value: Quality; label: string }[] = [
   { value: "low", label: "Tallow" },
@@ -38,6 +70,8 @@ const flatUrl = ((): string => {
 
 <template>
   <aside
+    ref="rootEl"
+    aria-modal="true"
     class="parchment fixed bottom-0 right-0 top-0 z-50 flex w-[min(22rem,92vw)] flex-col overflow-y-auto shadow-tome"
     role="dialog"
     aria-label="The Innkeeper's Ledger — settings"
@@ -54,6 +88,7 @@ const flatUrl = ((): string => {
         </p>
       </div>
       <button
+        ref="closeBtn"
         class="flex h-8 w-8 items-center justify-center rounded-full border border-leather/40 text-ink-soft transition hover:bg-leather/10"
         aria-label="Close the ledger"
         @click="emit('close')"
@@ -127,10 +162,12 @@ const flatUrl = ((): string => {
             :class="{ 'quality-active': settings.quality === opt.value }"
             role="radio"
             :aria-checked="settings.quality === opt.value"
+            :tabindex="settings.quality === opt.value ? 0 : -1"
             @click="settings.quality = opt.value"
+            @keydown="onRadioKeydown($event, QUALITY_OPTIONS, settings.quality, (v) => (settings.quality = v))"
           >
-            <span class="block font-heading text-[11px] uppercase tracking-wider">{{ opt.label }}</span>
-            <span class="block font-body text-[10px] italic text-ink-faint">{{ opt.value }}</span>
+            <span class="block font-heading text-xs uppercase tracking-wider">{{ opt.label }}</span>
+            <span class="block font-body text-xs italic text-ink-faint">{{ opt.value }}</span>
           </button>
         </div>
       </section>
@@ -146,10 +183,12 @@ const flatUrl = ((): string => {
             :class="{ 'quality-active': settings.timeOfDay === opt.value }"
             role="radio"
             :aria-checked="settings.timeOfDay === opt.value"
+            :tabindex="settings.timeOfDay === opt.value ? 0 : -1"
             @click="settings.timeOfDay = opt.value"
+            @keydown="onRadioKeydown($event, TIME_OPTIONS, settings.timeOfDay, (v) => (settings.timeOfDay = v))"
           >
-            <span class="block font-heading text-[11px] uppercase tracking-wider">{{ opt.label }}</span>
-            <span class="block font-body text-[10px] italic text-ink-faint">{{ opt.hint }}</span>
+            <span class="block font-heading text-xs uppercase tracking-wider">{{ opt.label }}</span>
+            <span class="block font-body text-xs italic text-ink-faint">{{ opt.hint }}</span>
           </button>
         </div>
       </section>
