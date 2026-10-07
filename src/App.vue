@@ -111,11 +111,46 @@ const BOOK_SECTIONS: BookSection[] = [
   "runes",
   "contact",
 ];
-let pendingBookSection: BookSection | null = ((): BookSection | null => {
-  const match = window.location.hash.match(/^#\/book\/([a-z]+)$/);
+let pendingBookSection: BookSection | null = parseBookHash();
+
+/** `#/book/<section>` → section; anything else (or empty) → null. */
+function parseBookHash(hash: string = window.location.hash): BookSection | null {
+  const match = hash.match(/^#\/book\/([a-z]+)$/);
   const candidate = match?.[1] as BookSection | undefined;
   return candidate && BOOK_SECTIONS.includes(candidate) ? candidate : null;
-})();
+}
+
+/**
+ * Write the hash without echoing: a write that already matches is skipped,
+ * so history navigation (which sets the hash itself) never re-pushes.
+ * `push` for user-initiated moves (Back works), `replace` for continuous
+ * ones like scroll-spy.
+ */
+function writeHash(section: BookSection | null, mode: "push" | "replace"): void {
+  const hash = section ? `#/book/${section}` : "";
+  if (window.location.hash === hash) return;
+  const url = window.location.pathname + window.location.search + hash;
+  if (mode === "push") history.pushState(null, "", url);
+  else history.replaceState(null, "", url);
+}
+
+/** Back/forward or a typed hash: open, turn or close the tome to match. */
+function applyHash(): void {
+  const section = parseBookHash();
+  if (useFallback) {
+    // The flat page is always "open": just scroll to the section.
+    bookSection.value = section ?? "cover";
+    return;
+  }
+  if (section) {
+    if (bookOpen.value || flatBookOpen.value) bookSection.value = section;
+    else openBookAt(section);
+  } else {
+    pendingBookSection = null;
+    if (bookOpen.value) closeBook();
+    flatBookOpen.value = false;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Toasts                                                               */
@@ -469,11 +504,11 @@ watch(consoleOpen, (open) => {
 watch(
   [bookOpen, bookSection],
   ([open, section], [wasOpen, prevSection]) => {
-    const base = window.location.pathname + window.location.search;
-    // Only strip the hash if the book was actually open, so a deep link
+    // Only touch the hash if the book was actually open, so a deep link
     // (#/book/<section>) present before "Enter the Inn" is not clobbered.
-    if (open) history.replaceState(null, "", `${base}#/book/${section}`);
-    else if (wasOpen) history.replaceState(null, "", base);
+    // Opening / turning / closing are user moves → pushState (Back works).
+    if (open) writeHash(section, "push");
+    else if (wasOpen) writeHash(null, "push");
 
     if (open && !wasOpen) {
       track("book_open");
@@ -493,12 +528,19 @@ watch(
 );
 
 /* Flat tome (coarse pointers) shares the same #/book/<section> deep links. */
-watch([flatBookOpen, bookSection], ([open, section], [wasOpen]) => {
-  if (useFallback) return;
-  const base = window.location.pathname + window.location.search;
-  if (open) history.replaceState(null, "", `${base}#/book/${section}`);
-  else if (wasOpen) history.replaceState(null, "", base);
-});
+watch(
+  [flatBookOpen, bookSection],
+  ([open, section], [wasOpen, prevSection]) => {
+    if (useFallback) {
+      // Scroll-spy changes the section continuously — replace, never push.
+      if (section !== prevSection) writeHash(section, "replace");
+      return;
+    }
+    if (open && !wasOpen) writeHash(section, "push");
+    else if (open && section !== prevSection) writeHash(section, "replace");
+    else if (!open && wasOpen) writeHash(null, "push");
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* Lifecycle                                                            */
@@ -525,6 +567,8 @@ onMounted(async () => {
     settings.reducedMotion,
   );
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("hashchange", applyHash);
+  window.addEventListener("popstate", applyHash);
   window.addEventListener("pointerdown", unlockAudioOnGesture, { once: true });
   window.addEventListener("keydown", unlockAudioOnGesture, { once: true });
   void probeCv();
@@ -551,6 +595,8 @@ onMounted(async () => {
 
 function teardown(): void {
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("hashchange", applyHash);
+  window.removeEventListener("popstate", applyHash);
   window.removeEventListener("pointerdown", unlockAudioOnGesture);
   window.removeEventListener("keydown", unlockAudioOnGesture);
   document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -684,7 +730,7 @@ import.meta.hot?.dispose(() => teardown());
           @close="settingsOpen = false"
           @return-to-table="
             settingsOpen = false;
-            bookOpen ? closeBook() : unfocus();
+            unfocus();
           "
         />
       </Transition>

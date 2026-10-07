@@ -29,7 +29,10 @@ const SECTION_ANCHORS: Partial<Record<BookSection, string>> = {
   skills: "skills",
   career: "career",
   projects: "projects",
-  runes: "contact", // no appendix here — land the reader on the nearest page
+  // The tome's "runes" appendix is decorative (no real content) and has no
+  // flat equivalent, so #/book/runes lands on the nearest page, Contact. The
+  // scroll-spy then reports "contact" and the hash settles on it.
+  runes: "contact",
   contact: "contact",
 };
 
