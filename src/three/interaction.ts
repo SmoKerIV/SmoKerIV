@@ -27,6 +27,8 @@ const KEYBOARD_ORDER: ItemId[] = [
 ];
 const CLICK_MAX_DIST = 6;
 const CLICK_MAX_MS = 400;
+/** Touch taps are slower and wobblier than mouse clicks. */
+const TOUCH_CLICK_MAX_MS = 1000;
 
 /** Standard-material family that carries an emissive channel. */
 function hasEmissive(
@@ -88,6 +90,7 @@ export class Interaction {
     canvas.addEventListener("pointermove", this.onPointerMove);
     canvas.addEventListener("pointerdown", this.onPointerDown);
     canvas.addEventListener("pointerup", this.onPointerUp);
+    canvas.addEventListener("pointercancel", this.onPointerCancel);
     canvas.addEventListener("pointerleave", this.onPointerLeave);
   }
 
@@ -172,16 +175,24 @@ export class Interaction {
     this.canvas.removeEventListener("pointermove", this.onPointerMove);
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
     this.canvas.removeEventListener("pointerup", this.onPointerUp);
+    this.canvas.removeEventListener("pointercancel", this.onPointerCancel);
     this.canvas.removeEventListener("pointerleave", this.onPointerLeave);
   }
 
   private readonly onPointerMove = (event: PointerEvent) => {
+    // Touch drags aren't hovers; touch hover is driven by taps (onPointerUp).
+    if (event.pointerType === "touch") return;
     this.lastClientX = event.clientX;
     this.lastClientY = event.clientY;
     this.pickPending = true;
   };
 
   private readonly onPointerDown = (event: PointerEvent) => {
+    // Only the primary button (left click / touch contact / pen tip) clicks.
+    if (event.button !== 0) {
+      this.downValid = false;
+      return;
+    }
     this.downX = event.clientX;
     this.downY = event.clientY;
     this.downTime = performance.now();
@@ -189,28 +200,60 @@ export class Interaction {
   };
 
   private readonly onPointerUp = (event: PointerEvent) => {
+    if (event.button !== 0) return;
     if (!this.downValid || !this.enabled) return;
     this.downValid = false;
+    const touch = event.pointerType === "touch";
     const dx = event.clientX - this.downX;
     const dy = event.clientY - this.downY;
     if (
       Math.hypot(dx, dy) > CLICK_MAX_DIST ||
-      performance.now() - this.downTime > CLICK_MAX_MS
+      performance.now() - this.downTime >
+        (touch ? TOUCH_CLICK_MAX_MS : CLICK_MAX_MS)
     ) {
       return;
     }
     const root = this.pick(event.clientX, event.clientY);
-    if (!root) return;
+    if (!root) {
+      if (touch) this.clearHover();
+      return;
+    }
     const item = root.userData.itemId as ItemId;
     // While focused, only the focused item's group(s) accept clicks.
     if (this.focusFilter !== null && item !== this.focusFilter) return;
+
+    // Touch has no hover: the first tap on an item shows its nameplate and
+    // highlight, a second tap on the same one selects. (Focused items select
+    // straight away: they are already the subject.)
+    if (touch && this.focusFilter === null && root !== this.hoveredRoot) {
+      this.showTouchHover(root, event.clientX, event.clientY);
+      return;
+    }
     this.events.onSelect?.(item, root);
   };
 
-  private readonly onPointerLeave = () => {
+  private readonly onPointerCancel = () => {
+    // The browser took the gesture (scroll/zoom/system UI): drop any
+    // half-finished click so a later pointerup can't register as a tap.
     this.downValid = false;
+  };
+
+  private readonly onPointerLeave = (event: PointerEvent) => {
+    this.downValid = false;
+    // A finger lifting also fires pointerleave; keep the tapped item's
+    // nameplate until the next tap.
+    if (event.pointerType === "touch") return;
     this.clearHover();
   };
+
+  private showTouchHover(root: THREE.Group, x: number, y: number): void {
+    this.clearHighlight();
+    this.hoveredRoot = root;
+    this.applyHighlight(root);
+    this.highlightedItem = root.userData.itemId as ItemId;
+    this.keyboardIndex = this.order.indexOf(this.highlightedItem);
+    this.events.onHover?.(this.highlightedItem, { x, y });
+  }
 
   private clearHover(): void {
     this.pickPending = false;
