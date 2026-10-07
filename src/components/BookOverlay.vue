@@ -9,6 +9,7 @@ import {
   watch,
 } from "vue";
 import type { BookPageScreenTransforms, BookSection } from "../three/types";
+import type { Quest } from "../data/content";
 import { PAGE_CSS_W, PAGE_CSS_H } from "../three/types";
 import {
   identity,
@@ -57,8 +58,34 @@ const SECTIONS: { id: BookSection; tab: string; title: string }[] = [
 const sectionIndex = computed(() =>
   SECTIONS.findIndex((s) => s.id === props.section),
 );
-const canPrev = computed(() => sectionIndex.value > 0);
-const canNext = computed(() => sectionIndex.value < SECTIONS.length - 1);
+
+/**
+ * Long sections span several spreads (two pages each). The tome's section
+ * (tabs, TOC, #/book/<section>) stays the unit of navigation; `spread` is
+ * the page-turn inside it.
+ */
+const spread = ref(0);
+/** Spread to land on after the next section change (set when paging back). */
+let pendingSpread = 0;
+
+const questPages: Quest[][] = [
+  quests.slice(0, 3),
+  quests.slice(3, 6),
+  quests.slice(6),
+];
+
+function spreadCountFor(section: BookSection): number {
+  if (section === "career") return Math.ceil(questPages.length / 2);
+  return 1;
+}
+const spreadCount = computed(() => spreadCountFor(props.section));
+
+const canPrev = computed(() => sectionIndex.value > 0 || spread.value > 0);
+const canNext = computed(
+  () =>
+    sectionIndex.value < SECTIONS.length - 1 ||
+    spread.value < spreadCount.value - 1,
+);
 
 const paneBase = {
   width: `${PAGE_CSS_W}px`,
@@ -107,15 +134,30 @@ const tabsStyle = computed<Record<string, string> | null>(() => {
 
 function navigate(to: BookSection): void {
   if (to === props.section) return;
+  if (pendingSpread !== 0 && SECTIONS[sectionIndex.value - 1]?.id !== to) {
+    pendingSpread = 0; // only prev() pages back onto a last spread
+  }
   audio.playFlip();
   emit("update:section", to);
 }
 
 function next(): void {
-  if (canNext.value) navigate(SECTIONS[sectionIndex.value + 1]!.id);
+  if (spread.value < spreadCount.value - 1) {
+    audio.playFlip();
+    spread.value += 1;
+  } else if (sectionIndex.value < SECTIONS.length - 1) {
+    navigate(SECTIONS[sectionIndex.value + 1]!.id);
+  }
 }
 function prev(): void {
-  if (canPrev.value) navigate(SECTIONS[sectionIndex.value - 1]!.id);
+  if (spread.value > 0) {
+    audio.playFlip();
+    spread.value -= 1;
+  } else if (sectionIndex.value > 0) {
+    const target = SECTIONS[sectionIndex.value - 1]!.id;
+    pendingSpread = spreadCountFor(target) - 1;
+    navigate(target);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -279,8 +321,8 @@ const contactLines = [
   },
 ];
 
-const questsLeft = quests.slice(0, 3);
-const questsRight = quests.slice(3);
+const questsLeft = computed(() => questPages[spread.value * 2] ?? []);
+const questsRight = computed(() => questPages[spread.value * 2 + 1] ?? []);
 
 /** D&D ability modifier, formatted +N / −N / ±0. */
 function statMod(value: number): string {
@@ -352,9 +394,15 @@ watch(
     // Only page turns get the inscribe reveal — the very first mount (book
     // just opened) shows content immediately; the open animation covered it.
     hasNavigated.value = true;
+    spread.value = pendingSpread;
+    pendingSpread = 0;
     void nextTick(fitPages);
   },
 );
+watch(spread, () => {
+  hasNavigated.value = true;
+  void nextTick(fitPages);
+});
 </script>
 
 <template>
@@ -371,7 +419,7 @@ watch(
       :style="{ ...paneBase, transform: transforms?.left ?? 'none' }"
     >
       <div
-        :key="section"
+        :key="`${section}-${spread}`"
         ref="leftPadEl"
         class="ink-pad book-page"
         :class="{ 'ink-inscribe': inscribe }"
@@ -442,7 +490,7 @@ watch(
 
           <!-- career -->
           <template v-else-if="section === 'career'">
-            <h2>The Quest Log</h2>
+            <h2>The Quest Log<span v-if="spread > 0" class="continued"> · continued</span></h2>
             <article
               v-for="quest in questsLeft"
               :key="quest.company"
@@ -542,7 +590,7 @@ watch(
       :style="{ ...paneBase, transform: transforms?.right ?? 'none' }"
     >
       <div
-        :key="section"
+        :key="`${section}-${spread}`"
         ref="rightPadEl"
         class="ink-pad book-page"
         :class="{ 'ink-inscribe': inscribe }"
@@ -619,6 +667,12 @@ watch(
               <p class="quest-period">{{ quest.period }}</p>
               <p class="quest-summary">{{ quest.summary }}</p>
             </article>
+            <p v-if="questsRight.length === 0" class="folio mt-6">
+              — the log is still being written —
+            </p>
+            <p v-else-if="spreadCount > 1" class="folio">
+              folio {{ spread + 1 }} of {{ spreadCount }}
+            </p>
           </template>
 
           <!-- projects: remaining artifacts -->
@@ -993,6 +1047,20 @@ watch(
   font-size: 0.64rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.continued {
+  font-weight: 400;
+  font-style: italic;
+  font-size: 0.8em;
+  color: var(--ink-faint);
+}
+.folio {
+  margin: 0.4rem 0 0;
+  text-align: center;
+  font-family: "EB Garamond", serif;
+  font-size: 0.8rem;
+  font-style: italic;
   color: var(--ink-faint);
 }
 .quest-summary {

@@ -15,9 +15,9 @@ export const identity = {
   status: "available" as "available" | "busy",
   statusFlavor: "Available for quests",
   bio:
-    "A developer who ships fast and fixes faster. Fluent in the arcane arts of " +
-    "TypeScript on both fronts of the battlefield — client and server — and " +
-    "sustained almost entirely by caffeine.",
+    "A developer who ships fast and fixes faster — three years and counting of " +
+    "production apps. Fluent in the arcane arts of TypeScript on both fronts of " +
+    "the battlefield, client and server, and sustained almost entirely by caffeine.",
   alignment: "Chaotic Shipper",
 };
 
@@ -59,29 +59,36 @@ export interface Quest {
   summary: string;
 }
 
-/** Career as a quest log, newest first. */
+/** Career as a quest log, newest start date first. */
 export const quests: Quest[] = [
   {
-    company: "Qi Card",
+    company: "Enjaz (Qi Card)",
     role: "Software Developer",
     period: "Jul 2025 — Present",
     current: true,
-    summary: "The ongoing campaign: fintech at national scale.",
+    summary: "Forging oil-sector realms and a SuperQi mini app for 1M+ families.",
+  },
+  {
+    company: "Freelance",
+    role: "Software Developer",
+    period: "2024 — Present",
+    current: true,
+    summary: "A wandering sellsword: cafe menus, a clinic CRM, a portfolio.",
   },
   {
     company: "Alrabiaa TV",
-    role: "Software Developer",
+    role: "Junior Software Developer",
     period: "Feb — Jun 2025",
-    summary: "Kept the broadcast beacons burning.",
+    summary: "Charted the seats of the great hall: ticketing with living seat maps.",
   },
   {
-    company: "Puretik",
-    role: "Software Developer",
+    company: "PureTik",
+    role: "Junior Software Developer",
     period: "Jun 2024 — Jun 2025",
-    summary: "A year-long expedition through full-stack lands.",
+    summary: "Brewed Dr.Lab for the alchemists' labs; raised Karada Store.",
   },
   {
-    company: "Aon",
+    company: "Aon.iq",
     role: "Assistant Trainer",
     period: "Oct — Dec 2024",
     summary: "Trained fresh adventurers in the ways of code.",
@@ -94,9 +101,15 @@ export const quests: Quest[] = [
   },
   {
     company: "Makers of Baghdad",
-    role: "Frontend Intern",
+    role: "Front-End & UI Design Intern",
     period: "Jul — Aug 2023",
-    summary: "The tutorial quest. Everyone starts somewhere.",
+    summary: "The tutorial quest: redrew a site in Figma, then rebuilt it in React.",
+  },
+  {
+    company: "ZainCash",
+    role: "Archive Officer",
+    period: "Jan — Feb 2023",
+    summary: "Kept the vault ledgers of a mobile wallet in order.",
   },
 ];
 
