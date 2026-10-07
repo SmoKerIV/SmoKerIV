@@ -47,7 +47,8 @@ import {
   woodLightMaterial,
   woodStaveMaterial,
 } from "./models/materials";
-import { DicePhysics } from "./dicePhysics";
+import { DicePhysics, measureObstacle } from "./dicePhysics";
+import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
 
 const PIXEL_RATIO_CAP: Record<Quality, number> = {
@@ -150,6 +151,8 @@ const PROGRESS = {
   shaders: 0.95,
 } as const;
 const COMPILE_TIMEOUT_MS = 5000;
+/** Delay after the stage is ready before fetching the d20 physics engine. */
+const DICE_PRELOAD_DELAY_MS = 2500;
 /** Upper bound on a start-up yield when rAF is throttled (hidden tab). */
 const YIELD_FALLBACK_MS = 50;
 
@@ -305,6 +308,8 @@ export class SceneManager implements ISceneManager {
 
   private diceRolling = false;
   private dicePhysics: DicePhysics | null = null;
+  /** World point of the click that is about to roll the die (see onSelect). */
+  private diceAim: THREE.Vector3 | null = null;
 
   /** Reusable fireball projectile, built with the stage. */
   private fireball: FireballRig | null = null;
@@ -495,9 +500,18 @@ export class SceneManager implements ISceneManager {
   }
 
   rollDice(): void {
-    if (this.diceRolling || !this.dicePhysics) return;
+    const hit = this.diceAim;
+    this.diceAim = null;
+    const physics = this.dicePhysics;
+    if (this.diceRolling || !physics || physics.isRolling) return;
     this.diceRolling = true;
-    this.dicePhysics.roll(this.settings.reducedMotion);
+    // Throw away from the viewer: through the clicked point, or along the
+    // camera's view for keyboard / spell rolls.
+    const camera = this.rig.camera;
+    const aim = hit
+      ? hit.sub(camera.position)
+      : camera.getWorldDirection(new THREE.Vector3());
+    physics.roll({ reducedMotion: this.settings.reducedMotion, aim });
   }
 
   castFireball(): void {
@@ -871,6 +885,11 @@ export class SceneManager implements ISceneManager {
 
     this.stageReady = true;
     this.updateRunning();
+
+    // Fetch the dice engine once the first frames are out of the way.
+    setTimeout(() => {
+      if (!this.disposed) void this.dicePhysics?.preload().catch(() => undefined);
+    }, DICE_PRELOAD_DELAY_MS);
   }
 
   private async buildStage(
@@ -961,12 +980,7 @@ export class SceneManager implements ISceneManager {
     }
 
     const dice = this.itemGroups.get("dice");
-    if (dice) {
-      this.dicePhysics = new DicePhysics(dice, TABLE_SURFACE_Y, (value) => {
-        this.diceRolling = false;
-        if (!this.disposed) this.events.onDiceResult?.(value);
-      });
-    }
+    if (dice) this.createDicePhysics(dice, table, candleB);
 
     this.scene.traverse((object) => {
       const mesh = object as THREE.Mesh;
@@ -982,6 +996,83 @@ export class SceneManager implements ISceneManager {
     this.addContactShadows(table, candleB);
     onProgress(1);
     return true;
+  }
+
+  /**
+   * The d20's world: the measured tabletop plus a collider for every item,
+   * each sized from its built group (Box3 in the item's own frame). The
+   * spellbook gets a closed and an open collider (cover swung over).
+   */
+  private createDicePhysics(
+    dice: THREE.Group,
+    table: THREE.Group,
+    candleB: THREE.Group,
+  ): void {
+    const obstacles: ObstacleSpec[] = [];
+    const add = (spec: ObstacleSpec | null): void => {
+      if (spec) obstacles.push(spec);
+    };
+    const group = (id: ItemId): THREE.Group | undefined => this.itemGroups.get(id);
+    const sword = group("sword");
+    const shield = group("shield");
+    const scroll = group("scroll");
+    const tankard = group("tankard");
+    const potion = group("potion");
+    const candle = group("candle");
+    if (sword) add(measureObstacle(sword, "box"));
+    if (shield) add(measureObstacle(shield, "cylinder"));
+    if (scroll) add(measureObstacle(scroll, "box"));
+    if (tankard) add(measureObstacle(tankard, "box"));
+    // One cylinder per bottle, so the die can roll between them.
+    if (potion) {
+      for (const bottle of potion.children) add(measureObstacle(potion, "cylinder", bottle));
+    }
+    for (const c of [candle, candleB]) if (c) add(measureObstacle(c, "cylinder"));
+
+    let bookClosed: ObstacleSpec | null = null;
+    let bookOpen: ObstacleSpec | null = null;
+    const book = group("spellbook");
+    const parts = book?.userData.parts as SpellbookParts | undefined;
+    if (book) {
+      bookClosed = measureObstacle(book, "box");
+      if (parts) {
+        // Measure the open pose, then put everything back.
+        const cover = parts.frontCover.rotation.z;
+        const pages = parts.flipPages.map((page) => page.rotation.z);
+        parts.frontCover.rotation.z = Math.PI;
+        for (const page of parts.flipPages) page.rotation.z = Math.PI;
+        bookOpen = measureObstacle(book, "box");
+        parts.frontCover.rotation.z = cover;
+        parts.flipPages.forEach((page, i) => (page.rotation.z = pages[i]));
+        book.updateWorldMatrix(true, true);
+      }
+    }
+
+    table.updateWorldMatrix(true, true);
+    const tableBox = new THREE.Box3().setFromObject(table);
+    const inset = 0.02;
+    this.dicePhysics = new DicePhysics(dice, {
+      tableY: TABLE_SURFACE_Y,
+      table: {
+        minX: tableBox.min.x + inset,
+        maxX: tableBox.max.x - inset,
+        minZ: tableBox.min.z + inset,
+        maxZ: tableBox.max.z - inset,
+      },
+      obstacles,
+      bookClosed,
+      bookOpen,
+      home: new THREE.Vector2(LAYOUT.dice.x, LAYOUT.dice.z),
+      onResult: (value) => {
+        this.diceRolling = false;
+        this.markShadowsDirty();
+        if (!this.disposed) this.events.onDiceResult?.(value);
+      },
+      onImpact: (strength, hard) => {
+        if (!this.disposed) this.events.onDiceImpact?.(strength, hard);
+      },
+    });
+    this.dicePhysics.setBookOpen(this.bookOpen);
   }
 
   private placeOnTable(group: THREE.Group, placement: Placement): void {
@@ -1265,8 +1356,11 @@ export class SceneManager implements ISceneManager {
       }
       this.events.onHover?.(item, screen);
     },
-    onSelect: (item, root) => {
+    onSelect: (item, root, point) => {
       this.lastPickedRoot = root;
+      // A click on the d20 throws it along the camera → pointer direction;
+      // rollDice() picks this up when the overlay calls it right back.
+      this.diceAim = item === "dice" && point ? point : null;
       if (item === "candle") this.handleCandleClick(root);
       this.events.onSelect?.(item);
     },
@@ -1565,6 +1659,7 @@ export class SceneManager implements ISceneManager {
     this.bookTl?.kill();
     gsap.killTweensOf(this.runeProxy);
     this.bookOpen = true;
+    this.dicePhysics?.setBookOpen(true);
 
     const reduced = this.settings.reducedMotion;
     return new Promise((resolve) => {
@@ -1627,6 +1722,7 @@ export class SceneManager implements ISceneManager {
     this.pageFlipTween = null;
     gsap.killTweensOf(this.runeProxy);
     this.bookOpen = false;
+    this.dicePhysics?.setBookOpen(false);
     this.setReading(false);
     this.setReadingPagesVisible(false);
     for (const page of parts.flipPages) page.visible = true;

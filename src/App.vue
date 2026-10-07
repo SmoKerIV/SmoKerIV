@@ -251,6 +251,7 @@ const events: SceneEvents = {
     pageTransforms.value = t;
   },
   onDiceResult: handleDiceResult,
+  onDiceImpact: (strength, hard) => audio.playClack(strength, hard),
   onFireballImpact: () => {
     // The 3D detonation just fired — shake the DOM on the same beat.
     screenShake();

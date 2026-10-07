@@ -291,6 +291,59 @@ function playThump(): void {
   osc.stop(now + 0.45);
 }
 
+/** Shared 60 ms white-noise burst for dice clatter (made on first use). */
+let clackNoise: AudioBuffer | null = null;
+let lastClackAt = 0;
+/** Minimum gap between clacks (s) so a tumble can't machine-gun. */
+const CLACK_GAP = 0.045;
+
+/**
+ * Dice clatter: a tiny resonant noise tick plus a short pitched knock.
+ * Resin on wood is a dull "tok"; against an item it rings brighter.
+ * strength 0..1 scales loudness (and a little brightness).
+ */
+function playClack(strength: number, hard = false): void {
+  const context = sfxReady();
+  if (!context || !sfxGain) return;
+  const now = context.currentTime;
+  if (now - lastClackAt < CLACK_GAP) return;
+  lastClackAt = now;
+
+  const s = Math.min(1, Math.max(0, strength));
+  const peak = 0.05 + 0.4 * s * s;
+  const jitter = 0.9 + Math.random() * 0.2;
+
+  if (!clackNoise || clackNoise.sampleRate !== context.sampleRate) {
+    clackNoise = makeNoiseBuffer(context, 0.06, false);
+  }
+  const noise = context.createBufferSource();
+  noise.buffer = clackNoise;
+  const band = context.createBiquadFilter();
+  band.type = "bandpass";
+  band.frequency.value = (hard ? 3600 : 2200) * jitter * (0.85 + 0.3 * s);
+  band.Q.value = hard ? 6 : 3.5;
+  const noiseEnv = context.createGain();
+  noiseEnv.gain.setValueAtTime(0.0001, now);
+  noiseEnv.gain.exponentialRampToValueAtTime(peak, now + 0.002);
+  noiseEnv.gain.exponentialRampToValueAtTime(0.0001, now + (hard ? 0.05 : 0.035));
+  noise.connect(band).connect(noiseEnv).connect(sfxGain);
+  noise.start(now);
+  noise.stop(now + 0.06);
+
+  const knock = context.createOscillator();
+  knock.type = "triangle";
+  const pitch = (hard ? 1450 : 620) * jitter;
+  knock.frequency.setValueAtTime(pitch, now);
+  knock.frequency.exponentialRampToValueAtTime(pitch * 0.7, now + 0.05);
+  const knockEnv = context.createGain();
+  knockEnv.gain.setValueAtTime(0.0001, now);
+  knockEnv.gain.exponentialRampToValueAtTime(peak * (hard ? 0.35 : 0.55), now + 0.003);
+  knockEnv.gain.exponentialRampToValueAtTime(0.0001, now + (hard ? 0.09 : 0.06));
+  knock.connect(knockEnv).connect(sfxGain);
+  knock.start(now);
+  knock.stop(now + 0.1);
+}
+
 /** Small arpeggiated chime — natural 20. */
 function playChime(): void {
   const context = sfxReady();
@@ -325,6 +378,8 @@ export interface AudioEngine {
   playFlip: () => void;
   playThump: () => void;
   playChime: () => void;
+  /** Dice clatter; strength 0..1, hard = struck an item rather than wood. */
+  playClack: (strength: number, hard?: boolean) => void;
   dispose: () => void;
 }
 
@@ -357,6 +412,7 @@ const engine: AudioEngine = {
   playFlip,
   playThump,
   playChime,
+  playClack,
   dispose() {
     stopAmbience();
     if (visibilityHooked) {
@@ -371,6 +427,7 @@ const engine: AudioEngine = {
     if (ctx) {
       void ctx.close();
       ctx = null;
+      clackNoise = null;
       masterGain = null;
       musicGain = null;
       sfxGain = null;

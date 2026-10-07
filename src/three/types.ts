@@ -77,6 +77,11 @@ export interface SceneEvents {
   /** d20 roll result (1..20), fired when the die comes to rest. */
   onDiceResult?: (value: number) => void;
   /**
+   * The rolling d20 struck the table or an item (throttled by the scene).
+   * strength 0..1 from the impact speed; hard = an item, not the wood.
+   */
+  onDiceImpact?: (strength: number, hard: boolean) => void;
+  /**
    * The scene downgraded its own quality after sustained slow frames
    * (fail-down for weak GPUs). The overlay should sync its settings UI.
    */

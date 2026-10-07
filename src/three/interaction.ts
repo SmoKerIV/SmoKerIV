@@ -4,8 +4,11 @@ import type { ItemId } from "./types";
 /** Hover/select callbacks; SceneManager wraps SceneEvents before passing. */
 export interface InteractionEvents {
   onHover?: (item: ItemId | null, screen?: { x: number; y: number }) => void;
-  /** root = the actual picked group instance (itemIds can be shared). */
-  onSelect?: (item: ItemId, root: THREE.Group) => void;
+  /**
+   * root = the actual picked group instance (itemIds can be shared).
+   * point = world-space ray hit for pointer selections (none for keyboard).
+   */
+  onSelect?: (item: ItemId, root: THREE.Group, point?: THREE.Vector3) => void;
 }
 
 interface EmissiveSnapshot {
@@ -44,6 +47,8 @@ function hasEmissive(
 export class Interaction {
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointerNDC = new THREE.Vector2();
+  /** World hit point of the last successful pick(). */
+  private readonly pickPoint = new THREE.Vector3();
 
   private readonly roots: THREE.Group[];
   private readonly primaryByItem = new Map<ItemId, THREE.Group>();
@@ -229,7 +234,7 @@ export class Interaction {
       this.showTouchHover(root, event.clientX, event.clientY);
       return;
     }
-    this.events.onSelect?.(item, root);
+    this.events.onSelect?.(item, root, this.pickPoint.clone());
   };
 
   private readonly onPointerCancel = () => {
@@ -277,7 +282,10 @@ export class Interaction {
     const hits = this.raycaster.intersectObjects(this.roots, true);
     for (const hit of hits) {
       const root = this.findRoot(hit.object);
-      if (root) return root;
+      if (root) {
+        this.pickPoint.copy(hit.point);
+        return root;
+      }
     }
     return null;
   }
