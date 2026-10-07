@@ -21,7 +21,6 @@ import {
   artifacts,
   contact,
   colophon,
-  credits,
 } from "../data/content";
 import { sceneAudio } from "../composables/useSceneAudio";
 import { useSettings } from "../composables/useSettings";
@@ -681,7 +680,7 @@ watch(spread, () => {
                 >{{ line.label }}</a>
               </li>
             </ul>
-            <!-- colophon sits here: the right page has no room for both it and the credits -->
+            <!-- colophon sits here: the right page has no room for it -->
             <div class="mt-4 flex justify-center">
               <p class="m-0 max-w-[40ch] border-t border-gold/50 pt-2 text-center font-body text-xs italic leading-relaxed text-ink-faint">
                 {{ colophon }}
@@ -848,13 +847,13 @@ watch(spread, () => {
             <div class="mt-4 flex flex-col items-center gap-3 text-center">
               <a
                 :href="`mailto:${contact.email}`"
-                class="btn-wax flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-full text-center"
+                class="btn-wax flex h-28 w-28 flex-col items-center justify-center gap-1.5 rounded-full px-4 text-center"
                 aria-label="Send an email"
               >
                 <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M4 8l8 5 8-5M4 8v9h16V8M4 8l8-4 8 4" />
                 </svg>
-                <span class="text-xs leading-tight tracking-[0.04em]">Send<br />the Raven</span>
+                <span class="whitespace-nowrap text-xs leading-tight tracking-[0.02em]">Send<br />the Raven</span>
               </a>
               <a
                 v-if="cvUrl"
@@ -866,9 +865,6 @@ watch(spread, () => {
               >
                 Take the Adventurer's Contract (CV)
               </a>
-              <ul class="m-0 max-w-[44ch] list-none border-t border-gold/50 p-0 pt-2 font-body text-xs leading-snug text-ink-faint">
-                <li v-for="credit in credits" :key="credit">{{ credit }}</li>
-              </ul>
             </div>
           </template>
         </div>

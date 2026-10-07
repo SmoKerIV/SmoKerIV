@@ -10,7 +10,6 @@ import {
   artifacts,
   contact,
   colophon,
-  credits,
 } from "../data/content";
 
 /** Deep-linked section (#/book/<section>) to scroll to on open. */
@@ -354,9 +353,6 @@ const contactLines = [
 
       <footer class="border-t border-gold/40 pt-5 text-center font-body text-xs italic text-ink-faint">
         {{ colophon }}
-        <ul class="m-0 mt-3 list-none space-y-1 p-0 text-xs not-italic">
-          <li v-for="credit in credits" :key="credit">{{ credit }}</li>
-        </ul>
       </footer>
     </main>
 

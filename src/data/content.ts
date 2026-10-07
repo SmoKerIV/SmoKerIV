@@ -255,17 +255,6 @@ export const colophon =
   "Bound in Baghdad. Written in TypeScript. Powered by caffeine. " +
   "No goblins were harmed in the making of this website.";
 
-/**
- * Credits & licenses — rendered under the colophon on the contact page.
- * When you add real music to public/audio/, credit it here (e.g. CC-BY
- * requires attribution: "Track by Artist, licensed CC-BY 4.0").
- */
-export const credits: string[] = [
-  "Ambience: fire & wind synthesized in-browser via WebAudio — no samples, no license needed.",
-  "Typefaces: Cinzel, Cinzel Decorative & IM Fell English via Google Fonts (OFL).",
-  "3D scene: procedural models, no external assets.",
-];
-
 /* ------------------------------------------------------------------ */
 /* Focus cards — parchment scrap shown when zoomed on a table item     */
 /* (titles/flavor come from ITEM_LABELS in three/types.ts)             */
