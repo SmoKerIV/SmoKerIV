@@ -39,7 +39,10 @@ diffuseColor.a = clamp(
 #endif
 
 #ifdef USE_TRANSMISSION
-diffuseColor.a *= material.transmissionAlpha;
+// Refractive glass passes through the bloom mask of what it refracts
+// (transmitted.a: the transmission target holds the opaque pass' mask), so
+// a glowing potion still blooms behind its bottle.
+diffuseColor.a = max( diffuseColor.a, material.transmissionAlpha );
 #endif
 
 gl_FragColor = vec4( outgoingLight, diffuseColor.a );

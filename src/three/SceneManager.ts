@@ -54,6 +54,7 @@ import {
   woodStaveMaterial,
 } from "./models/materials";
 import { swordMaps } from "./models/sword";
+import { potionMaps } from "./models/potion";
 import { DicePhysics, measureObstacle } from "./dicePhysics";
 import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
@@ -230,6 +231,7 @@ const TEXTURE_WARMUPS: (() => unknown)[] = [
   makeCrestTexture,
   makeBladeRuneTexture,
   swordMaps,
+  potionMaps,
   makeRuneCircleTexture,
   makeDotTexture,
   wallMaps,
@@ -538,6 +540,10 @@ export class SceneManager implements ISceneManager {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.95;
+    // The potions' glass (high quality only) refracts the opaque scene from
+    // a second render; at half resolution it costs a fraction and the
+    // refracted room is soft behind the bottles anyway.
+    this.renderer.transmissionResolutionScale = 0.5;
     this.renderer.shadowMap.enabled = settings.quality !== "low";
     // r185 deprecates PCFSoftShadowMap and swaps it for PCFShadowMap on the
     // first shadow render — a type change that flags every material for
@@ -907,6 +913,7 @@ export class SceneManager implements ISceneManager {
     this.lights.setQuality(quality);
     this.particles.setQuality(quality);
     this.room?.setQuality(quality);
+    this.applyItemQuality();
     this.applyPostQuality();
     this.updateMothVisibility();
     this.markShadowsDirty();
@@ -1270,6 +1277,9 @@ export class SceneManager implements ISceneManager {
       // would otherwise light up every mesh sharing a cached material
       // (hovering the scroll used to make parts of the table glow).
       this.makeMaterialsUnique(group);
+      (group.userData.setQuality as ((q: Quality) => void) | undefined)?.(
+        this.settings.quality,
+      );
       this.placeOnTable(group, LAYOUT[id]);
       this.itemGroups.set(id, group);
       this.interactableRoots.push(group);
@@ -1515,6 +1525,14 @@ export class SceneManager implements ISceneManager {
     drop(candleB, TABLE_SURFACE_Y + 0.0012, 0.3);
     for (const prop of this.tableProps) drop(prop, TABLE_SURFACE_Y + 0.0012, 0.25);
     drop(table, 0.0015, 0.2);
+  }
+
+  /** Items with quality-dependent materials (the potions' glass). */
+  private applyItemQuality(): void {
+    for (const group of this.itemGroups.values()) {
+      const apply = group.userData.setQuality as ((q: Quality) => void) | undefined;
+      apply?.(this.settings.quality);
+    }
   }
 
   /**
