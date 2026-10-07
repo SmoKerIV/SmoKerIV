@@ -57,6 +57,7 @@ import { swordMaps } from "./models/sword";
 import { potionMaps } from "./models/potion";
 import { scrollMaps } from "./models/scroll";
 import { tankardMaps } from "./models/tankard";
+import { spellbookMaps } from "./models/spellbookLook";
 import { DicePhysics, measureObstacle } from "./dicePhysics";
 import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
@@ -236,6 +237,7 @@ const TEXTURE_WARMUPS: (() => unknown)[] = [
   potionMaps,
   scrollMaps,
   tankardMaps,
+  spellbookMaps,
   makeRuneCircleTexture,
   makeDotTexture,
   wallMaps,
