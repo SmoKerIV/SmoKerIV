@@ -245,7 +245,9 @@ const events: SceneEvents = {
   },
   onSelect: (item) => {
     if (item === "dice") {
-      // The die never takes camera focus — it just rolls.
+      // The die never takes camera focus — it just rolls. Drop the nameplate
+      // so it doesn't sit on the die (or its number in the phone peek).
+      hoveredItem.value = null;
       scene?.rollDice();
       return;
     }
