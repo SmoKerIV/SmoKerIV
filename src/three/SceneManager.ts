@@ -43,7 +43,6 @@ import {
   makeRuneCircleTexture,
 } from "./models/textures";
 import {
-  leatherMaterial,
   parchmentMaterial,
   plasterMaterial,
   scrollEndMaterial,
@@ -51,7 +50,6 @@ import {
   waxMaterial,
   woodDarkMaterial,
   woodLightMaterial,
-  woodStaveMaterial,
 } from "./models/materials";
 import { swordMaps } from "./models/sword";
 import { potionMaps } from "./models/potion";
@@ -223,8 +221,6 @@ const YIELD_FALLBACK_MS = 50;
 const TEXTURE_WARMUPS: (() => unknown)[] = [
   woodDarkMaterial,
   woodLightMaterial,
-  woodStaveMaterial,
-  leatherMaterial,
   () => parchmentMaterial(false),
   () => parchmentMaterial(true),
   plasterMaterial,

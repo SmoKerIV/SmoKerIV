@@ -186,52 +186,6 @@ function paintWoodTexture(
   return toTexture(canvas);
 }
 
-/** Worn dark leather for the tome and grips. */
-function paintLeatherTexture(): THREE.CanvasTexture {
-  const size = 512;
-  const [canvas, ctx] = createCanvas(size);
-  const rand = mulberry32(4242);
-
-  ctx.fillStyle = "#5a2e1d";
-  ctx.fillRect(0, 0, size, size);
-
-  // Mottled patches
-  for (let i = 0; i < 40; i++) {
-    const x = rand() * size;
-    const y = rand() * size;
-    const r = 20 + rand() * 70;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    const darker = rand() > 0.5;
-    g.addColorStop(0, darker ? "rgba(40, 18, 10, 0.20)" : "rgba(140, 84, 52, 0.14)");
-    g.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(x - r, y - r, r * 2, r * 2);
-  }
-  // Fine speckle
-  for (let i = 0; i < 2600; i++) {
-    const a = 0.03 + rand() * 0.08;
-    ctx.fillStyle = rand() > 0.5 ? `rgba(0,0,0,${a})` : `rgba(220,160,110,${a * 0.6})`;
-    ctx.fillRect(rand() * size, rand() * size, 1.5, 1.5);
-  }
-  // Crease lines
-  ctx.strokeStyle = "rgba(28, 12, 6, 0.35)";
-  for (let i = 0; i < 26; i++) {
-    ctx.lineWidth = 0.8 + rand() * 1.4;
-    ctx.beginPath();
-    let x = rand() * size;
-    let y = rand() * size;
-    ctx.moveTo(x, y);
-    const segs = 2 + Math.floor(rand() * 3);
-    for (let sIdx = 0; sIdx < segs; sIdx++) {
-      x += (rand() - 0.5) * 90;
-      y += (rand() - 0.5) * 90;
-      ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
-  return toTexture(canvas);
-}
-
 /** Aged parchment; withRunes adds faded handwritten rune rows. */
 function paintParchmentTexture(withRunes = false): THREE.CanvasTexture {
   const size = 512;
@@ -678,10 +632,6 @@ export function makeWoodTexture(
   return cachedTexture(`wood:${tone}:${vertical}`, () =>
     paintWoodTexture(tone, vertical),
   );
-}
-
-export function makeLeatherTexture(): THREE.CanvasTexture {
-  return cachedTexture("leather", paintLeatherTexture);
 }
 
 export function makeParchmentTexture(withRunes = false): THREE.CanvasTexture {

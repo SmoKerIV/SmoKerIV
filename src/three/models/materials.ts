@@ -5,7 +5,6 @@
  */
 import * as THREE from "three";
 import {
-  makeLeatherTexture,
   makeParchmentTexture,
   makePlasterTexture,
   makeScrollEndTexture,
@@ -43,38 +42,6 @@ export function woodLightMaterial(): THREE.MeshStandardMaterial {
     new THREE.MeshStandardMaterial({
       map: makeWoodTexture("light"),
       roughness: 0.8,
-      metalness: 0.0,
-    }),
-  );
-}
-
-/** Vertical-grain wood (tankard staves, posts seen from the side). */
-export function woodStaveMaterial(): THREE.MeshStandardMaterial {
-  return cached("woodStave", () =>
-    new THREE.MeshStandardMaterial({
-      map: makeWoodTexture("dark", true),
-      roughness: 0.85,
-      metalness: 0.0,
-    }),
-  );
-}
-
-export function leatherMaterial(): THREE.MeshStandardMaterial {
-  return cached("leather", () =>
-    new THREE.MeshStandardMaterial({
-      map: makeLeatherTexture(),
-      roughness: 0.9,
-      metalness: 0.0,
-    }),
-  );
-}
-
-/** Slightly darker plain leather (embossed borders, grips). */
-export function leatherDarkMaterial(): THREE.MeshStandardMaterial {
-  return cached("leatherDark", () =>
-    new THREE.MeshStandardMaterial({
-      color: 0x3f1f13,
-      roughness: 0.95,
       metalness: 0.0,
     }),
   );
@@ -155,23 +122,6 @@ export function keepBloomMask<T extends THREE.Material>(
   return material;
 }
 
-/** Tinted glass for potion bottles. Cached per tint. */
-export function glassMaterial(tint = 0xcfe8e4): THREE.MeshStandardMaterial {
-  return cached(`glass:${tint}`, () =>
-    keepBloomMask(
-      new THREE.MeshStandardMaterial({
-        color: tint,
-        transparent: true,
-        opacity: 0.55,
-        roughness: 0.1,
-        metalness: 0.0,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      }),
-    ),
-  );
-}
-
 /** Emissive potion liquid. Cached per color. */
 export function liquidMaterial(color: number): THREE.MeshStandardMaterial {
   return cached(`liquid:${color}`, () =>
@@ -218,42 +168,6 @@ export function sealWaxMaterial(): THREE.MeshStandardMaterial {
   );
 }
 
-/** Dark amber ale/coffee surface: glossy with a warm inner glow. */
-export function drinkMaterial(): THREE.MeshStandardMaterial {
-  return cached("drink", () =>
-    new THREE.MeshStandardMaterial({
-      color: 0x6e3d0d,
-      emissive: 0x3a1c04,
-      emissiveIntensity: 0.35,
-      roughness: 0.15,
-      metalness: 0.0,
-    }),
-  );
-}
-
-/** Off-white matte foam head. */
-export function foamMaterial(): THREE.MeshStandardMaterial {
-  return cached("foam", () =>
-    new THREE.MeshStandardMaterial({
-      color: 0xf2e8cf,
-      roughness: 0.95,
-      metalness: 0.0,
-    }),
-  );
-}
-
-/** Dark interior wall of the tankard (rendered from the inside). */
-export function tankardInnerMaterial(): THREE.MeshStandardMaterial {
-  return cached("tankardInner", () =>
-    new THREE.MeshStandardMaterial({
-      color: 0x2b1a10,
-      roughness: 0.9,
-      metalness: 0.0,
-      side: THREE.BackSide,
-    }),
-  );
-}
-
 export function plasterMaterial(): THREE.MeshStandardMaterial {
   return cached("plaster", () =>
     new THREE.MeshStandardMaterial({
@@ -268,16 +182,6 @@ export function stoneMaterial(): THREE.MeshStandardMaterial {
   return cached("stone", () =>
     new THREE.MeshStandardMaterial({
       map: makeStoneTexture(),
-      roughness: 0.95,
-      metalness: 0.0,
-    }),
-  );
-}
-
-export function corkMaterial(): THREE.MeshStandardMaterial {
-  return cached("cork", () =>
-    new THREE.MeshStandardMaterial({
-      color: 0xa9805a,
       roughness: 0.95,
       metalness: 0.0,
     }),
