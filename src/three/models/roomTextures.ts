@@ -1,5 +1,5 @@
 /**
- * Canvas-painted surfaces for the inn room: plaster-over-stone walls, a
+ * Canvas-painted surfaces for the inn room: lime plaster over rubble walls, a
  * plank floor, sooty hearth stone (each with a matching normal map built
  * from a painted height field) and the window's night sky, moon and
  * clouds. Deterministic (seeded) and cached like textures.ts; sizes drop
@@ -225,10 +225,104 @@ function paintStoneCourses(
 }
 
 /**
- * Inn wall: lime plaster over rubble stone. One tile = 3.5 m x 3.2 m of
- * wall (u repeats twice along a 7 m wall). The plaster has fallen away in
- * patches, mostly low on the wall where boots and damp wear it; smoke has
- * browned its upper reaches.
+ * Rubble stone: irregular fieldstones of mixed size (no courses, no brick
+ * rhythm) bedded in pale lime mortar. Colour and height painted together.
+ */
+function paintRubble(
+  color: CanvasRenderingContext2D,
+  height: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  rand: () => number,
+  unit: number,
+): void {
+  color.fillStyle = "#7a6c5a";
+  color.fillRect(0, 0, w, h);
+  height.fillStyle = "rgb(70,70,70)";
+  height.fillRect(0, 0, w, h);
+  const palette: [number, number, number][] = [
+    [142, 126, 104],
+    [130, 116, 98],
+    [150, 132, 106],
+    [124, 112, 96],
+    [138, 120, 92],
+  ];
+  let y = -unit * 0.3;
+  while (y < h) {
+    const rowH = unit * (0.55 + rand() * 0.9);
+    let x = -rand() * unit;
+    while (x < w) {
+      const bw = unit * (0.6 + rand() * 1.5);
+      const bh = rowH * (0.7 + rand() * 0.45);
+      const cx = x + bw / 2;
+      const cy = y + rowH / 2 + (rand() - 0.5) * rowH * 0.25;
+      const rx = bw / 2 - 2 - rand() * 2;
+      const ry = bh / 2 - 2 - rand() * 2;
+      const sides = 7 + Math.floor(rand() * 4);
+      const turn = rand() * Math.PI;
+      const radii = Array.from({ length: sides }, () => 0.78 + rand() * 0.22);
+      const [r, g, b] = palette[Math.floor(rand() * palette.length)]!;
+      const shade = 0.88 + rand() * 0.2;
+      const fill = `rgb(${(r * shade) | 0},${(g * shade) | 0},${(b * shade) | 0})`;
+      const lift = 150 + rand() * 60;
+      const outline = (ctx: CanvasRenderingContext2D, px: number): void => {
+        ctx.beginPath();
+        for (let i = 0; i <= sides; i++) {
+          const a = turn + (i / sides) * Math.PI * 2;
+          const k = radii[i % sides]!;
+          const vx = px + Math.cos(a) * rx * k;
+          const vy = cy + Math.sin(a) * ry * k;
+          if (i === 0) ctx.moveTo(vx, vy);
+          else ctx.lineTo(vx, vy);
+        }
+        ctx.closePath();
+      };
+      if (rx > 2 && ry > 2) {
+        wrapX(w, cx - rx, rx * 2, (px) => {
+          const ox = px + rx;
+          outline(color, ox);
+          color.fillStyle = fill;
+          color.fill();
+          // Soft top light, gentle shadowed underside (no black rims).
+          const grad = color.createLinearGradient(0, cy - ry, 0, cy + ry);
+          grad.addColorStop(0, "rgba(255,240,215,0.08)");
+          grad.addColorStop(0.65, "rgba(0,0,0,0)");
+          grad.addColorStop(1, "rgba(40,28,16,0.14)");
+          color.fillStyle = grad;
+          color.fill();
+          outline(height, ox);
+          const hg = height.createRadialGradient(ox, cy, 0, ox, cy, Math.max(rx, ry));
+          hg.addColorStop(0, `rgb(${(lift + 25) | 0},${(lift + 25) | 0},${(lift + 25) | 0})`);
+          hg.addColorStop(1, `rgb(${(lift - 45) | 0},${(lift - 45) | 0},${(lift - 45) | 0})`);
+          height.fillStyle = hg;
+          height.fill();
+        });
+        // Lichen-dull speckle, light only.
+        for (let i = 0; i < rx * ry * 0.01; i++) {
+          const sx = cx + (rand() - 0.5) * rx * 1.4;
+          const sy = cy + (rand() - 0.5) * ry * 1.4;
+          const sz = 1 + rand() * 2;
+          const tone = rand() < 0.6
+            ? `rgba(60,44,30,${0.06 + rand() * 0.08})`
+            : `rgba(255,236,206,${0.04 + rand() * 0.05})`;
+          wrapX(w, sx, sz, (px) => {
+            color.fillStyle = tone;
+            color.fillRect(px, sy, sz, sz);
+          });
+        }
+      }
+      x += bw;
+    }
+    y += rowH;
+  }
+}
+
+/**
+ * Inn wall: rough lime plaster over rubble stone. One tile = 3.5 m x 3.2 m
+ * of wall (u repeats twice along a 7 m wall). Mostly plaster — warm, low
+ * contrast, trowel-mottled — with the odd flaked patch showing the stone
+ * beneath, more of them low on the wall where boots and damp wear it;
+ * smoke has browned the upper reaches a little.
  */
 function paintWall(): SurfaceMaps {
   const size = surfaceSize;
@@ -237,69 +331,74 @@ function paintWall(): SurfaceMaps {
   const rand = mulberry32(7171);
   const [, stone] = canvas2d(w, h);
   const [, height] = canvas2d(w, h);
-  paintStoneCourses(stone, height, w, h, rand, {
-    rowPx: size * 0.062,
-    tones: [108, 98, 86],
-    mortar: "#2c251f",
-    jitter: size * 0.006,
-  });
+  paintRubble(stone, height, w, h, rand, size * 0.07);
 
   // Plaster coat (colour only; the composite below decides where it stays).
   const [, plaster] = canvas2d(w, h);
-  plaster.fillStyle = "#b8a585";
+  plaster.fillStyle = "#c4b294";
   plaster.fillRect(0, 0, w, h);
-  for (let i = 0; i < 90; i++) {
-    plaster.strokeStyle = `rgba(${rand() > 0.5 ? "250,236,206" : "120,100,74"}, ${0.04 + rand() * 0.06})`;
-    plaster.lineWidth = size * (0.01 + rand() * 0.03);
+  // Trowel mottling: broad, faint strokes of lighter and warmer lime.
+  for (let i = 0; i < 120; i++) {
+    const light = rand() > 0.45;
+    plaster.strokeStyle = light
+      ? `rgba(246,234,208,${0.05 + rand() * 0.06})`
+      : `rgba(150,124,92,${0.04 + rand() * 0.05})`;
+    plaster.lineWidth = size * (0.012 + rand() * 0.035);
+    plaster.lineCap = "round";
     plaster.beginPath();
     const x = rand() * w;
     const y = rand() * h;
     plaster.moveTo(x, y);
     plaster.quadraticCurveTo(
-      x + (rand() - 0.5) * w * 0.3, y + (rand() - 0.5) * h * 0.1,
-      x + (rand() - 0.5) * w * 0.5, y + (rand() - 0.5) * h * 0.2,
+      x + (rand() - 0.5) * w * 0.25, y + (rand() - 0.5) * h * 0.08,
+      x + (rand() - 0.5) * w * 0.4, y + (rand() - 0.5) * h * 0.14,
     );
     plaster.stroke();
   }
-  // Smoke-browned top, damp-stained foot.
+  // Smoke-browned top, faint damp tide at the foot.
   const smoke = plaster.createLinearGradient(0, 0, 0, h);
-  smoke.addColorStop(0, "rgba(40,24,12,0.55)");
-  smoke.addColorStop(0.35, "rgba(40,24,12,0.12)");
-  smoke.addColorStop(0.75, "rgba(0,0,0,0)");
-  smoke.addColorStop(1, "rgba(50,38,24,0.3)");
+  smoke.addColorStop(0, "rgba(70,44,24,0.32)");
+  smoke.addColorStop(0.3, "rgba(70,44,24,0.08)");
+  smoke.addColorStop(0.8, "rgba(0,0,0,0)");
+  smoke.addColorStop(1, "rgba(90,70,48,0.18)");
   plaster.fillStyle = smoke;
   plaster.fillRect(0, 0, w, h);
 
   // Where the plaster survives: tileable noise, thinned toward the floor.
-  const noise = periodicNoise(4242, 6);
+  const noise = periodicNoise(4242, 5);
   const fine = periodicNoise(911, 24);
+  const grit = periodicNoise(5150, 64);
   const stoneData = stone.getImageData(0, 0, w, h);
   const plasterData = plaster.getImageData(0, 0, w, h).data;
   const heightData = height.getImageData(0, 0, w, h);
   const sd = stoneData.data;
   const hd = heightData.data;
+  const CUT = 0.3;
   for (let y = 0; y < h; y++) {
     const v = y / h; // 0 = top of wall
-    // Bottom ~30 % of the wall is mostly bare stone.
-    const lowBias = THREE.MathUtils.smoothstep(v, 0.62, 0.92) * 0.5;
+    // The lowest ~25 % of the wall loses more plaster.
+    const lowBias = THREE.MathUtils.smoothstep(v, 0.7, 0.97) * 0.1;
     for (let x = 0; x < w; x++) {
       const u = x / w;
-      const n = noise(u, v) * 0.8 + fine(u, v) * 0.2 - lowBias;
+      const g = grit(u, v);
+      const n = noise(u, v) * 0.78 + fine(u, v) * 0.22 - lowBias;
       const i = (y * w + x) << 2;
-      if (n > 0.4) {
-        // Plaster, with a darker broken lip right at the edge.
-        const edge = THREE.MathUtils.clamp((n - 0.4) / 0.025, 0, 1);
-        const shade = 0.72 + 0.28 * edge;
-        sd[i] = plasterData[i]! * shade;
-        sd[i + 1] = plasterData[i + 1]! * shade;
-        sd[i + 2] = plasterData[i + 2]! * shade;
-        const ph = 205 + (fine(u * 2, v * 2) - 0.5) * 30;
+      if (n > CUT) {
+        // Plaster; a slightly lighter, raised lip right at the break.
+        const edge = THREE.MathUtils.clamp((n - CUT) / 0.03, 0, 1);
+        const shade = (1.04 - 0.04 * edge) * (0.96 + 0.08 * g);
+        sd[i] = Math.min(255, plasterData[i]! * shade);
+        sd[i + 1] = Math.min(255, plasterData[i + 1]! * shade);
+        sd[i + 2] = Math.min(255, plasterData[i + 2]! * shade);
+        const ph = 200 + (fine(u * 2, v * 2) - 0.5) * 36 + (g - 0.5) * 24 + (1 - edge) * 18;
         hd[i] = hd[i + 1] = hd[i + 2] = ph;
       } else {
-        // Exposed stone, sooted a little where plaster fell away.
-        sd[i] *= 0.92;
-        sd[i + 1] *= 0.9;
-        sd[i + 2] *= 0.88;
+        // Exposed stone, a touch recessed and dusted with lime.
+        const dust = THREE.MathUtils.clamp((n - (CUT - 0.08)) / 0.08, 0, 1) * 0.35;
+        sd[i] = sd[i]! * 0.9 * (1 - dust) + plasterData[i]! * dust;
+        sd[i + 1] = sd[i + 1]! * 0.9 * (1 - dust) + plasterData[i + 1]! * dust;
+        sd[i + 2] = sd[i + 2]! * 0.9 * (1 - dust) + plasterData[i + 2]! * dust;
+        hd[i] = hd[i + 1] = hd[i + 2] = hd[i]! * 0.82;
       }
     }
   }
