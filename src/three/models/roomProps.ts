@@ -16,7 +16,13 @@ import {
   FIREPLACE_SCALE,
   SHELF,
 } from "../roomLayout";
-import { hearthStoneMaps } from "./roomTextures";
+import { hearthStoneMaps, wallMaps } from "./roomTextures";
+
+/** Model-space height where the mantel ends and the plastered hood starts. */
+const HOOD_Y = 0.99;
+/** Wall texture tile in model units (3.5 m x 3.2 m of wall, model scale). */
+const HOOD_TILE_U = 3.5 / FIREPLACE_SCALE;
+const HOOD_TILE_V = 3.2 / FIREPLACE_SCALE;
 
 export interface RoomDressing {
   /** The fireplace model was placed (otherwise build the fallback). */
@@ -118,6 +124,23 @@ function reskinFireplace(root: THREE.Object3D): void {
     metalness: 0,
     vertexColors: true,
   });
+  // The hood above the mantel wears lime plaster like the walls (stone
+  // courses on its slope read as roof shingles, flat soot as a black
+  // block); soot is baked into its vertex colours below.
+  const walls = wallMaps();
+  const hood = new THREE.MeshStandardMaterial({
+    map: walls.map,
+    normalMap: walls.normalMap,
+    normalScale: new THREE.Vector2(0.8, 0.8),
+    color: 0xc2b09a,
+    // Warm spill from the opening below, which the point light (just in
+    // front of the grate) only grazes across the hood's slope.
+    emissive: 0x5c2e16,
+    emissiveMap: walls.map,
+    roughness: 0.95,
+    metalness: 0,
+    vertexColors: true,
+  });
   const TILE = 0.55; // model units per texture repeat
   const FIRE_X = 0.173;
   const smooth = THREE.MathUtils.smoothstep;
@@ -159,12 +182,14 @@ function reskinFireplace(root: THREE.Object3D): void {
         u = x;
         v = y;
       }
-      // Hood above the mantel: rendered smooth (sooty render over the
-      // stone) — courses on its slope read as roof shingles. Sampling a
-      // tiny patch of the texture gives a near-flat, still-mottled tone.
-      const hood = y > 0.99 ? 0.08 : 1;
-      uv[i * 2] = (u / TILE) * hood;
-      uv[i * 2 + 1] = (v / TILE) * hood;
+      if (y > HOOD_Y) {
+        // Hood: lime render (the wall texture, at the wall's scale).
+        uv[i * 2] = u / HOOD_TILE_U;
+        uv[i * 2 + 1] = v / HOOD_TILE_V;
+      } else {
+        uv[i * 2] = u / TILE;
+        uv[i * 2 + 1] = v / TILE;
+      }
 
       let soot = 0;
       // Inside the firebox (behind the grate): near black.
@@ -178,16 +203,50 @@ function reskinFireplace(root: THREE.Object3D): void {
       soot = Math.max(soot, 0.55 * Math.exp(-((d / 0.36) ** 2)));
       // Ground grime along the base.
       soot = Math.max(soot, 0.35 * (1 - smooth(y, 0.0, 0.25)));
-      const c = 1 - soot;
+      let c = 1 - soot;
+      if (y > HOOD_Y) {
+        // Smoke from the opening: darkest at the hood's foot, fading to
+        // clean lime toward the ceiling, a little heavier over the fire.
+        const rise = smooth(y, HOOD_Y, 1.75);
+        c = THREE.MathUtils.lerp(0.55, 1.05, rise) * (1 - 0.18 * across * (1 - rise));
+      }
       color[i * 3] = c;
       color[i * 3 + 1] = c * 0.97;
       color[i * 3 + 2] = c * 0.94;
     }
     geometry.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
     geometry.setAttribute("color", new THREE.BufferAttribute(color, 3));
+    splitHood(geometry, pos);
     mesh.geometry = geometry;
-    mesh.material = stone;
+    mesh.material = geometry.groups.length > 1 ? [stone, hood] : stone;
   });
+}
+
+/**
+ * Reorder the triangles so the hood (centroid above HOOD_Y) forms its own
+ * draw group, rendered with the plaster material; stone first.
+ */
+function splitHood(
+  geometry: THREE.BufferGeometry,
+  pos: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
+): void {
+  const index = geometry.getIndex();
+  const count = index ? index.count : pos.count;
+  const at = (k: number): number => (index ? index.getX(k) : k);
+  const stoneTris: number[] = [];
+  const hoodTris: number[] = [];
+  for (let k = 0; k < count; k += 3) {
+    const a = at(k);
+    const b = at(k + 1);
+    const c = at(k + 2);
+    const cy = (pos.getY(a) + pos.getY(b) + pos.getY(c)) / 3;
+    (cy > HOOD_Y ? hoodTris : stoneTris).push(a, b, c);
+  }
+  if (hoodTris.length === 0) return;
+  geometry.setIndex([...stoneTris, ...hoodTris]);
+  geometry.clearGroups();
+  geometry.addGroup(0, stoneTris.length, 0);
+  geometry.addGroup(stoneTris.length, hoodTris.length, 1);
 }
 
 /** Split logs stacked in the fireplace's side niche (model space). */
