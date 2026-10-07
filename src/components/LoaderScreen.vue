@@ -185,7 +185,7 @@ onUnmounted(() => {
       <span
         v-else
         role="status"
-        class="pt-4 font-heading text-xs uppercase tracking-[0.3em] text-parchment/70"
+        class="px-6 pt-4 text-center font-heading text-xs uppercase tracking-[0.3em] text-parchment/70"
         :class="{ 'fade-up': ready }"
       >
         {{ ready ? "the door swings open…" : "the innkeeper is preparing your table" }}
