@@ -53,6 +53,8 @@ const SPREAD_WIDTH = 0.9;
 const READING_TILT = { y: 0.99995, z: 0.01 };
 
 const FOCUS_DURATION = 1.6;
+/** Settled-camera ease when the viewport aspect changes. */
+const RETARGET_DURATION = 0.3;
 const REDUCED_DURATION = 0.3;
 const FOCUS_EASE = "power2.inOut";
 
@@ -99,6 +101,8 @@ export class CameraRig {
    */
   private swayScale = 1;
   private tween: gsap.core.Timeline | null = null;
+  /** Item the camera is posed on / heading to (null = table). */
+  private currentItem: ItemId | null = null;
   private resolveActive: (() => void) | null = null;
 
   private readonly onPointerMove = (event: PointerEvent) => {
@@ -124,25 +128,38 @@ export class CameraRig {
   /** Tween the base pose toward an item (or the table when null). */
   focusTo(item: ItemId | null): Promise<void> {
     this.killTween();
-    const pose = this.poseFor(item);
-    const up = this.upFor(item);
+    this.currentItem = item;
     const duration = this.reducedMotion ? REDUCED_DURATION : FOCUS_DURATION;
 
     return new Promise<void>((resolve) => {
       this.resolveActive = resolve;
-      this.tween = gsap
-        .timeline({
-          defaults: { duration, ease: FOCUS_EASE },
-          onComplete: () => {
-            this.tween = null;
-            this.resolveActive = null;
-            resolve();
-          },
-        })
-        .to(this.basePosition, { x: pose.position.x, y: pose.position.y, z: pose.position.z }, 0)
-        .to(this.baseTarget, { x: pose.target.x, y: pose.target.y, z: pose.target.z }, 0)
-        .to(this.upVec, { x: up.x, y: up.y, z: up.z }, 0);
+      this.tweenToCurrent(duration, FOCUS_EASE, () => {
+        this.resolveActive = null;
+        resolve();
+      });
     });
+  }
+
+  /** Tween base pose/up toward the current item's pose. */
+  private tweenToCurrent(
+    duration: number,
+    ease: string,
+    onDone?: () => void,
+  ): void {
+    const item = this.currentItem;
+    const pose = this.poseFor(item);
+    const up = this.upFor(item);
+    this.tween = gsap
+      .timeline({
+        defaults: { duration, ease },
+        onComplete: () => {
+          this.tween = null;
+          onDone?.();
+        },
+      })
+      .to(this.basePosition, { x: pose.position.x, y: pose.position.y, z: pose.position.z }, 0)
+      .to(this.baseTarget, { x: pose.target.x, y: pose.target.y, z: pose.target.z }, 0)
+      .to(this.upVec, { x: up.x, y: up.y, z: up.z }, 0);
   }
 
   update(elapsed: number, delta: number): void {
@@ -177,18 +194,55 @@ export class CameraRig {
   }
 
   /**
-   * Re-apply the (aspect-dependent) pose for the current focus instantly.
-   * Called on resize: portrait re-centers the table on the tome, and the
-   * reading pose recomputes its distance so the spread never overflows.
-   * Interrupts any in-flight transition — a stale tween would otherwise
-   * land the camera on a pose computed for the old aspect.
+   * The aspect changed: re-aim at the (aspect-dependent) pose of the current
+   * focus. An in-flight focus tween keeps running — it is re-aimed at the
+   * new pose for its remaining time, and its promise still resolves when it
+   * lands, so onFocusSettled never fires early. A settled camera eases to
+   * the new pose briefly (instantly under reduced motion) so mobile
+   * URL-bar show/hide doesn't make the view jump.
    */
+  retarget(): void {
+    if (this.tween && this.resolveActive) {
+      const remaining = Math.max(
+        this.tween.duration() * (1 - this.tween.progress()),
+        0.05,
+      );
+      const resolve = this.resolveActive;
+      this.tween.kill();
+      this.tween = null;
+      this.tweenToCurrent(remaining, "power2.out", () => {
+        this.resolveActive = null;
+        resolve();
+      });
+      return;
+    }
+    this.snapOrEase();
+  }
+
+  /** Jump straight to an item's pose (first layout). Interrupts any tween. */
   snapToPose(item: ItemId | null): void {
     this.killTween();
+    this.currentItem = item;
     const pose = this.poseFor(item);
     this.basePosition.copy(pose.position);
     this.baseTarget.copy(pose.target);
     this.upVec.copy(this.upFor(item));
+  }
+
+  /** Settled camera: ease (or snap) to the pose for the current aspect. */
+  private snapOrEase(): void {
+    if (this.tween) {
+      this.tween.kill();
+      this.tween = null;
+    }
+    if (this.reducedMotion) {
+      const pose = this.poseFor(this.currentItem);
+      this.basePosition.copy(pose.position);
+      this.baseTarget.copy(pose.target);
+      this.upVec.copy(this.upFor(this.currentItem));
+      return;
+    }
+    this.tweenToCurrent(RETARGET_DURATION, "power2.out");
   }
 
   setReducedMotion(reduced: boolean): void {

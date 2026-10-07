@@ -209,6 +209,7 @@ export class SceneManager implements ISceneManager {
   private warmupUntil = Number.POSITIVE_INFINITY;
 
   private rafId: number | null = null;
+  private resizeRaf: number | null = null;
   private userPaused = false;
   private disposed = false;
   private progressFrame = 0;
@@ -260,9 +261,10 @@ export class SceneManager implements ISceneManager {
       this.interactionEvents,
     );
 
-    this.resizeObserver = new ResizeObserver(() => this.handleResize());
+    // Single resize source, coalesced to one rAF (mobile URL-bar show/hide
+    // and window drags fire bursts).
+    this.resizeObserver = new ResizeObserver(this.scheduleResize);
     this.resizeObserver.observe(canvas);
-    window.addEventListener("resize", this.handleResize);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
     this.handleResize();
     this.updateRunning();
@@ -562,7 +564,8 @@ export class SceneManager implements ISceneManager {
     this.updateRunning();
 
     this.resizeObserver.disconnect();
-    window.removeEventListener("resize", this.handleResize);
+    if (this.resizeRaf !== null) cancelAnimationFrame(this.resizeRaf);
+    this.resizeRaf = null;
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
 
     this.bookTl?.kill();
@@ -1326,19 +1329,26 @@ export class SceneManager implements ISceneManager {
     if (this.readyFired) this.measureFrame(delta, elapsed);
   };
 
-  private readonly handleResize = (): void => {
+  private readonly scheduleResize = (): void => {
+    if (this.resizeRaf !== null || this.disposed) return;
+    this.resizeRaf = requestAnimationFrame(() => {
+      this.resizeRaf = null;
+      this.handleResize(false);
+    });
+  };
+
+  private handleResize(initial = true): void {
     const canvas = this.renderer.domElement;
     const width = canvas.clientWidth || window.innerWidth;
     const height = canvas.clientHeight || window.innerHeight;
     if (width === 0 || height === 0) return;
     this.renderer.setSize(width, height, false);
     this.rig.setSize(width, height);
-    // Poses depend on aspect (portrait centers the table on the tome; the
-    // reading distance is fit to the frustum) — re-apply for the new frame.
-    // Mid-transition too: _focused is already the transition target, and a
-    // tween finishing on an old-aspect pose would leave the book mis-framed.
-    this.rig.snapToPose(this._focused);
-  };
+    // Poses depend on aspect (table/focus framing, reading distance fit to
+    // the frustum). Re-aim without killing an in-flight focus tween.
+    if (initial) this.rig.snapToPose(this._focused);
+    else this.rig.retarget();
+  }
 
   private readonly onVisibilityChange = (): void => {
     this.updateRunning();
