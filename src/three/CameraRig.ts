@@ -63,7 +63,7 @@ const BOOK_OPEN_HALF_W = 0.5;
 const BOOK_OPEN_HALF_D = 0.18;
 /** Margins: sides leave air around the covers; depth leaves room for the
  *  section tabs above and the page arrows below. */
-const BOOK_MARGIN_W = 1.08;
+const BOOK_MARGIN_W = 1.16;
 const BOOK_MARGIN_D = 1.6;
 /**
  * Near-perfect top-down reading pose (≈1° toward the reader — just enough
