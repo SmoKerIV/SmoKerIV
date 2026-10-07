@@ -5,6 +5,34 @@
  */
 import * as THREE from "three";
 
+/**
+ * Module-level texture cache: identical canvases (the rune circle on the
+ * table and on the tome cover, the shared dark wood, the particle dot) are
+ * painted and uploaded once. Callers that need their own sampler settings
+ * (e.g. a different repeat) must .clone() — a clone shares the canvas source,
+ * so the GPU upload is still shared. clearTextureCache() runs on scene
+ * dispose so an HMR remount repaints everything for the new renderer.
+ */
+const textureCache = new Map<string, THREE.Texture>();
+
+export function cachedTexture<T extends THREE.Texture>(
+  key: string,
+  make: () => T,
+): T {
+  let texture = textureCache.get(key) as T | undefined;
+  if (!texture) {
+    texture = make();
+    textureCache.set(key, texture);
+  }
+  return texture;
+}
+
+/** Dispose every cached texture once and forget them. */
+export function clearTextureCache(): void {
+  for (const texture of textureCache.values()) texture.dispose();
+  textureCache.clear();
+}
+
 /** Tiny deterministic PRNG (mulberry32). */
 function mulberry32(seed: number): () => number {
   let t = seed >>> 0;
@@ -64,7 +92,7 @@ function drawRune(
  * Plank wood grain. tone: "dark" (#4a3524-ish) or "light" (#6b4a2f-ish).
  * vertical=true rotates the grain 90° (tankard staves).
  */
-export function makeWoodTexture(
+function paintWoodTexture(
   tone: "dark" | "light" = "dark",
   vertical = false,
 ): THREE.CanvasTexture {
@@ -136,7 +164,7 @@ export function makeWoodTexture(
 }
 
 /** Worn dark leather for the tome and grips. */
-export function makeLeatherTexture(): THREE.CanvasTexture {
+function paintLeatherTexture(): THREE.CanvasTexture {
   const size = 512;
   const [canvas, ctx] = createCanvas(size);
   const rand = mulberry32(4242);
@@ -182,7 +210,7 @@ export function makeLeatherTexture(): THREE.CanvasTexture {
 }
 
 /** Aged parchment; withRunes adds faded handwritten rune rows. */
-export function makeParchmentTexture(withRunes = false): THREE.CanvasTexture {
+function paintParchmentTexture(withRunes = false): THREE.CanvasTexture {
   const size = 512;
   const [canvas, ctx] = createCanvas(size);
   const rand = mulberry32(withRunes ? 9001 : 1009);
@@ -251,7 +279,7 @@ export function makeParchmentTexture(withRunes = false): THREE.CanvasTexture {
 }
 
 /** Warm plaster for inn walls. */
-export function makePlasterTexture(): THREE.CanvasTexture {
+function paintPlasterTexture(): THREE.CanvasTexture {
   const size = 512;
   const [canvas, ctx] = createCanvas(size);
   const rand = mulberry32(5150);
@@ -293,7 +321,7 @@ export function makePlasterTexture(): THREE.CanvasTexture {
 }
 
 /** Grey stone blocks for the fireplace. */
-export function makeStoneTexture(): THREE.CanvasTexture {
+function paintStoneTexture(): THREE.CanvasTexture {
   const size = 512;
   const [canvas, ctx] = createCanvas(size);
   const rand = mulberry32(8080);
@@ -331,7 +359,7 @@ export function makeStoneTexture(): THREE.CanvasTexture {
  * Painted shield face: quartered field + stylized tower crest.
  * Meant for a top-down planar projection onto the shield dome.
  */
-export function makeCrestTexture(): THREE.CanvasTexture {
+function paintCrestTexture(): THREE.CanvasTexture {
   const size = 512;
   const [canvas, ctx] = createCanvas(size);
   const rand = mulberry32(2323);
@@ -395,7 +423,7 @@ export function makeCrestTexture(): THREE.CanvasTexture {
 }
 
 /** Cream/ivory candle wax: vertical melt streaks + soft mottling. */
-export function makeWaxTexture(): THREE.CanvasTexture {
+function paintWaxTexture(): THREE.CanvasTexture {
   const size = 256;
   const [canvas, ctx] = createCanvas(size);
   const rand = mulberry32(2718);
@@ -439,7 +467,7 @@ export function makeWaxTexture(): THREE.CanvasTexture {
  * Scroll roll end cap: spiral of wound parchment around a wooden rod core.
  * Meant for the flat circular caps of the roll cylinders.
  */
-export function makeScrollEndTexture(): THREE.CanvasTexture {
+function paintScrollEndTexture(): THREE.CanvasTexture {
   const size = 256;
   const [canvas, ctx] = createCanvas(size);
   const rand = mulberry32(6174);
@@ -515,7 +543,7 @@ export function makeScrollEndTexture(): THREE.CanvasTexture {
  * Faintly glowing teal rune etchings for the sword fuller.
  * Transparent background; use as map + emissiveMap on a decal plane.
  */
-export function makeBladeRuneTexture(): THREE.CanvasTexture {
+function paintBladeRuneTexture(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 96;
@@ -545,7 +573,7 @@ export function makeBladeRuneTexture(): THREE.CanvasTexture {
 /**
  * Arcane rune circle: teal glyphs on transparent, for additive planes.
  */
-export function makeRuneCircleTexture(): THREE.CanvasTexture {
+function paintRuneCircleTexture(): THREE.CanvasTexture {
   const size = 512;
   const [canvas, ctx] = createCanvas(size);
   const rand = mulberry32(6060);
@@ -611,4 +639,76 @@ export function makeRuneCircleTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.ClampToEdgeWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
   return tex;
+}
+
+// --- Cached public entry points ---------------------------------------------
+
+/**
+ * Plank wood grain. tone: "dark" (#4a3524-ish) or "light" (#6b4a2f-ish).
+ * vertical=true rotates the grain 90° (tankard staves). Shared — clone()
+ * before changing repeat/offset.
+ */
+export function makeWoodTexture(
+  tone: "dark" | "light" = "dark",
+  vertical = false,
+): THREE.CanvasTexture {
+  return cachedTexture(`wood:${tone}:${vertical}`, () =>
+    paintWoodTexture(tone, vertical),
+  );
+}
+
+export function makeLeatherTexture(): THREE.CanvasTexture {
+  return cachedTexture("leather", paintLeatherTexture);
+}
+
+export function makeParchmentTexture(withRunes = false): THREE.CanvasTexture {
+  return cachedTexture(`parchment:${withRunes}`, () =>
+    paintParchmentTexture(withRunes),
+  );
+}
+
+export function makePlasterTexture(): THREE.CanvasTexture {
+  return cachedTexture("plaster", paintPlasterTexture);
+}
+
+export function makeStoneTexture(): THREE.CanvasTexture {
+  return cachedTexture("stone", paintStoneTexture);
+}
+
+export function makeCrestTexture(): THREE.CanvasTexture {
+  return cachedTexture("crest", paintCrestTexture);
+}
+
+export function makeWaxTexture(): THREE.CanvasTexture {
+  return cachedTexture("wax", paintWaxTexture);
+}
+
+export function makeScrollEndTexture(): THREE.CanvasTexture {
+  return cachedTexture("scrollEnd", paintScrollEndTexture);
+}
+
+export function makeBladeRuneTexture(): THREE.CanvasTexture {
+  return cachedTexture("bladeRune", paintBladeRuneTexture);
+}
+
+/** Shared by the table rune circle and the tome's cover rune. */
+export function makeRuneCircleTexture(): THREE.CanvasTexture {
+  return cachedTexture("runeCircle", paintRuneCircleTexture);
+}
+
+/** Soft radial dot so points/sprites don't render as hard squares. */
+export function makeDotTexture(): THREE.Texture {
+  return cachedTexture("dot", () => {
+    const size = 64;
+    const [canvas, ctx] = createCanvas(size);
+    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.4, "rgba(255,255,255,0.6)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  });
 }

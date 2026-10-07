@@ -28,7 +28,8 @@ import {
 } from "./models";
 import { CameraRig } from "./CameraRig";
 import { Lights } from "./lights";
-import { Particles, makeDotTexture } from "./particles";
+import { Particles } from "./particles";
+import { clearTextureCache, makeDotTexture } from "./models/textures";
 import { DicePhysics } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
 
@@ -96,7 +97,6 @@ interface FireballRig {
   group: THREE.Group;
   /** Sprite materials — not reached by the dispose() mesh traverse. */
   spriteMaterials: THREE.SpriteMaterial[];
-  texture: THREE.Texture;
 }
 
 /** Tabletop still-life layout (world coords, items rest at TABLE_SURFACE_Y). */
@@ -586,8 +586,8 @@ export class SceneManager implements ISceneManager {
     if (this.fireball) {
       // The scene traverse below only reaches mesh materials; the glow
       // sprites and their shared texture must be released by hand.
+      // Its dot texture is the cached one, released with the cache below.
       for (const material of this.fireball.spriteMaterials) material.dispose();
-      this.fireball.texture.dispose();
       this.fireball = null;
     }
     this.dicePhysics?.dispose();
@@ -609,6 +609,9 @@ export class SceneManager implements ISceneManager {
     this.lights.dispose();
     this.particles.dispose();
 
+    // Textures are shared across materials (and cached in textures.ts):
+    // collect them and release each exactly once after every material.
+    const textures = new Set<THREE.Texture>();
     this.scene.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -616,8 +619,10 @@ export class SceneManager implements ISceneManager {
       const materials = Array.isArray(mesh.material)
         ? mesh.material
         : [mesh.material];
-      for (const material of materials) this.disposeMaterial(material);
+      for (const material of materials) this.disposeMaterial(material, textures);
     });
+    for (const texture of textures) texture.dispose();
+    clearTextureCache();
     this.scene.clear();
     this.renderer.dispose();
   }
@@ -1058,7 +1063,6 @@ export class SceneManager implements ISceneManager {
     this.fireball = {
       group,
       spriteMaterials: [halo.material, innerGlow.material],
-      texture,
     };
     return this.fireball;
   }
@@ -1431,9 +1435,12 @@ export class SceneManager implements ISceneManager {
     }
   }
 
-  private disposeMaterial(material: THREE.Material): void {
+  private disposeMaterial(
+    material: THREE.Material,
+    textures: Set<THREE.Texture>,
+  ): void {
     for (const value of Object.values(material)) {
-      if (value instanceof THREE.Texture) value.dispose();
+      if (value instanceof THREE.Texture) textures.add(value);
     }
     material.dispose();
   }

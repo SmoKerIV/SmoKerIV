@@ -20,7 +20,8 @@ export function buildRoom(): THREE.Group {
   group.name = "room";
 
   // --- Floor: wide plank wood --------------------------------------------
-  const floorTex = makeWoodTexture("dark");
+  // Clone of the shared dark wood: own repeat, same canvas source/upload.
+  const floorTex = makeWoodTexture("dark").clone();
   floorTex.repeat.set(4, 4);
   const floorMat = new THREE.MeshStandardMaterial({
     map: floorTex,

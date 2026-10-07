@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Quality } from "./types";
 import { TABLE_SURFACE_Y } from "./types";
+import { makeDotTexture } from "./models/textures";
 
 const DUST_COUNT: Record<Quality, number> = { low: 60, medium: 120, high: 240 };
 const EMBER_COUNT: Record<Quality, number> = { low: 15, medium: 30, high: 30 };
@@ -15,26 +16,6 @@ const FIREBALL_EMBER_COUNT = 48;
 const FIREBALL_BURST_SIZE = 20;
 
 const BOOK_CENTER = new THREE.Vector3(0, TABLE_SURFACE_Y + 0.22, -0.05);
-
-/** Soft radial dot so points don't render as hard squares. */
-export function makeDotTexture(): THREE.Texture {
-  const size = 64;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, "rgba(255,255,255,1)");
-    grad.addColorStop(0.4, "rgba(255,255,255,0.6)");
-    grad.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
 
 interface DustSystem {
   points: THREE.Points;
@@ -58,6 +39,7 @@ interface EmberData {
 export class Particles {
   readonly group = new THREE.Group();
 
+  /** Shared, cached (textures.ts) — released by clearTextureCache(). */
   private readonly dotTexture = makeDotTexture();
   private readonly dustMaterial: THREE.PointsMaterial;
   private readonly emberMaterial: THREE.PointsMaterial;
@@ -354,7 +336,6 @@ export class Particles {
     this.smokeMaterial.dispose();
     this.fireballMaterial.dispose();
     this.sparkleMaterial.dispose();
-    this.dotTexture.dispose();
   }
 
   private buildDust(count: number): DustSystem {
