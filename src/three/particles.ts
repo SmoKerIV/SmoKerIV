@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { Quality } from "./types";
 import { TABLE_SURFACE_Y } from "./types";
 import { makeDotTexture } from "./models/textures";
+import { keepBloomMask } from "./models/materials";
 import { FIREBOX, FIRE_POS } from "./roomLayout";
 
 const DUST_COUNT: Record<Quality, number> = { low: 60, medium: 120, high: 240 };
@@ -104,6 +105,8 @@ export class Particles {
       depthWrite: false,
       sizeAttenuation: true,
     });
+    // Lit motes, not light: keep them out of the bloom mask.
+    keepBloomMask(this.dustMaterial, true);
     this.emberMaterial = new THREE.PointsMaterial({
       size: 0.03,
       map: this.dotTexture,
@@ -170,6 +173,8 @@ export class Particles {
       depthWrite: false,
       sizeAttenuation: true,
     });
+    // Lit motes, not light: keep them out of the bloom mask.
+    keepBloomMask(this.smokeMaterial, true);
     this.smokeGeometry = new THREE.BufferGeometry();
     this.smokeGeometry.setAttribute(
       "position",

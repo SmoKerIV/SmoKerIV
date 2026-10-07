@@ -135,18 +135,40 @@ export function brassMaterial(): THREE.MeshStandardMaterial {
   );
 }
 
+/**
+ * Transparent but not a light source: blend the colour as usual (normal,
+ * or additive for drifting dust and smoke) but leave
+ * the target's alpha untouched — the post chain reads alpha as its bloom
+ * mask (see postprocessing.ts), and lit glass must not bloom.
+ */
+export function keepBloomMask<T extends THREE.Material>(
+  material: T,
+  additive = false,
+): T {
+  material.blending = THREE.CustomBlending;
+  material.blendEquation = THREE.AddEquation;
+  material.blendSrc = THREE.SrcAlphaFactor;
+  material.blendDst = additive ? THREE.OneFactor : THREE.OneMinusSrcAlphaFactor;
+  material.blendEquationAlpha = THREE.AddEquation;
+  material.blendSrcAlpha = THREE.ZeroFactor;
+  material.blendDstAlpha = THREE.OneFactor;
+  return material;
+}
+
 /** Tinted glass for potion bottles. Cached per tint. */
 export function glassMaterial(tint = 0xcfe8e4): THREE.MeshStandardMaterial {
   return cached(`glass:${tint}`, () =>
-    new THREE.MeshStandardMaterial({
-      color: tint,
-      transparent: true,
-      opacity: 0.55,
-      roughness: 0.1,
-      metalness: 0.0,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    }),
+    keepBloomMask(
+      new THREE.MeshStandardMaterial({
+        color: tint,
+        transparent: true,
+        opacity: 0.55,
+        roughness: 0.1,
+        metalness: 0.0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    ),
   );
 }
 

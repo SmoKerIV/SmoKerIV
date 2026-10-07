@@ -54,6 +54,7 @@ import { DicePhysics, measureObstacle } from "./dicePhysics";
 import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
 import { loadModels, ModelLibrary, type ModelKey } from "./assets";
+import { PostFX } from "./postprocessing";
 import type { RoomRig } from "./models/room";
 import {
   clearRoomTextures,
@@ -301,6 +302,12 @@ export class SceneManager implements ISceneManager {
   /** Created once the stage exists (it snapshots the pickable roots). */
   private interaction: Interaction | null = null;
   private readonly resizeObserver: ResizeObserver;
+  /** Bloom/vignette/grain chain (medium/high); null = direct render (low). */
+  private post: PostFX | null = null;
+  /** Low quality's stand-in vignette: a CSS overlay beside the canvas. */
+  private cssVignette: HTMLDivElement | null = null;
+  /** Frames actually rendered (dev: verifies the idle throttle). */
+  private renderedFrames = 0;
 
   private readonly settings: SceneSettings;
   private readonly events: SceneEvents;
@@ -459,6 +466,9 @@ export class SceneManager implements ISceneManager {
     this.renderer.setPixelRatio(
       Math.min(window.devicePixelRatio, PIXEL_RATIO_CAP[settings.quality]),
     );
+    // The composer draws several passes per frame: draw-call stats are
+    // reset once per rendered frame in loop() instead of per render().
+    this.renderer.info.autoReset = false;
 
     this.scene.background = new THREE.Color(FOG_COLOR);
     this.scene.fog = new THREE.FogExp2(FOG_COLOR, 0.055);
@@ -494,12 +504,18 @@ export class SceneManager implements ISceneManager {
       });
     }
     this.handleResize();
+    this.applyPostQuality();
     this.events.onProgress?.(PROGRESS.start);
     void this.init(canvas);
     // Dev-only escape hatch for debugging camera/scene state in the console.
     if (import.meta.env.DEV) {
       (window as unknown as { __scene?: SceneManager }).__scene = this;
     }
+  }
+
+  /** Frames rendered so far (dev tooling: idle-throttle checks). */
+  get frameCount(): number {
+    return this.renderedFrames;
   }
 
   get focusedItem(): ItemId | null {
@@ -767,9 +783,43 @@ export class SceneManager implements ISceneManager {
     this.lights.setQuality(quality);
     this.particles.setQuality(quality);
     this.room?.setQuality(quality);
+    this.applyPostQuality();
     this.updateMothVisibility();
     this.markShadowsDirty();
     this.renderSoon = true;
+  }
+
+  /**
+   * (Re)build the post chain for the current quality: medium/high compose
+   * (bloom, vignette, grain on high), low renders straight to the canvas
+   * with a CSS vignette. Rebuilding reuses the cached post programs; the
+   * scene's programs recompile once when switching to/from low (render
+   * target vs canvas output), like the shadow toggle above.
+   */
+  private applyPostQuality(): void {
+    const quality = this.settings.quality;
+    this.post?.dispose();
+    this.post = null;
+    if (quality !== "low") {
+      this.post = new PostFX(this.renderer, this.scene, this.rig.camera, quality);
+    }
+    this.setCssVignette(quality === "low");
+  }
+
+  private setCssVignette(on: boolean): void {
+    const canvas = this.renderer.domElement;
+    if (on && !this.cssVignette && canvas.parentElement) {
+      const div = document.createElement("div");
+      div.setAttribute("aria-hidden", "true");
+      div.style.cssText =
+        "position:absolute;inset:0;pointer-events:none;" +
+        "background:radial-gradient(ellipse at 50% 50%, transparent 52%, rgba(8,5,3,0.5) 100%);";
+      canvas.insertAdjacentElement("afterend", div);
+      this.cssVignette = div;
+    } else if (!on && this.cssVignette) {
+      this.cssVignette.remove();
+      this.cssVignette = null;
+    }
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -884,6 +934,9 @@ export class SceneManager implements ISceneManager {
     clearTextureCache();
     clearRoomTextures();
     this.scene.clear();
+    this.post?.dispose();
+    this.post = null;
+    this.setCssVignette(false);
     this.renderer.dispose();
 
     if (--lagSmoothingOwners === 0) {
@@ -971,7 +1024,9 @@ export class SceneManager implements ISceneManager {
     if (this.disposed) return;
     this.rig.camera.updateMatrixWorld();
     await Promise.race([
-      this.renderer.compileAsync(this.scene, this.rig.camera),
+      this.post
+        ? this.post.compileAsync(this.scene, this.rig.camera)
+        : this.renderer.compileAsync(this.scene, this.rig.camera),
       new Promise((resolve) => setTimeout(resolve, COMPILE_TIMEOUT_MS)),
     ]);
     if (this.disposed) return;
@@ -1974,7 +2029,10 @@ export class SceneManager implements ISceneManager {
       this.shadowDirtyFrames--;
       this.renderer.shadowMap.needsUpdate = true;
     }
-    this.renderer.render(this.scene, this.rig.camera);
+    this.renderer.info.reset();
+    if (this.post) this.post.render(elapsed, delta);
+    else this.renderer.render(this.scene, this.rig.camera);
+    this.renderedFrames++;
     // After render so the camera's world/projection matrices are fresh.
     if (this.reading) {
       // Belt-and-suspenders: no scribbled flip sheet may rest over the ink.
@@ -2012,6 +2070,7 @@ export class SceneManager implements ISceneManager {
     const height = canvas.clientHeight || window.innerHeight;
     if (width === 0 || height === 0) return;
     this.renderer.setSize(width, height, false);
+    this.post?.setSize(width, height, this.renderer.getPixelRatio());
     // Resizing clears the canvas: repaint on the next frame even if idle.
     this.renderSoon = true;
     this.rig.setSize(width, height);
