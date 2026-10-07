@@ -75,7 +75,6 @@ onUnmounted(() => {
   <div
     class="fixed inset-0 z-70 flex flex-col items-center justify-center gap-8 bg-night transition-opacity duration-700"
     :class="leaving ? 'pointer-events-none opacity-0' : 'opacity-100'"
-    aria-live="polite"
   >
     <!-- warm vignette + faint candle glow -->
     <div
@@ -88,7 +87,15 @@ onUnmounted(() => {
     />
 
     <!-- Rune circle -->
-    <div class="relative h-56 w-56 select-none">
+    <div
+      class="relative h-56 w-56 select-none"
+      role="progressbar"
+      aria-label="Preparing the tavern"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      :aria-valuenow="percent"
+      :aria-valuetext="`${percent} percent`"
+    >
       <svg viewBox="0 0 200 200" class="h-full w-full" aria-hidden="true">
         <!-- static faint ring -->
         <circle
@@ -150,7 +157,8 @@ onUnmounted(() => {
     <!-- Status line (the inn opens itself once the table is ready) -->
     <div class="relative flex h-16 items-center justify-center">
       <span
-        class="font-heading text-xs uppercase tracking-[0.3em] text-parchment/30"
+        role="status"
+        class="font-heading text-xs uppercase tracking-[0.3em] text-parchment/70"
         :class="{ 'fade-up': ready }"
       >
         {{ ready ? "the door swings open…" : "the innkeeper is preparing your table" }}
