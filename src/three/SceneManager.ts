@@ -316,6 +316,11 @@ export class SceneManager implements ISceneManager {
   private frameWindowTime = 0;
   private warmupUntil = Number.POSITIVE_INFINITY;
 
+  /** Frames left that must re-render the shadow map (see markShadowsDirty). */
+  private shadowDirtyFrames = 0;
+  /** performance.now() until which casters may be moving (item hops). */
+  private shadowBusyUntil = 0;
+
   private rafId: number | null = null;
   private resizeRaf: number | null = null;
   private userPaused = false;
@@ -345,6 +350,10 @@ export class SceneManager implements ISceneManager {
     // first shadow render — a type change that flags every material for
     // recompile right after the warm-up. Ask for PCF directly.
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // The one shadow caster (the key spot) is static, so the shadow map only
+    // needs re-rendering when a caster moves or shadow settings change:
+    // see markShadowsDirty() and shadowsAnimating().
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.setPixelRatio(
       Math.min(window.devicePixelRatio, PIXEL_RATIO_CAP[settings.quality]),
     );
@@ -549,6 +558,7 @@ export class SceneManager implements ISceneManager {
       state.clicks.length = 0;
       flame.visible = false;
       this.lights.setCandleLit(flame, false);
+      this.markShadowsDirty();
       this.particles.puffSmoke(flame.getWorldPosition(new THREE.Vector3()));
       snuffedAny = true;
     }
@@ -569,6 +579,7 @@ export class SceneManager implements ISceneManager {
         state.snuffed = false;
         flame.visible = true;
         this.lights.setCandleLit(flame, true);
+        this.markShadowsDirty();
         relit = true;
       }
       if (relit) this.events.onCandleSnuff?.({ snuffed: false, bothOut: false });
@@ -581,6 +592,8 @@ export class SceneManager implements ISceneManager {
     this.rollDice();
     if (this.settings.reducedMotion) return;
     const hoppers: ItemId[] = ["sword", "tankard", "potion", "scroll", "shield"];
+    // Last hop starts at 4 × 0.09 s and runs 0.5 s; keep shadows live a bit past.
+    this.markShadowsDirty(2, (hoppers.length * 0.09 + 0.6) * 1000);
     hoppers.forEach((id, i) => {
       const group = this.itemGroups.get(id);
       if (!group) return;
@@ -635,6 +648,7 @@ export class SceneManager implements ISceneManager {
     this.lights.setQuality(quality);
     this.particles.setQuality(quality);
     this.updateMothVisibility();
+    this.markShadowsDirty();
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -647,6 +661,10 @@ export class SceneManager implements ISceneManager {
   setTimeOfDay(mode: TimeOfDay): void {
     const target = this.resolveTimeOfDay(mode) === "day" ? 1 : 0;
     gsap.killTweensOf(this.moodProxy);
+    this.markShadowsDirty(
+      2,
+      this.settings.reducedMotion ? 0 : MOOD_TWEEN_DURATION * 1000,
+    );
     if (this.settings.reducedMotion) {
       this.moodProxy.v = target;
       this.applyMood();
@@ -663,6 +681,23 @@ export class SceneManager implements ISceneManager {
   setPaused(paused: boolean): void {
     this.userPaused = paused;
     this.updateRunning();
+  }
+
+  /**
+   * Re-render the shadow map on the next frames (shadowMap.autoUpdate is
+   * off). Call when a shadow caster moves/appears or shadow-relevant
+   * settings change; camera moves never need it. Two frames by default so
+   * the final resting pose of a just-finished animation is captured too.
+   * busyMs keeps it dirty for a span (fire-and-forget gsap animations).
+   */
+  markShadowsDirty(frames = 2, busyMs = 0): void {
+    this.shadowDirtyFrames = Math.max(this.shadowDirtyFrames, frames);
+    if (busyMs > 0) {
+      this.shadowBusyUntil = Math.max(
+        this.shadowBusyUntil,
+        performance.now() + busyMs,
+      );
+    }
   }
 
   dispose(): void {
@@ -769,6 +804,7 @@ export class SceneManager implements ISceneManager {
     );
     // Re-fit the camera now that the layout bounds and anchors exist.
     this.handleResize();
+    this.markShadowsDirty();
     report(PROGRESS.models);
 
     // Compile every program (all lights present and visible) before the
@@ -1239,6 +1275,7 @@ export class SceneManager implements ISceneManager {
   /** Impact beat: flash + radial embers + smoke, then the overlay's shake. */
   private detonateFireball(impact: THREE.Vector3): void {
     this.lights.flashAt(impact, this.clock.elapsedTime);
+    this.markShadowsDirty();
     this.particles.burstEmbersAt(impact);
     this.particles.puffSmoke(impact);
     this.events.onFireballImpact?.();
@@ -1266,6 +1303,7 @@ export class SceneManager implements ISceneManager {
       state.clicks.length = 0;
       flame.visible = true;
       this.lights.setCandleLit(flame, true);
+      this.markShadowsDirty();
       this.events.onCandleSnuff?.({ snuffed: false, bothOut: false });
       return;
     }
@@ -1281,6 +1319,7 @@ export class SceneManager implements ISceneManager {
     state.snuffed = true;
     flame.visible = false;
     this.lights.setCandleLit(flame, false);
+    this.markShadowsDirty();
     this.particles.puffSmoke(flame.getWorldPosition(new THREE.Vector3()));
     let bothOut = true;
     for (const other of this.candleStates.values()) {
@@ -1374,6 +1413,7 @@ export class SceneManager implements ISceneManager {
     if (!this.readingPages) return;
     this.readingPages.left.visible = visible;
     this.readingPages.right.visible = visible;
+    this.markShadowsDirty();
   }
 
   /**
@@ -1579,6 +1619,16 @@ export class SceneManager implements ISceneManager {
     });
   }
 
+  /** Is any shadow caster moving this frame? */
+  private shadowsAnimating(now: number): boolean {
+    return (
+      this.bookTl !== null ||
+      this.pageFlipTween !== null ||
+      (this.dicePhysics?.isRolling ?? false) ||
+      now < this.shadowBusyUntil
+    );
+  }
+
   private readonly loop = (): void => {
     this.rafId = requestAnimationFrame(this.loop);
 
@@ -1593,12 +1643,21 @@ export class SceneManager implements ISceneManager {
     this.updateIdleLife(elapsed);
     this.interaction?.update();
 
+    if (this.shadowsAnimating(performance.now())) this.markShadowsDirty();
+    if (this.shadowDirtyFrames > 0) {
+      this.shadowDirtyFrames--;
+      this.renderer.shadowMap.needsUpdate = true;
+    }
     this.renderer.render(this.scene, this.rig.camera);
     // After render so the camera's world/projection matrices are fresh.
     if (this.reading) {
       // Belt-and-suspenders: no scribbled flip sheet may rest over the ink.
       if (!this.pageFlipTween && this.spellbookParts) {
-        for (const page of this.spellbookParts.flipPages) page.visible = false;
+        for (const page of this.spellbookParts.flipPages) {
+          if (!page.visible) continue;
+          page.visible = false;
+          this.markShadowsDirty();
+        }
       }
       this.emitPageTransforms();
     }
