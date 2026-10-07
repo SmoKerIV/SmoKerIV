@@ -345,7 +345,7 @@ const LAYOUT: Record<ItemId, Placement> & { candleB: Placement } = {
   // spread so neither table half feels crowded: sword + tankard right-back,
   // shield + potions left, scroll front-left, d20 front-center.
   spellbook: { x: 0.2, z: -0.05, rotY: 0.04 },
-  sword: { x: 0.97, z: -0.13, rotY: THREE.MathUtils.degToRad(125) },
+  sword: { x: 0.69, z: 0, rotY: THREE.MathUtils.degToRad(125) },
   shield: { x: -0.82, z: 0.15, rotY: 0.4 },
   potion: { x: -0.45, z: -0.5, rotY: 0.2 },
   scroll: { x: -0.35, z: 0.32, rotY: 0.5 },

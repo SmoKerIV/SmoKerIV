@@ -21,8 +21,8 @@ const TABLE_PROPS: PropPlacement[] = [
   // Behind the tome, between the potions and the tankard.
   { key: "ink", x: -0.08, z: -0.55, rotY: 0.5, scale: 0.85 },
   { key: "scroll1", x: 0.17, z: -0.6, rotY: -0.35, scale: 0.9 },
-  // Front-right corner, out of the die's lane.
-  { key: "bookStack", x: 0.9, z: 0.18, rotY: -0.45, scale: 0.72 },
+  // Right end, tucked behind the longsword and clear of the die's lane.
+  { key: "bookStack", x: 0.96, z: -0.11, rotY: -0.45, scale: 0.72 },
 ];
 
 export function buildTableProps(models: ModelLibrary): THREE.Group[] {
