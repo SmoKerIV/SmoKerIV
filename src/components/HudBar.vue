@@ -3,14 +3,14 @@ import { identity, contact } from "../data/content";
 import { track } from "../composables/useAnalytics";
 
 defineProps<{
-  musicOn: boolean;
+  ambienceOn: boolean;
   bookOpen: boolean;
   /** Set only when /baker-cv.pdf actually exists. */
   cvUrl?: string | null;
 }>();
 
 const emit = defineEmits<{
-  "toggle-music": [];
+  "toggle-ambience": [];
   "open-settings": [];
   /** Touch devices can't type `sudo` — give them a door to the spells. */
   "open-console": [];
@@ -42,15 +42,17 @@ const emit = defineEmits<{
       <button
         type="button"
         class="hud-btn"
-        :aria-label="musicOn ? 'Silence the bard' : 'Summon the bard'"
-        :data-tip="musicOn ? 'Silence the bard' : 'Summon the bard'"
-        @click="emit('toggle-music')"
+        aria-label="Hearth sounds"
+        :aria-pressed="ambienceOn"
+        :data-tip="ambienceOn ? 'Hearth sounds: on' : 'Hearth sounds: off'"
+        @click="emit('toggle-ambience')"
       >
+        <!-- hearth flame; struck through when the ambience is off -->
         <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M9 18V6l10-2v11" />
-          <circle cx="6.5" cy="18" r="2.5" />
-          <circle cx="16.5" cy="15" r="2.5" />
-          <line v-if="!musicOn" x1="3" y1="3" x2="21" y2="21" stroke-width="1.8" />
+          <path d="M12 3c.4 3-3.5 4.6-3.5 8.6a3.5 3.5 0 0 0 7 0c0-1.2-.5-2.1-1-2.9-.3 1-.9 1.5-1.6 1.5C12.3 8.2 12.9 5.6 12 3z" />
+          <path d="M12 21c-3.9 0-6.5-2.6-6.5-6 0-1.6.6-3 1.5-4" />
+          <path d="M18.5 15c0 1.9-.8 3.4-2 4.4" />
+          <line v-if="!ambienceOn" x1="3" y1="3" x2="21" y2="21" stroke-width="1.8" />
         </svg>
       </button>
 

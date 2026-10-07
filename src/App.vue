@@ -652,10 +652,10 @@ import.meta.hot?.dispose(() => teardown());
       <!-- corner chrome (hidden while reading — the table should be bare) -->
       <HudBar
         v-if="(appPhase === 'table' || appPhase === 'focused') && !bookOpen && !flatBookOpen"
-        :music-on="settings.ambienceOn"
+        :ambience-on="settings.ambienceOn"
         :book-open="bookOpen"
         :cv-url="cvUrl"
-        @toggle-music="settings.ambienceOn = !settings.ambienceOn"
+        @toggle-ambience="settings.ambienceOn = !settings.ambienceOn"
         @open-settings="settingsOpen = true"
         @open-console="consoleOpen = true"
       />
