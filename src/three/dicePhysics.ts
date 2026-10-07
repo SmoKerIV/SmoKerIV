@@ -33,8 +33,8 @@ const MAX_SUBSTEPS = 8;
 
 // A big (≈9 cm) resin d20: ~0.28 kg.
 const DIE_MASS = 0.28;
-const DIE_LINEAR_DAMPING = 0.04;
-const DIE_ANGULAR_DAMPING = 0.04;
+const DIE_LINEAR_DAMPING = 0.05;
+const DIE_ANGULAR_DAMPING = 0.06;
 const SLEEP_SPEED = 0.05;
 const SLEEP_TIME = 0.3;
 
@@ -61,7 +61,7 @@ const RIM_THICKNESS = 0.05;
  * cannon has no rolling resistance, so a die rocking on an edge can keep
  * going; past this point damping ramps up until it settles.
  */
-const DAMPING_RAMP_AFTER = 2.6;
+const DAMPING_RAMP_AFTER = 1.8;
 /** A die that is still awake after this long gets settled anyway. */
 const MAX_ROLL_SECONDS = 6;
 const COCKED_DOT = 0.98;
@@ -290,7 +290,7 @@ export class DicePhysics {
     if (!this.simulating || !world || !die || !this.cannon) return;
 
     if (this.elapsed > DAMPING_RAMP_AFTER) {
-      const k = Math.min(1, (this.elapsed - DAMPING_RAMP_AFTER) / 1.5);
+      const k = Math.min(1, (this.elapsed - DAMPING_RAMP_AFTER) / 1.2);
       die.angularDamping = THREE.MathUtils.lerp(DIE_ANGULAR_DAMPING, 0.9, k);
       die.linearDamping = THREE.MathUtils.lerp(DIE_LINEAR_DAMPING, 0.9, k);
     }
