@@ -70,26 +70,18 @@ const spread = ref(0);
 /** Spread to land on after the next section change (set when paging back). */
 let pendingSpread = 0;
 
-const questPages: Quest[][] = [
-  quests.slice(0, 3),
-  quests.slice(3, 6),
-  quests.slice(6),
-];
+/** Quests per page — kept low enough that fit-to-page never shrinks text. */
+const QUESTS_PER_PAGE = 3;
+const questPages: Quest[][] = [];
+for (let at = 0; at < quests.length; at += QUESTS_PER_PAGE) {
+  questPages.push(quests.slice(at, at + QUESTS_PER_PAGE));
+}
 
-/** Artifacts per page; the first page also carries the section intro. */
-const ARTIFACT_PAGE_SIZES = [2, 3, 2, 2];
+/** Artifacts per page (the first page also carries the section intro). */
+const ARTIFACTS_PER_PAGE = 2;
 const artifactPages: Artifact[][] = [];
-{
-  let at = 0;
-  for (const size of ARTIFACT_PAGE_SIZES) {
-    artifactPages.push(artifacts.slice(at, at + size));
-    at += size;
-  }
-  // Anything added beyond the plan still gets pages (two per page).
-  while (at < artifacts.length) {
-    artifactPages.push(artifacts.slice(at, at + 2));
-    at += 2;
-  }
+for (let at = 0; at < artifacts.length; at += ARTIFACTS_PER_PAGE) {
+  artifactPages.push(artifacts.slice(at, at + ARTIFACTS_PER_PAGE));
 }
 
 function spreadCountFor(section: BookSection): number {
@@ -341,7 +333,21 @@ function statMod(value: number): string {
 const leftPadEl = ref<HTMLElement | null>(null);
 const rightPadEl = ref<HTMLElement | null>(null);
 const fitScale = reactive({ left: 1, right: 1 });
-const MIN_FIT = 0.7;
+/** Smallest text a page may render at, in screen px (before pane tilt). */
+const MIN_TEXT_PX = 12.5;
+/** Smallest rendered font-size (CSS px) of any text inside `wrap`. */
+function smallestFontPx(wrap: HTMLElement): number {
+  let min = Infinity;
+  const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!n.nodeValue?.trim()) continue;
+    const el = n.parentElement;
+    if (!el || el.closest("svg, [aria-hidden='true']")) continue;
+    const fs = parseFloat(getComputedStyle(el).fontSize);
+    if (fs > 0 && fs < min) min = fs;
+  }
+  return min;
+}
 
 function fitStyle(side: "left" | "right"): Record<string, string> | undefined {
   const s = fitScale[side];
@@ -361,13 +367,16 @@ async function fitPane(side: "left" | "right"): Promise<void> {
   if (!wrap) return;
   fitScale[side] = 1;
   await nextTick();
+  // Floor: never scale below the point where the smallest text would drop
+  // under MIN_TEXT_PX (and never below 0.7 either).
+  const floor = Math.min(1, Math.max(0.7, MIN_TEXT_PX / smallestFontPx(wrap)));
   // Re-measure after each shrink: narrower text rewraps, so converge in
   // a couple of steps rather than trusting the first ratio.
   for (let i = 0; i < 3; i++) {
     const need = wrap.scrollHeight;
     const room = wrap.clientHeight;
     if (need <= room + 1) break;
-    const next = Math.max(MIN_FIT, fitScale[side] * (room / need) * 0.98);
+    const next = Math.max(floor, fitScale[side] * (room / need) * 0.98);
     if (next >= fitScale[side] - 0.005) break;
     fitScale[side] = next;
     await nextTick();
@@ -982,7 +991,7 @@ watch(spread, () => {
   width: 6.2rem;
   flex-shrink: 0;
   font-family: "Cinzel", serif;
-  font-size: 0.75rem;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1076,7 +1085,7 @@ watch(spread, () => {
 .quest-period {
   margin: 0.05rem 0 0.15rem;
   font-family: "Cinzel", serif;
-  font-size: 0.75rem;
+  font-size: 12.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1106,7 +1115,7 @@ watch(spread, () => {
   right: 0;
   top: 0.2rem;
   font-family: "Cinzel", serif;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1121,7 +1130,7 @@ watch(spread, () => {
   top: 0.2rem;
   transform: rotate(-11deg);
   font-family: "Cinzel", serif;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -1148,7 +1157,7 @@ watch(spread, () => {
   gap: 0.2rem 0.6rem;
   margin: 0 0 0.15rem;
   font-family: "Cinzel", serif;
-  font-size: 0.75rem;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -1172,7 +1181,7 @@ watch(spread, () => {
 }
 .rune-chip {
   font-family: "Cinzel", serif;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1188,7 +1197,7 @@ watch(spread, () => {
   margin-left: auto;
   padding: 0.2em 0.1em;
   font-family: "Cinzel", serif;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1253,7 +1262,7 @@ watch(spread, () => {
 .scribble {
   font-family: "EB Garamond", serif;
   font-style: italic;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.3;
   color: rgba(94, 19, 15, 0.75);
 }
@@ -1266,7 +1275,7 @@ watch(spread, () => {
 }
 .contact-kind {
   font-family: "Cinzel", serif;
-  font-size: 0.75rem;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
