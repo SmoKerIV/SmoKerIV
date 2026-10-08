@@ -22,7 +22,7 @@ const TABLE_PROPS: PropPlacement[] = [
   { key: "ink", x: -0.08, z: -0.55, rotY: 0.5, scale: 0.85 },
   { key: "scroll1", x: 0.17, z: -0.6, rotY: -0.35, scale: 0.9 },
   // Right end, tucked behind the longsword and clear of the die's lane.
-  { key: "bookStack", x: 0.96, z: -0.11, rotY: -0.45, scale: 1.0 },
+  { key: "bookStack", x: 0.94, z: -0.11, rotY: -0.45, scale: 1.0 },
 ];
 
 export function buildTableProps(models: ModelLibrary): THREE.Group[] {
