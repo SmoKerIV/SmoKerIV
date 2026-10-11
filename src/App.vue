@@ -19,6 +19,7 @@ import { ITEM_LABELS } from "./three/types";
 import type { FocusCardItem } from "./data/content";
 import { useSettings } from "./composables/useSettings";
 import { useAudio } from "./composables/useAudio";
+import { useMusic } from "./composables/useMusic";
 import { sceneAudio, installUiHover } from "./composables/useSceneAudio";
 import { track } from "./composables/useAnalytics";
 import LoaderScreen from "./components/LoaderScreen.vue";
@@ -41,6 +42,7 @@ const FallbackView = defineAsyncComponent(
 
 const settings = useSettings();
 const audio = useAudio();
+const music = useMusic();
 
 /* ------------------------------------------------------------------ */
 /* WebGL detection / flat mode                                          */
@@ -386,10 +388,12 @@ function enterInn(): void {
   audio.setBusVolume("ambience", settings.ambienceVolume);
   audio.setBusVolume("sfx", settings.sfxVolume);
   audio.setBusVolume("ui", settings.uiVolume);
+  audio.setBusVolume("music", settings.musicVolume);
   audio.setAmbienceOn(settings.ambienceOn);
   audio.unlock();
   sceneAudio.afterEnter();
   appPhase.value = "entering";
+  startMusic();
   window.setTimeout(() => {
     appPhase.value = "table";
     if (pendingBookSection) {
@@ -405,6 +409,20 @@ function enterInn(): void {
 /** First real user gesture: resume the (autoplay-blocked) AudioContext. */
 function unlockAudioOnGesture(): void {
   audio.unlock();
+  // returning visitors auto-enter without a gesture: the music waits for it
+  if (appPhase.value !== "loading") startMusic();
+}
+
+/**
+ * After Enter: fetch the music manifest (no audio yet) and, if the visitor
+ * left the music box on last time, start it. A no-op until the page has had
+ * a user activation.
+ */
+function startMusic(): void {
+  music.setMusicOn(settings.musicOn);
+  void music.loadMusic().then((tracks) => {
+    if (tracks.length && settings.musicOn) void music.resume();
+  });
 }
 
 /**
@@ -718,6 +736,8 @@ watch(() => settings.ambienceVolume, (v) => audio.setBusVolume("ambience", v));
 watch(() => settings.sfxVolume, (v) => audio.setBusVolume("sfx", v));
 watch(() => settings.uiVolume, (v) => audio.setBusVolume("ui", v));
 watch(() => settings.sfxOn, (on) => audio.setSfxOn(on));
+watch(() => settings.musicOn, (on) => music.setMusicOn(on));
+watch(() => settings.musicVolume, (v) => audio.setBusVolume("music", v));
 /* Flat tome (small screens): the same book thump on open and close. */
 watch(flatBookOpen, (open, wasOpen) => {
   if (open && !wasOpen) void audio.play("book-open");
