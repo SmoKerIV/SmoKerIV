@@ -12,8 +12,12 @@
  * Graph:
  *   voice -> [gain] -> [StereoPanner] -> bus
  *   fire, fire-crackle -> fireGroup (ambience intensity) -> ambience bus
- *   ambience bus -> duck -> master;  sfx bus -> master;  ui bus -> master
+ *   ambience bus -> duck -> musicBed -> master;  sfx bus -> master;  ui bus -> master
+ *   music bus -> musicDuck -> master  (+ musicAnalyser tap; see useMusic.ts)
  *   master -> DynamicsCompressor (gentle limiter) -> destination
+ *
+ * musicBed lowers ambience while music plays (useMusic sets it); spells duck
+ * both ambience (duck) and music (musicDuck).
  *
  * Slots (manifest): fire*, room-tone*, wind-window* (*loops), fire-crackle,
  *   creak | spells: fireball-whoosh, fireball-impact, zap, thunder, gust,
@@ -31,12 +35,12 @@
  *   startLoop(slot, opts?) / stopLoop(slot, fadeMs?)
  *   startAmbience() / stopAmbience(fadeMs?)   fire + room tone + wind loops
  *                                    plus random crackles and creaks
- *   setAmbienceOn(on) / setSfxOn(on) / setBusVolume(bus, 0..1)
+ *   setAmbienceOn(on) / setSfxOn(on) / setMusicOn(on) / setBusVolume(bus, 0..1)
  *   setAmbienceIntensity(0..1)       fire loudness + crackle rate
  *   onEmberPop()                     crackle synced to an ember particle
  *   setListener(position, forward)   camera; drives pan + distance falloff
  *   setSourcePosition(name, pos)     named emitters ('fire', 'window', ...)
- *   duck(amount 0..1, ms)            lower ambience, then recover
+ *   duck(amount 0..1, ms)            lower ambience (and music), then recover
  *   prefetch(slots[] | category)     e.g. prefetch('spells') on console open
  *   configureSlot(slot, tuning)      pitch/gain jitter, latency, voices
  *   playLayer(kind, opts?)           synthesized layer for weak slots: kinds
@@ -55,7 +59,7 @@
 /* Types                                                                */
 /* ------------------------------------------------------------------ */
 
-export type BusName = "ambience" | "sfx" | "ui";
+export type BusName = "ambience" | "sfx" | "ui" | "music";
 export type SoundCategory = "ambience" | "spells" | "sfx" | "ui";
 
 /** Every slot in the manifest with its category (bus follows from it). */
@@ -232,11 +236,16 @@ let master: GainNode | null = null;
 let limiter: DynamicsCompressorNode | null = null;
 let analyser: AnalyserNode | null = null;
 let duckNode: GainNode | null = null;
+/** Ambience level while music plays (1 = no music). */
+let musicBed: GainNode | null = null;
+/** Spell ducking on the music bus. */
+let musicDuck: GainNode | null = null;
+let musicAnalyser: AnalyserNode | null = null;
 let fireGroup: GainNode | null = null;
 let buses: Record<BusName, GainNode> | null = null;
 
-const volumes: Record<BusName, number> = { ambience: 0.6, sfx: 0.8, ui: 0.5 };
-const enabled: Record<BusName, boolean> = { ambience: false, sfx: true, ui: true };
+const volumes: Record<BusName, number> = { ambience: 0.6, sfx: 0.8, ui: 0.5, music: 0.55 };
+const enabled: Record<BusName, boolean> = { ambience: false, sfx: true, ui: true, music: false };
 let intensity = 1;
 
 let format: AudioFormat | null = null;
@@ -397,8 +406,12 @@ function ensureContext(): AudioContext | null {
     limiter.connect(analyser);
   }
 
+  musicBed = c.createGain();
+  musicBed.connect(master);
   duckNode = c.createGain();
-  duckNode.connect(master);
+  duckNode.connect(musicBed);
+  musicDuck = c.createGain();
+  musicDuck.connect(master);
 
   const mk = (bus: BusName, dest: AudioNode) => {
     const g = c.createGain();
@@ -406,7 +419,18 @@ function ensureContext(): AudioContext | null {
     g.connect(dest);
     return g;
   };
-  buses = { ambience: mk("ambience", duckNode), sfx: mk("sfx", master), ui: mk("ui", master) };
+  buses = {
+    ambience: mk("ambience", duckNode),
+    sfx: mk("sfx", master),
+    ui: mk("ui", master),
+    music: mk("music", musicDuck),
+  };
+  // visualizer tap: post-volume music, output left unconnected (MDN: an
+  // AnalyserNode processes even when its output isn't connected)
+  musicAnalyser = c.createAnalyser();
+  musicAnalyser.fftSize = 2048;
+  musicAnalyser.smoothingTimeConstant = 0.8;
+  buses.music.connect(musicAnalyser);
 
   fireGroup = c.createGain();
   fireGroup.gain.value = fireGroupTarget();
@@ -477,24 +501,27 @@ async function fetchDecode(url: string): Promise<AudioBuffer> {
   return ctx.decodeAudioData(data);
 }
 
+/** Fetch + decode base.{webm|m4a} in the preferred container (uncached). */
+async function decodeBase(base: string): Promise<AudioBuffer> {
+  const preferred = pickFormat();
+  const alternate: AudioFormat = preferred === "webm" ? "m4a" : "webm";
+  try {
+    return await fetchDecode(`${audioBase}${base}.${preferred}`);
+  } catch (err) {
+    // A decode failure (e.g. Safari + Opus in WebAudio) is worth one retry
+    // in the other container; a missing file is not.
+    if (err instanceof HttpError) throw err;
+    return await fetchDecode(`${audioBase}${base}.${alternate}`);
+  }
+}
+
 /** Decode one file (base path without extension); deduped and cached. */
 function loadFile(base: string): Promise<AudioBuffer | null> {
   const cached = fileBuffers.get(base);
   if (cached) return Promise.resolve(cached);
   const pending = fileLoads.get(base);
   if (pending) return pending;
-  const preferred = pickFormat();
-  const alternate: AudioFormat = preferred === "webm" ? "m4a" : "webm";
-  const p = (async () => {
-    try {
-      return await fetchDecode(`${audioBase}${base}.${preferred}`);
-    } catch (err) {
-      // A decode failure (e.g. Safari + Opus in WebAudio) is worth one retry
-      // in the other container; a missing file is not.
-      if (err instanceof HttpError) throw err;
-      return await fetchDecode(`${audioBase}${base}.${alternate}`);
-    }
-  })()
+  const p = decodeBase(base)
     .then((buf) => {
       fileBuffers.set(base, buf);
       return buf;
@@ -1146,12 +1173,20 @@ function duckAmbience(amount: number, ms: number, delay = 0): void {
   const end = start + ms / 1000;
   duckDepth = now < duckEnd ? Math.max(duckDepth, amount) : amount;
   duckEnd = Math.max(duckEnd, end);
-  const p = duckNode.gain;
-  p.cancelScheduledValues(now);
-  p.setValueAtTime(p.value, now);
-  p.setTargetAtTime(1 - clamp(duckDepth, 0, 1), start, 0.06);
-  p.setTargetAtTime(1, duckEnd, 0.35);
+  const depth = clamp(duckDepth, 0, 1);
+  const duckTo = (p: AudioParam, level: number) => {
+    p.cancelScheduledValues(now);
+    p.setValueAtTime(p.value, now);
+    p.setTargetAtTime(level, start, 0.06);
+    p.setTargetAtTime(1, duckEnd, 0.35);
+  };
+  duckTo(duckNode.gain, 1 - depth);
+  // music dips a little less than the ambience bed so a tune doesn't vanish
+  if (musicDuck) duckTo(musicDuck.gain, 1 - depth * MUSIC_DUCK_SCALE);
 }
+
+/** Share of a spell duck applied to the music bus. */
+const MUSIC_DUCK_SCALE = 0.8;
 
 /* ------------------------------------------------------------------ */
 /* Ambience scene                                                       */
@@ -1251,6 +1286,8 @@ export interface AudioEngine {
   setAmbienceOn: (on: boolean) => void;
   /** SFX mute toggle (settings); covers the sfx and ui buses. */
   setSfxOn: (on: boolean) => void;
+  /** Music bus mute (the player itself lives in useMusic). */
+  setMusicOn: (on: boolean) => void;
   /** Bus volume 0..1 (perceptual curve, glides without zipper noise). */
   setBusVolume: (bus: BusName, volume: number) => void;
   /** 0..1: fire loudness and crackle rate (snuffed candles, daylight). */
@@ -1261,7 +1298,7 @@ export interface AudioEngine {
   setListener: (position: Vec3, forward: Vec3) => void;
   /** Named emitter position ("fire", "window", ...); null clears it. */
   setSourcePosition: (name: string, position: Vec3 | null) => void;
-  /** Lower ambience by amount (0..1) for ms, then recover. */
+  /** Lower ambience (and music, a little less) by amount (0..1) for ms, then recover. */
   duck: (amount: number, ms: number) => void;
   prefetch: (what: SlotName[] | SoundCategory) => void;
   configureSlot: (slot: SlotName, tuning: Partial<SlotTuning>) => void;
@@ -1311,6 +1348,10 @@ const engine: AudioEngine = {
     applyBus("sfx");
     applyBus("ui");
   },
+  setMusicOn(on) {
+    enabled.music = on;
+    applyBus("music");
+  },
   setBusVolume(bus, volume) {
     volumes[bus] = clamp(volume, 0, 1);
     applyBus(bus);
@@ -1357,7 +1398,10 @@ const engine: AudioEngine = {
     }
     if (ctx) void ctx.close();
     ctx = master = limiter = analyser = duckNode = fireGroup = null;
+    musicBed = musicDuck = null;
+    musicAnalyser = null;
     buses = null;
+    for (const cb of disposeHooks) cb();
     loops.clear();
     voices.clear();
     fileBuffers.clear();
@@ -1372,6 +1416,51 @@ const engine: AudioEngine = {
     preloadStarted = false;
     duckEnd = duckDepth = 0;
   },
+};
+
+/* ------------------------------------------------------------------ */
+/* Music port (internal: used by useMusic.ts only)                      */
+/* ------------------------------------------------------------------ */
+
+const disposeHooks: (() => void)[] = [];
+
+export interface MusicPort {
+  /** The running context, or null before the Enter gesture. */
+  context: () => AudioContext | null;
+  /** Music bus input (volume + toggle + spell duck downstream). */
+  input: () => GainNode | null;
+  /** Analyser tapped on the music bus output. */
+  analyser: () => AnalyserNode | null;
+  /** Fetch + decode audio/<base>.{webm|m4a} with the engine's format choice. */
+  decode: (base: string) => Promise<AudioBuffer>;
+  /** Ambience level while music plays (0..1, 1 = none), smooth ramp. */
+  setAmbienceBed: (level: number, seconds?: number) => void;
+  /** Music bus toggle state. */
+  enabled: () => boolean;
+  /** Called after engine.dispose() closed the context. */
+  onDispose: (cb: () => void) => void;
+  /** audio/ base URL. */
+  base: string;
+}
+
+export const musicPort: MusicPort = {
+  context() {
+    if (!hasUserActivation()) return null;
+    return ensureContext();
+  },
+  input: () => buses?.music ?? null,
+  analyser: () => musicAnalyser,
+  decode: decodeBase,
+  setAmbienceBed(level, seconds = 1.5) {
+    if (!ctx || !musicBed) return;
+    // setTargetAtTime reaches ~99 % after 5 time constants
+    glide(musicBed.gain, clamp(level, 0, 1), seconds / 5);
+  },
+  enabled: () => enabled.music,
+  onDispose(cb) {
+    disposeHooks.push(cb);
+  },
+  base: audioBase,
 };
 
 /* ------------------------------------------------------------------ */
@@ -1402,7 +1491,10 @@ function debugState() {
           ambience: buses.ambience.gain.value,
           sfx: buses.sfx.gain.value,
           ui: buses.ui.gain.value,
+          music: buses.music.gain.value,
           duck: duckNode?.gain.value ?? null,
+          musicDuck: musicDuck?.gain.value ?? null,
+          musicBed: musicBed?.gain.value ?? null,
           fireGroup: fireGroup?.gain.value ?? null,
         }
       : null,

@@ -12,13 +12,24 @@ export interface AppSettings {
   sfxVolume: number;
   /** UI bus volume 0..1 (hover ticks). */
   uiVolume: number;
+  /** The Innkeeper's Music Box on. Off by default (autoplay etiquette). */
+  musicOn: boolean;
+  /** Music bus volume 0..1. */
+  musicVolume: number;
   quality: Quality;
   reducedMotion: boolean;
   /** Inn mood lighting: "auto" follows the visitor's clock. */
   timeOfDay: TimeOfDay;
+  /** Storage schema version (see load()). */
+  version: number;
 }
 
 const STORAGE_KEY = "smokeriv-settings";
+/**
+ * v1: ambience stored as musicOn/musicVolume. v2: ambienceOn/ambienceVolume
+ * (no music). v3: musicOn/musicVolume are the music box.
+ */
+const VERSION = 3;
 const QUALITIES: Quality[] = ["low", "medium", "high"];
 const TIMES_OF_DAY: TimeOfDay[] = ["auto", "day", "night"];
 
@@ -46,14 +57,17 @@ function defaults(): AppSettings {
     sfxOn: true,
     sfxVolume: 0.8,
     uiVolume: 0.5,
+    musicOn: false,
+    musicVolume: 0.55,
     quality: autoQuality(),
     reducedMotion: prefersReducedMotion(),
     timeOfDay: "auto",
+    version: VERSION,
   };
 }
 
-/** Fields from the first settings version, migrated on load. */
-interface LegacySettings {
+/** Stored shape of any version (fields may be missing or wrong-typed). */
+interface StoredSettings extends Partial<Omit<AppSettings, "musicOn" | "musicVolume">> {
   musicOn?: unknown;
   musicVolume?: unknown;
 }
@@ -69,11 +83,21 @@ function load(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const saved = JSON.parse(raw) as Partial<AppSettings> & LegacySettings;
-      // v1 stored the ambience toggle/volume as musicOn/musicVolume.
-      const ambienceOn = saved.ambienceOn ?? saved.musicOn;
-      if (typeof ambienceOn === "boolean") base.ambienceOn = ambienceOn;
-      base.ambienceVolume = volume(saved.ambienceVolume ?? saved.musicVolume, base.ambienceVolume);
+      const saved = JSON.parse(raw) as StoredSettings;
+      // v1 (no version, no ambienceOn) stored the ambience toggle/volume as
+      // musicOn/musicVolume; from v3 those keys belong to the music box.
+      const v1 = typeof saved.version !== "number" && saved.ambienceOn === undefined;
+      if (v1) {
+        if (typeof saved.musicOn === "boolean") base.ambienceOn = saved.musicOn;
+        base.ambienceVolume = volume(saved.musicVolume, base.ambienceVolume);
+      } else {
+        if (typeof saved.ambienceOn === "boolean") base.ambienceOn = saved.ambienceOn;
+        base.ambienceVolume = volume(saved.ambienceVolume, base.ambienceVolume);
+        if (typeof saved.version === "number" && saved.version >= 3) {
+          if (typeof saved.musicOn === "boolean") base.musicOn = saved.musicOn;
+          base.musicVolume = volume(saved.musicVolume, base.musicVolume);
+        }
+      }
       if (typeof saved.sfxOn === "boolean") base.sfxOn = saved.sfxOn;
       base.sfxVolume = volume(saved.sfxVolume, base.sfxVolume);
       base.uiVolume = volume(saved.uiVolume, base.uiVolume);

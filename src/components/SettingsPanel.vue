@@ -54,10 +54,11 @@ const TIME_OPTIONS: { value: TimeOfDay; label: string; hint: string }[] = [
   { value: "night", label: "Candlelight", hint: "night" },
 ];
 
-type VolumeKey = "ambienceVolume" | "sfxVolume" | "uiVolume";
+type VolumeKey = "ambienceVolume" | "musicVolume" | "sfxVolume" | "uiVolume";
 
 const SLIDERS: { key: VolumeKey; label: string; aria: string; enabled: () => boolean }[] = [
   { key: "ambienceVolume", label: "Hearth", aria: "Ambience", enabled: () => settings.ambienceOn },
+  { key: "musicVolume", label: "Music", aria: "Music", enabled: () => settings.musicOn },
   { key: "sfxVolume", label: "Effects", aria: "Sound effects", enabled: () => settings.sfxOn },
   { key: "uiVolume", label: "Interface", aria: "Interface sounds", enabled: () => settings.sfxOn },
 ];
@@ -110,7 +111,7 @@ const flatUrl = ((): string => {
     </header>
 
     <div class="flex flex-1 flex-col gap-6 px-5 py-5">
-      <!-- Sound: two mute toggles, three bus volumes -->
+      <!-- Sound: three mute toggles, four bus volumes -->
       <section class="flex flex-col gap-4" aria-labelledby="ledger-sound">
         <h3 id="ledger-sound" class="sr-only">Sound</h3>
         <div class="ledger-row">
@@ -122,6 +123,19 @@ const flatUrl = ((): string => {
             :aria-checked="settings.ambienceOn"
             aria-label="Toggle ambience"
             @click="settings.ambienceOn = !settings.ambienceOn"
+          >
+            <span class="toggle-knob" />
+          </button>
+        </div>
+        <div class="ledger-row">
+          <span class="ledger-label">Music Box <em class="ml-1 font-body text-xs not-italic text-ink-faint">(music)</em></span>
+          <button
+            class="toggle"
+            :class="{ 'toggle-on': settings.musicOn }"
+            role="switch"
+            :aria-checked="settings.musicOn"
+            aria-label="Toggle music"
+            @click="settings.musicOn = !settings.musicOn"
           >
             <span class="toggle-knob" />
           </button>
