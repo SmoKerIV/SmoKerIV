@@ -177,7 +177,7 @@ interface Manifest {
   slots: Partial<Record<SlotName, ManifestSlot>>;
 }
 
-type AudioFormat = "webm" | "m4a";
+export type AudioFormat = "webm" | "m4a";
 
 /* ------------------------------------------------------------------ */
 /* Tuning                                                               */
@@ -492,54 +492,28 @@ function loadManifest(): Promise<Manifest | null> {
 
 class HttpError extends Error {}
 
-/** Download progress 0..1; only called when the server sends Content-Length. */
-export type ProgressFn = (fraction: number) => void;
-
-async function fetchDecode(url: string, onProgress?: ProgressFn): Promise<AudioBuffer> {
+async function fetchDecode(url: string): Promise<AudioBuffer> {
   const res = await fetch(url);
   // Vite dev serves index.html for missing files: treat non-audio as missing.
   if (!res.ok || (res.headers.get("content-type") ?? "").includes("text/html")) {
     throw new HttpError(`${res.status} ${url}`);
   }
-  const data = await readBody(res, onProgress);
+  const data = await res.arrayBuffer();
   if (!ctx) throw new Error("no context");
   return ctx.decodeAudioData(data);
 }
 
-/** res.arrayBuffer(), streamed so the caller can show download progress. */
-async function readBody(res: Response, onProgress?: ProgressFn): Promise<ArrayBuffer> {
-  const total = Number(res.headers.get("content-length"));
-  if (!onProgress || !res.body || !(total > 0)) return res.arrayBuffer();
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.length;
-    onProgress(Math.min(1, received / total));
-  }
-  const out = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out.buffer;
-}
-
 /** Fetch + decode base.{webm|m4a} in the preferred container (uncached). */
-async function decodeBase(base: string, onProgress?: ProgressFn): Promise<AudioBuffer> {
+async function decodeBase(base: string): Promise<AudioBuffer> {
   const preferred = pickFormat();
   const alternate: AudioFormat = preferred === "webm" ? "m4a" : "webm";
   try {
-    return await fetchDecode(`${audioBase}${base}.${preferred}`, onProgress);
+    return await fetchDecode(`${audioBase}${base}.${preferred}`);
   } catch (err) {
     // A decode failure (e.g. Safari + Opus in WebAudio) is worth one retry
     // in the other container; a missing file is not.
     if (err instanceof HttpError) throw err;
-    return await fetchDecode(`${audioBase}${base}.${alternate}`, onProgress);
+    return await fetchDecode(`${audioBase}${base}.${alternate}`);
   }
 }
 
@@ -1491,8 +1465,8 @@ export interface MusicPort {
   input: () => GainNode | null;
   /** Analyser tapped on the music bus output. */
   analyser: () => AnalyserNode | null;
-  /** Fetch + decode audio/<base>.{webm|m4a} with the engine's format choice. */
-  decode: (base: string, onProgress?: ProgressFn) => Promise<AudioBuffer>;
+  /** Container extensions for streamed music, the engine's preferred one first. */
+  formats: () => AudioFormat[];
   /** Ambience level while music plays (0..1, 1 = none), smooth ramp. */
   setAmbienceBed: (level: number, seconds?: number) => void;
   /** Music bus toggle state. */
@@ -1510,7 +1484,10 @@ export const musicPort: MusicPort = {
   },
   input: () => buses?.music ?? null,
   analyser: () => musicAnalyser,
-  decode: decodeBase,
+  formats() {
+    const preferred = pickFormat();
+    return [preferred, preferred === "webm" ? "m4a" : "webm"];
+  },
   setAmbienceBed(level, seconds = 1.5) {
     if (!ctx || !musicBed) return;
     // setTargetAtTime reaches ~99 % after 5 time constants

@@ -11,26 +11,40 @@
  * fails to load plays the tune of its `mood` (which defaults to its id when
  * that is a placeholder id).
  *
+ * Real tracks STREAM: nothing is fetched or decoded up front. Two pooled
+ * HTMLAudioElements (A/B) are each wired once with createMediaElementSource
+ * (the call throws on reuse, so the nodes live as long as the context). A
+ * track starts as soon as the browser has enough data (a Range request, 206,
+ * for the first bytes, and another when seeking to the join-in-progress
+ * point); the rest downloads while it plays. Crossfades and the loop seam
+ * use the second element.
+ *
  * Graph (per playing track; two exist during a crossfade):
- *   file:  BufferSource -> gain(track.gain) -> out -> music bus
+ *   file:  <audio> -> MediaElementSource -> voice gain(track.gain) -> out -> music bus
  *   synth: tine voices -> voiceBus -> lowpass -> dry ----------> out -> music bus
  *                                           \-> Convolver -> wet /
  *   music bus -> musicDuck (spells) -> master; analyser tapped on the bus.
  *
+ * Looping: a file element has loop=false; when a looping track has under
+ * 0.5 s left, the other element (pre-buffered from 0) fades in over that
+ * overlap while the first fades out ("ping-pong"), because a single element's
+ * own `loop` can leave a small gap. If no second element is free it falls
+ * back to loop=true.
+ *
  * API (const music = useMusic()):
  *   musicState                 reactive { tracks, currentId, playing,
- *                              position (s), duration (s), loading,
- *                              loadProgress (download 0..1 while loading) }
- *   loadMusic(): Promise<MusicTrack[]>   fetch the manifest (no audio decoded
- *                              until a track is chosen); needs the Enter gesture
- *   warm(): Promise<void>      loadMusic() + start downloading the track play
- *                              would start with (current, else first); call it
- *                              when the box is opened so the seal feels instant
+ *                              position (s), duration (s), loading, blocked }
+ *                              blocked = the browser refused play(); stay
+ *                              paused and show "tap to play"
+ *   loadMusic(): Promise<MusicTrack[]>   fetch the manifest (no audio is
+ *                              fetched until a track is chosen); needs the
+ *                              Enter gesture
  *   playTrack(id): Promise<void>  ~1.2 s equal-power crossfade from the current
  *                              track; first start of a track this session joins
  *                              in progress at Date.now()/1000 % duration, later
  *                              starts resume where it was left. Turns musicOn on.
  *   pause() / resume()         resume() with nothing chosen plays the first track
+ *   seek(seconds)              file tracks only
  *   next() / prev()            wrap around the list
  *   shuffle(): string | null   play a random other track; returns its id
  *   setMusicOn(on)             settings toggle: mutes the bus; off pauses, on
@@ -41,9 +55,11 @@
  *
  * While music is audible the ambience bed drops to track.ambience (default
  * 0.6) with a 1.5 s ramp, and comes back on pause. A hidden tab suspends the
- * AudioContext (engine behaviour), which freezes the music too; it carries on
- * when the tab is visible again. Media Session metadata + play/pause/next/prev
- * handlers are set so OS media keys work where the browser routes them.
+ * AudioContext (engine behaviour) and pauses the <audio> elements; both carry
+ * on when the tab is visible again. Media Session metadata, playbackState,
+ * position state and play/pause/next/prev/seekto handlers are set, and since
+ * real <audio> elements play, the OS media keys and notification controls
+ * route to them.
  *
  * Dev builds add window.__audio.music = { api, state(), rms() }.
  */
@@ -83,8 +99,8 @@ export interface MusicState {
   position: number;
   duration: number;
   loading: boolean;
-  /** Download progress of the loading track, 0..1 (stays at 1 while decoding). */
-  loadProgress: number;
+  /** play() was refused by the browser (autoplay policy): offer "tap to play". */
+  blocked: boolean;
 }
 
 interface ManifestTrack {
@@ -563,6 +579,16 @@ interface Player {
   stopAt: (when: number) => void;
   /** File track ended (non-looping). */
   onEnded?: () => void;
+  /** File only: position/duration changed in a way the UI should pick up now. */
+  onSync?: () => void;
+  /** File only: stop and free its elements at once. */
+  kill?: () => void;
+  /** File only: free the loop-overlap elements (a new track needs one). */
+  dropSpare?: () => void;
+  seek?: (seconds: number) => void;
+  /** File only: hidden tab, pause the elements / carry on. */
+  suspend?: () => void;
+  unsuspend?: () => void;
 }
 
 const LOOKAHEAD = 0.12;
@@ -647,52 +673,313 @@ function synthPlayer(
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* Streaming voices (pooled <audio> elements)                           */
+/* ------------------------------------------------------------------ */
+
+/** Overlap of the ping-pong loop seam, in seconds. */
+const SEAM = 0.5;
+/** Start buffering the second element this long before the loop point. */
+const SEAM_PRELOAD = 8;
+
+interface Voice {
+  el: HTMLAudioElement;
+  /** createMediaElementSource may only run once per element: cached here. */
+  node: MediaElementAudioSourceNode;
+  gain: GainNode;
+  /** Who holds the voice right now (null = idle). */
+  owner: object | null;
+  off: (() => void)[];
+}
+
+let pool: { ctx: AudioContext; voices: Voice[] } | null = null;
+
+function voicePool(c: AudioContext): Voice[] {
+  if (pool && pool.ctx === c) return pool.voices;
+  dropPool();
+  const make = (): Voice => {
+    const el = new Audio();
+    el.preload = "none";
+    el.loop = false;
+    const node = c.createMediaElementSource(el);
+    const gain = c.createGain();
+    gain.gain.value = 0;
+    node.connect(gain);
+    return { el, node, gain, owner: null, off: [] };
+  };
+  pool = { ctx: c, voices: [make(), make()] };
+  return pool.voices;
+}
+
+/** The context is gone: its elements can never be wired again, so drop them. */
+function dropPool(): void {
+  if (!pool) return;
+  for (const v of pool.voices) resetVoice(v);
+  pool = null;
+}
+
+function listen(v: Voice, type: string, fn: (e: Event) => void): void {
+  v.el.addEventListener(type, fn);
+  v.off.push(() => v.el.removeEventListener(type, fn));
+}
+
+/** Drop listeners and free the connection (MDN: removeAttribute('src') + load()). */
+function resetVoice(v: Voice): void {
+  for (const fn of v.off) fn();
+  v.off = [];
+  const el = v.el;
+  el.pause();
+  el.loop = false;
+  el.removeAttribute("src");
+  el.preload = "none";
+  el.load();
+  v.gain.disconnect();
+  v.gain.gain.cancelScheduledValues(0);
+  v.gain.gain.value = 0;
+}
+
+function freeVoice(v: Voice): void {
+  resetVoice(v);
+  v.owner = null;
+}
+
+/** An idle voice, or null. `steal` may cut a fading tail or loop overlap to get one. */
+function leaseVoice(c: AudioContext, owner: object, steal: boolean): Voice | null {
+  const vs = voicePool(c);
+  const idle = () => vs.find((v) => !v.owner);
+  let v = idle();
+  if (!v && steal) {
+    for (const p of [...fading]) p.kill?.();
+    v = idle();
+  }
+  if (!v && steal) {
+    current?.dropSpare?.();
+    v = idle();
+  }
+  if (!v) return null;
+  v.owner = owner;
+  return v;
+}
+
+function streamUrl(track: MusicTrack, fmt: string): string {
+  return `${musicPort.base}${track.files}.${fmt}`;
+}
+
+/**
+ * Point `v` at `url` and start it; resolves on the `playing` event with the
+ * offset it started from. The currentTime set before metadata is the
+ * "default playback start position", so the first request already lands near
+ * the join point and play() is called inside the caller's gesture chain.
+ * Rejects on a media error or a refused play() (NotAllowedError).
+ */
+function startVoice(
+  v: Voice,
+  url: string,
+  track: MusicTrack,
+  wanted: (duration: number) => number,
+): Promise<{ offset: number; duration: number }> {
+  const el = v.el;
+  return new Promise((resolve, reject) => {
+    let offset = 0;
+    const known = () =>
+      Number.isFinite(el.duration) && el.duration > 0 ? el.duration : track.duration;
+    const play = () => {
+      el.play().catch((err: unknown) => reject(err));
+    };
+    listen(v, "error", () => reject(new Error(`media error ${el.error?.code ?? "?"}`)));
+    listen(v, "playing", () => resolve({ offset, duration: known() }));
+    listen(v, "loadedmetadata", () => {
+      const d = known();
+      if (!(track.duration > 0)) {
+        offset = wanted(d);
+        el.currentTime = offset;
+        play();
+      } else if (offset >= d - 0.05) {
+        // manifest duration was off: wrap into the real one
+        offset = wanted(d);
+        el.currentTime = offset;
+      }
+    });
+    el.preload = "auto";
+    el.loop = false;
+    el.src = url;
+    if (track.duration > 0) {
+      offset = wanted(track.duration);
+      el.currentTime = offset;
+      play();
+    }
+  });
+}
+
 function filePlayer(
   c: AudioContext,
   track: MusicTrack,
-  buffer: AudioBuffer,
-  offset: number,
-  when: number,
+  first: Voice,
+  url: string,
+  hooks: { owner: object },
 ): Player {
   const out = c.createGain();
   out.gain.value = 0;
-  const g = c.createGain();
-  g.gain.value = track.gain;
-  const src = c.createBufferSource();
-  src.buffer = buffer;
-  src.loop = track.loop;
-  src.connect(g).connect(out);
-  const duration = buffer.duration;
-  const start = Math.min(Math.max(0, offset), Math.max(0, duration - 0.05));
-  src.start(when, start);
+  let active = first;
+  /** Previous voice during a loop overlap (fading out). */
+  let tail: Voice | null = null;
+  /** Second voice buffering at 0, waiting for the loop point. */
+  let spare: Voice | null = null;
   let stopped = false;
+  let suspended = false;
+  let noSeam = false;
+  let retryAt = 0;
+  let seamTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const duration = (): number => {
+    const d = active.el.duration;
+    return Number.isFinite(d) && d > 0 ? d : track.duration;
+  };
+
   const player: Player = {
     track,
     out,
-    tick: () => undefined,
+    tick() {
+      if (stopped || suspended || !track.loop || tail) return;
+      if (noSeam) {
+        // no free element last time: try again every second
+        if (performance.now() < retryAt) return;
+        noSeam = false;
+        active.el.loop = false;
+      }
+      const el = active.el;
+      const d = duration();
+      if (!(d > SEAM_PRELOAD) || el.paused || el.seeking) return;
+      const left = d - el.currentTime;
+      if (!spare && left < SEAM_PRELOAD) prepareSpare();
+      if (spare && left <= SEAM && spare.el.readyState >= 2) swap();
+    },
     position() {
-      const el = Math.max(0, c.currentTime - when) + start;
-      return track.loop ? el % duration : Math.min(el, duration);
+      const d = duration();
+      const t = active.el.currentTime;
+      return d > 0 ? Math.min(t, d) : t;
     },
     stopAt(at) {
       stopped = true;
-      try {
-        src.stop(at);
-      } catch {
-        /* already stopped */
-      }
-      setTimeout(
-        () => {
-          g.disconnect();
-          out.disconnect();
-        },
-        Math.max(0, (at - c.currentTime) * 1000) + 100,
-      );
+      const ms = Math.max(0, (at - c.currentTime) * 1000) + 100;
+      setTimeout(() => player.kill?.(), ms);
+    },
+    kill() {
+      stopped = true;
+      if (seamTimer) clearTimeout(seamTimer);
+      for (const v of new Set([active, tail, spare])) if (v) freeVoice(v);
+      tail = spare = null;
+      out.disconnect();
+      fading.delete(player);
+    },
+    dropSpare() {
+      if (seamTimer) clearTimeout(seamTimer);
+      if (tail) freeVoice(tail);
+      if (spare) freeVoice(spare);
+      tail = spare = null;
+    },
+    seek(seconds) {
+      const d = duration();
+      player.dropSpare?.();
+      active.el.currentTime = Math.min(Math.max(0, seconds), Math.max(0, d - 0.1));
+    },
+    suspend() {
+      suspended = true;
+      for (const v of [active, tail]) v?.el.pause();
+    },
+    unsuspend() {
+      if (!suspended) return;
+      suspended = false;
+      for (const v of [active, tail]) void v?.el.play().catch(() => undefined);
     },
   };
-  src.addEventListener("ended", () => {
-    if (!stopped) player.onEnded?.();
-  });
+
+  function prepareSpare(): void {
+    const v = leaseVoice(c, hooks.owner, false);
+    if (!v) {
+      // no free element for the overlap: let the element loop itself
+      noSeam = true;
+      retryAt = performance.now() + 1000;
+      active.el.loop = true;
+      return;
+    }
+    spare = v;
+    v.gain.gain.value = 0;
+    v.gain.connect(out);
+    v.el.preload = "auto";
+    v.el.loop = false;
+    v.el.src = url;
+    v.el.currentTime = 0;
+  }
+
+  function swap(): void {
+    const next = spare!;
+    const old = active;
+    spare = null;
+    tail = old;
+    active = next;
+    attach(next);
+    void next.el.play().catch(() => undefined);
+    equalPower(c, old.gain.gain, 0, SEAM);
+    equalPower(c, next.gain.gain, track.gain, SEAM);
+    seamTimer = setTimeout(() => {
+      if (tail === old) {
+        freeVoice(old);
+        tail = null;
+      }
+    }, SEAM * 1000 + 120);
+    player.onSync?.();
+  }
+
+  function attach(v: Voice): void {
+    const mine = () => active === v && !stopped;
+    listen(v, "playing", () => {
+      if (!mine()) return;
+      if (current === player) musicState.loading = false;
+      player.onSync?.();
+    });
+    for (const type of ["waiting", "stalled"]) {
+      listen(v, type, () => {
+        // `stalled` also fires when the browser merely stops fetching: only
+        // count it when playback really lacks data.
+        if (mine() && current === player && !v.el.paused && v.el.readyState < 3)
+          musicState.loading = true;
+      });
+    }
+    listen(v, "timeupdate", () => {
+      if (mine() && current === player) musicState.position = player.position();
+    });
+    listen(v, "seeked", () => {
+      if (mine()) player.onSync?.();
+    });
+    listen(v, "ended", () => {
+      if (!mine()) return;
+      if (track.loop) {
+        // the overlap missed (late tick / starved spare): wrap by hand
+        active.el.currentTime = 0;
+        void active.el.play().catch(() => undefined);
+      } else {
+        player.onEnded?.();
+      }
+    });
+    listen(v, "error", () => {
+      if (!mine()) return;
+      // a media error mid-stream: this file is bad, play the tune instead
+      failed.add(track.id);
+      if (current === player) {
+        current = null;
+        retire(player, 0.05);
+        void playTrack(track.id);
+      }
+    });
+  }
+
+  // the starting voice: drop the startup listeners, keep one set for playback
+  for (const fn of first.off) fn();
+  first.off = [];
+  first.gain.gain.value = track.gain;
+  first.gain.connect(out);
+  attach(first);
   return player;
 }
 
@@ -740,7 +1027,7 @@ export const musicState = reactive<MusicState>({
   position: 0,
   duration: 0,
   loading: false,
-  loadProgress: 0,
+  blocked: false,
 });
 
 const manifestUrl = `${musicPort.base}music/manifest.json`;
@@ -750,24 +1037,19 @@ let current: Player | null = null;
 const fading = new Set<Player>();
 /** Last nominal position per track id (join-in-progress happens once). */
 const positions = new Map<string, number>();
-/** Decoded file buffers, at most MAX_BUFFERS, oldest first. */
-const buffers = new Map<string, AudioBuffer>();
-const MAX_BUFFERS = 2;
-/** In-flight file loads by track id: play and warm() share one download. */
-const loads = new Map<string, Promise<AudioBuffer | null>>();
-/** Track whose download the UI is waiting on (drives loadProgress). */
-let loadingId: string | null = null;
 /** Tracks whose file failed: they play their mood's melody instead. */
 const failed = new Set<string>();
-/** Bumped by every play/pause so a slow decode can't start a stale track. */
+/** Bumped by every play/pause so a slow start can't take over a newer choice. */
 let token = 0;
-/** True from the moment playback is requested (before decode finishes). */
+/** True from the moment playback is requested (before the stream starts). */
 let wantPlaying = false;
 let ticker: ReturnType<typeof setInterval> | null = null;
 let lastTickAt = 0;
 let lastPositionAt = 0;
 const listeners = new Set<(t: MusicTrack) => void>();
 let mediaHooked = false;
+/** The element a still-starting playTrack holds (freed if it is superseded). */
+let pending: Voice | null = null;
 
 function findTrack(id: string | null): MusicTrack | undefined {
   return id ? musicState.tracks.find((t) => t.id === id) : undefined;
@@ -873,46 +1155,6 @@ function retire(p: Player, seconds: number): void {
   );
 }
 
-function rememberBuffer(id: string, buf: AudioBuffer): void {
-  buffers.delete(id);
-  buffers.set(id, buf);
-  for (const key of buffers.keys()) {
-    if (buffers.size <= MAX_BUFFERS) break;
-    if (key !== id && key !== current?.track.id) buffers.delete(key);
-  }
-}
-
-/** Decoded file for the track (cached + deduped); null if synth or failed. */
-function loadBuffer(track: MusicTrack): Promise<AudioBuffer | null> {
-  const hit = buffers.get(track.id);
-  if (hit) return Promise.resolve(hit);
-  if (track.kind !== "file" || !track.files || failed.has(track.id)) {
-    return Promise.resolve(null);
-  }
-  const pending = loads.get(track.id);
-  if (pending) return pending;
-  const p = musicPort
-    .decode(track.files, (fraction) => {
-      if (track.id === loadingId) musicState.loadProgress = fraction;
-    })
-    .then((buf) => {
-      rememberBuffer(track.id, buf);
-      return buf;
-    })
-    .catch(() => {
-      failed.add(track.id);
-      return null;
-    })
-    .finally(() => loads.delete(track.id));
-  loads.set(track.id, p);
-  return p;
-}
-
-function saveData(): boolean {
-  const nav = navigator as Navigator & { connection?: { saveData?: boolean } };
-  return nav.connection?.saveData === true;
-}
-
 function emitChange(t: MusicTrack): void {
   for (const cb of listeners) {
     try {
@@ -937,11 +1179,17 @@ function hookMediaSession(): void {
   const ms = media();
   if (!ms || mediaHooked) return;
   mediaHooked = true;
-  const handlers: [MediaSessionAction, () => void][] = [
+  const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
     ["play", () => void resume()],
     ["pause", () => pause()],
     ["nexttrack", () => void next()],
     ["previoustrack", () => void prev()],
+    [
+      "seekto",
+      (d) => {
+        if (typeof d.seekTime === "number") seek(d.seekTime);
+      },
+    ],
   ];
   for (const [action, fn] of handlers) {
     try {
@@ -952,17 +1200,29 @@ function hookMediaSession(): void {
   }
 }
 
+/** Metadata for the current track (call when the track changes). */
+function updateMediaMetadata(): void {
+  const ms = media();
+  const t = findTrack(musicState.currentId);
+  if (!ms || !t || typeof MediaMetadata === "undefined") return;
+  ms.metadata = new MediaMetadata({
+    title: t.title,
+    artist: "The Innkeeper's Music Box",
+    album: t.verse,
+    artwork: [
+      {
+        src: new URL(`${import.meta.env.BASE_URL}og.jpg`, location.href).href,
+        sizes: "1200x630",
+        type: "image/jpeg",
+      },
+    ],
+  });
+}
+
 function updateMediaSession(): void {
   const ms = media();
   if (!ms) return;
   const t = findTrack(musicState.currentId);
-  if (t && typeof MediaMetadata !== "undefined") {
-    ms.metadata = new MediaMetadata({
-      title: t.title,
-      artist: "The Innkeeper's Music Box",
-      album: t.verse,
-    });
-  }
   ms.playbackState = musicState.playing ? "playing" : t ? "paused" : "none";
   if (t && musicState.duration > 0) {
     try {
@@ -1018,17 +1278,6 @@ function loadMusic(): Promise<MusicTrack[]> {
   return manifestPromise;
 }
 
-/**
- * Start downloading the track the seal would play (current, else the first)
- * so pressing it feels instant. Skipped on Save-Data connections.
- */
-async function warm(): Promise<void> {
-  if (!musicPort.context() || saveData()) return;
-  const tracks = await loadMusic();
-  const track = findTrack(musicState.currentId) ?? tracks[0];
-  if (track) void loadBuffer(track);
-}
-
 async function playTrack(id: string): Promise<void> {
   const c = musicPort.context();
   if (!c) return;
@@ -1038,42 +1287,100 @@ async function playTrack(id: string): Promise<void> {
   if (current?.track.id === id && musicState.playing) return;
   const my = ++token;
   wantPlaying = true;
+  musicState.blocked = false;
   // pressing play in the music box means "music on"
   useAudio().setMusicOn(true);
   const settings = useSettings();
   if (!settings.musicOn) settings.musicOn = true;
-
-  let buffer = buffers.get(track.id) ?? null;
-  if (!buffer && track.kind === "file" && !failed.has(track.id)) {
-    musicState.loading = true;
-    musicState.loadProgress = 0;
-    loadingId = track.id;
-    buffer = await loadBuffer(track);
-    if (my === token) {
-      musicState.loading = false;
-      loadingId = null;
-    }
+  if (pending) {
+    freeVoice(pending);
+    pending = null;
   }
-  if (my !== token) return; // superseded while decoding
-  if (c.state === "closed") return;
 
-  const duration = buffer ? buffer.duration : compose(track.mood).loopSeconds;
-  const offset = positions.has(track.id)
-    ? positions.get(track.id)! % duration
-    : (Date.now() / 1000) % duration; // join in progress: the bard is already playing
+  // join in progress: the bard is already playing
+  const wanted = (duration: number): number =>
+    positions.has(track.id)
+      ? positions.get(track.id)! % duration
+      : (Date.now() / 1000) % duration;
+
+  let voice: Voice | null = null;
+  let url = "";
+  let duration = 0;
+  let offset = 0;
+  const owner = {};
+  if (track.kind === "file" && track.files && !failed.has(track.id)) {
+    musicState.loading = true;
+    voice = leaseVoice(c, owner, true);
+    pending = voice;
+    let refused = false;
+    if (voice) {
+      for (const fmt of musicPort.formats()) {
+        try {
+          url = streamUrl(track, fmt);
+          const r = await startVoice(voice, url, track, wanted);
+          offset = r.offset;
+          duration = r.duration;
+          break;
+        } catch (err) {
+          if (my !== token) break;
+          if (err instanceof DOMException && err.name === "NotAllowedError") {
+            refused = true;
+            break;
+          }
+          // missing file / unsupported container: try the other one
+          resetVoice(voice);
+          url = "";
+        }
+      }
+    }
+    if (my !== token) {
+      // superseded while the stream was starting
+      if (voice && voice.owner === owner) freeVoice(voice);
+      if (pending === voice) pending = null;
+      return;
+    }
+    if (pending === voice) pending = null;
+    if (refused) {
+      if (voice) freeVoice(voice);
+      wantPlaying = false;
+      musicState.loading = false;
+      musicState.blocked = true;
+      return; // stay as we were; the panel offers "tap to play"
+    }
+    if (!url && voice) {
+      freeVoice(voice);
+      voice = null;
+      failed.add(track.id);
+    }
+    if (!voice) failed.add(track.id);
+    musicState.loading = false;
+  }
+  if (c.state === "closed") {
+    if (voice) freeVoice(voice);
+    return;
+  }
+
+  if (!voice) {
+    duration = compose(track.mood).loopSeconds;
+    offset = wanted(duration);
+  }
 
   const crossfade = !!current && musicState.playing;
   if (current) retire(current, crossfade ? XFADE : 0.05);
 
-  const when = c.currentTime + 0.03;
-  const p = buffer
-    ? filePlayer(c, track, buffer, offset, when)
-    : synthPlayer(c, track, offset, when);
+  const p = voice
+    ? filePlayer(c, track, voice, url, { owner })
+    : synthPlayer(c, track, offset, c.currentTime + 0.03);
   const input = musicPort.input();
   if (input) p.out.connect(input);
   equalPower(c, p.out.gain, 1, crossfade ? XFADE : 0.6);
   p.onEnded = () => {
     if (current === p) void next();
+  };
+  p.onSync = () => {
+    if (current !== p) return;
+    musicState.position = p.position();
+    updateMediaSession();
   };
   current = p;
   positions.set(track.id, offset);
@@ -1085,6 +1392,7 @@ async function playTrack(id: string): Promise<void> {
   musicState.position = offset;
   startTicker();
   updateBed();
+  if (changed) updateMediaMetadata();
   updateMediaSession();
   if (changed) emitChange(track);
 }
@@ -1093,7 +1401,10 @@ function pause(): void {
   token++;
   wantPlaying = false;
   musicState.loading = false;
-  loadingId = null;
+  if (pending) {
+    freeVoice(pending);
+    pending = null;
+  }
   if (current) {
     musicState.position = current.position();
     retire(current, 0.35);
@@ -1101,6 +1412,14 @@ function pause(): void {
   }
   musicState.playing = false;
   updateBed();
+  updateMediaSession();
+}
+
+/** Jump within the current file track (the synth tunes can't seek). */
+function seek(seconds: number): void {
+  if (!current?.seek || !Number.isFinite(seconds)) return;
+  current.seek(seconds);
+  musicState.position = current.position();
   updateMediaSession();
 }
 
@@ -1155,24 +1474,38 @@ musicPort.onDispose(() => {
   token++;
   wantPlaying = false;
   current = null;
+  pending = null;
   fading.clear();
-  buffers.clear();
-  loads.clear();
-  loadingId = null;
+  dropPool();
   if (ticker) clearInterval(ticker);
   ticker = null;
   manifestPromise = null;
   musicState.playing = false;
   musicState.loading = false;
+  musicState.blocked = false;
 });
+
+/* A hidden tab suspends the AudioContext (engine); pause the elements too so
+ * their clocks and downloads don't run on silently, and carry on when shown. */
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      current?.suspend?.();
+      for (const p of fading) p.suspend?.();
+    } else {
+      current?.unsuspend?.();
+      for (const p of fading) p.unsuspend?.();
+    }
+  });
+}
 
 export interface MusicPlayer {
   musicState: MusicState;
   loadMusic: () => Promise<MusicTrack[]>;
-  warm: () => Promise<void>;
   playTrack: (id: string) => Promise<void>;
   pause: () => void;
   resume: () => Promise<void>;
+  seek: (seconds: number) => void;
   next: () => Promise<void>;
   prev: () => Promise<void>;
   shuffle: () => string | null;
@@ -1184,10 +1517,10 @@ export interface MusicPlayer {
 const player: MusicPlayer = {
   musicState,
   loadMusic,
-  warm,
   playTrack,
   pause,
   resume,
+  seek,
   next,
   prev,
   shuffle,
@@ -1218,7 +1551,16 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
         ...(JSON.parse(JSON.stringify(musicState)) as MusicState),
         wantPlaying,
         fading: fading.size,
-        buffered: [...buffers.keys()],
+        voices: pool
+          ? pool.voices.map((v) => ({
+              busy: !!v.owner,
+              paused: v.el.paused,
+              t: Number(v.el.currentTime.toFixed(2)),
+              ready: v.el.readyState,
+              src: v.el.getAttribute("src"),
+              gain: Number(v.gain.gain.value.toFixed(3)),
+            }))
+          : [],
         failed: [...failed],
         positions: Object.fromEntries(positions),
         ticker: ticker !== null,
