@@ -462,7 +462,11 @@ export function slabGeometry(
  * Local frame: corner at the origin, board inside +X/+Z, board faces at
  * y = 0 and y = boardT (rotate about Y to fit other corners).
  */
-export function cornerGuardGeometry(leg: number, boardT: number): THREE.BufferGeometry {
+export function cornerGuardGeometry(
+  leg: number,
+  boardT: number,
+  curveSegments = 6,
+): THREE.BufferGeometry {
   const R = 0.0082; // the slab's rounded corner (radius + bevel)
   const e = 0.001; // sheet thickness
   const plate = (L: number): THREE.Shape => {
@@ -491,7 +495,7 @@ export function cornerGuardGeometry(leg: number, boardT: number): THREE.BufferGe
     const geo = new THREE.ExtrudeGeometry(shape, {
       depth,
       bevelEnabled: false,
-      curveSegments: 6,
+      curveSegments,
     });
     geo.rotateX(Math.PI / 2); // shape y → +z, extrusion → −y
     geo.translate(0, top, 0);
