@@ -1,4 +1,102 @@
 {
   "version": 1,
-  "tracks": []
+  "note": "Built by scripts/prepare-music.mjs; schema in docs/sounds.md (\"Music box tracks\"). title, mood, verse, tint, gain, ambience and loop are yours to edit and survive a rebuild.",
+  "target": "-18 LUFS integrated, limiter -2 dBFS (~ -1.5 dBTP), Opus 96 kbps / AAC 160 kbps stereo 48000 Hz",
+  "tracks": [
+    {
+      "id": "witcher",
+      "title": "The Witcher",
+      "mood": "witcher",
+      "verse": "Wind off the Skellige cliffs, a fiddle by the fire",
+      "files": "music/witcher",
+      "duration": 183.297,
+      "loop": true,
+      "gain": 1,
+      "tint": "#4f7a8c",
+      "ambience": 0.6,
+      "source": "The Witcher.mp3",
+      "measured": {
+        "lufs": -18,
+        "truePeakDb": -2.9,
+        "webmBytes": 2527026,
+        "m4aBytes": 3731294
+      }
+    },
+    {
+      "id": "skyrim",
+      "title": "Skyrim",
+      "mood": "skyrim",
+      "verse": "Snow on the eaves, a hearth in Whiterun",
+      "files": "music/skyrim",
+      "duration": 139.085,
+      "loop": true,
+      "gain": 1,
+      "tint": "#8fa7b8",
+      "ambience": 0.55,
+      "source": "Skyrim.mp3",
+      "measured": {
+        "lufs": -18,
+        "truePeakDb": -4.2,
+        "webmBytes": 1787443,
+        "m4aBytes": 2862035
+      }
+    },
+    {
+      "id": "minecraft",
+      "title": "Minecraft",
+      "mood": "minecraft",
+      "verse": "Soft piano at dusk; the blocks can wait",
+      "files": "music/minecraft",
+      "duration": 308.689,
+      "loop": true,
+      "gain": 1,
+      "tint": "#6fa86a",
+      "ambience": 0.7,
+      "source": "Minecraft.mp3",
+      "measured": {
+        "lufs": -18,
+        "truePeakDb": -4.8,
+        "webmBytes": 3831231,
+        "m4aBytes": 6376872
+      }
+    },
+    {
+      "id": "baldurs-gate-3",
+      "title": "Baldur's Gate 3",
+      "mood": "baldurs-gate-3",
+      "verse": "Dice on the table, a party far from home",
+      "files": "music/baldurs-gate-3",
+      "duration": 161.472,
+      "loop": true,
+      "gain": 1,
+      "tint": "#c08a3e",
+      "ambience": 0.6,
+      "source": "Baldur's Gate 3.mp3",
+      "measured": {
+        "lufs": -18,
+        "truePeakDb": -5,
+        "webmBytes": 2036556,
+        "m4aBytes": 3281527
+      }
+    },
+    {
+      "id": "dragon-age",
+      "title": "Dragon Age",
+      "mood": "dragon-age",
+      "verse": "A tavern bard, a lute, the Inquisition marching on",
+      "files": "music/dragon-age",
+      "duration": 166.975,
+      "loop": true,
+      "gain": 1,
+      "tint": "#9b3b2f",
+      "ambience": 0.6,
+      "source": "Dragon Age.mp3",
+      "measured": {
+        "lufs": -18,
+        "truePeakDb": -5.7,
+        "webmBytes": 2040803,
+        "m4aBytes": 3404057
+      }
+    }
+  ]
 }

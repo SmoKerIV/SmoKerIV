@@ -322,7 +322,17 @@ Totals: 27 slots, 59 files per format; WebM 0.99 MB, M4A 1.57 MB. `public/audio/
 
 The Innkeeper's Music Box (`src/composables/useMusic.ts`) plays songs from `public/audio/music/` on the music bus. They are listed in `public/audio/music/manifest.json`.
 
-Until real files exist, five generative music-box tunes stand in, one per game flavour: `witcher`, `skyrim`, `minecraft`, `baldurs-gate-3`, `dragon-age`. A manifest track with one of those ids replaces that placeholder one-for-one; a track with any other id is added. Real tracks come first, in manifest order, followed by the placeholders nobody has replaced. If a track's file fails to load, the tune for its `mood` plays instead.
+Five tracks are in place, one per game flavour, in this tab order:
+
+| id | Piece | Artist | Album (ID3) | Loop length | Source |
+|---|---|---|---|---|---|
+| `witcher` | The Fields of Ard Skellig | Marcin Przybyłowicz | The Witcher 3: Wild Hunt (Official Soundtrack) | 3:03 | `The Witcher.mp3` |
+| `skyrim` | Secunda (lofi version) | Bits & Hits | Skyrim but it's lofi beats | 2:19 | `Skyrim.mp3` |
+| `minecraft` | Sweden (Caution & Crisis remix) | C418 | Sweden (Caution & Crisis remix) | 5:08 | `Minecraft.mp3` |
+| `baldurs-gate-3` | Main Theme Part I | Borislav Slavov | Baldur's Gate 3 Original Soundtrack | 2:41 | `Baldur's Gate 3.mp3` |
+| `dragon-age` | Dragon Age Inquisition Theme | Trevor Morris | Dragon Age Inquisition (Original Game Soundtrack) | 2:46 | `Dragon Age.mp3` |
+
+These are commercial soundtrack recordings supplied by the site owner, not CC-licensed like the samples above; the raw mp3s stay in `~/Downloads/music/` and only the processed Opus/AAC files are published. The player keeps the five flavour verses (they were written for these pieces). The game-flavoured generative music-box tunes with the same ids are now fallbacks only: a manifest track with one of those ids replaces that tune one-for-one, a track with any other id is added, real tracks come first in manifest order, and if a track's file fails to load the tune for its `mood` plays instead.
 
 ### Adding songs
 

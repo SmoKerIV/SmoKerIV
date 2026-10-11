@@ -2,13 +2,14 @@
  * The Innkeeper's Music Box: a small music player on the engine's music bus.
  *
  * Tracks come from public/audio/music/manifest.json (see docs/sounds.md,
- * "Music box tracks"; built by `pnpm audio:music`). Five generative
- * music-box tunes stand in, one per game: witcher, skyrim, minecraft,
- * baldurs-gate-3, dragon-age. A manifest track with one of those ids replaces
- * that placeholder one-for-one; tracks with new ids are added. Real tracks
- * are listed first (manifest order), then the placeholders still unclaimed.
- * A real track whose file fails to load plays the tune of its `mood` (which
- * defaults to its id when that is a placeholder id).
+ * "Music box tracks"; built by `pnpm audio:music`, which currently ships one
+ * soundtrack piece per game). Five generative music-box tunes back them up,
+ * one per game: witcher, skyrim, minecraft, baldurs-gate-3, dragon-age. A
+ * manifest track with one of those ids replaces that placeholder one-for-one;
+ * tracks with new ids are added. Real tracks are listed first (manifest
+ * order), then the placeholders still unclaimed. A real track whose file
+ * fails to load plays the tune of its `mood` (which defaults to its id when
+ * that is a placeholder id).
  *
  * Graph (per playing track; two exist during a crossfade):
  *   file:  BufferSource -> gain(track.gain) -> out -> music bus
