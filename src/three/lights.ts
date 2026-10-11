@@ -28,13 +28,15 @@ const MOON_INTENSITY_DAY = 1.6;
 const HEMI_INTENSITY_NIGHT = 0.28;
 const HEMI_INTENSITY_DAY = 0.45;
 /** Track tint: how far the fill lights lean toward it at full strength. */
-const MOOD_HEMI_MIX = 0.6;
-const MOOD_HEMI_BOOST = 0.1;
-const MOOD_SPOT_MIX = 0.13;
+const MOOD_HEMI_MIX = 1;
+const MOOD_HEMI_BOOST = 1.8;
+const MOOD_SPOT_MIX = 0.4;
 const MOOD_FILL_MIX = 0.5;
 /** Time constant (s) of the tint glide: settles in about 1.6 s. */
 const MOOD_TAU = 0.4;
 const SPOT_BASE = new THREE.Color(0xffc78e);
+const FIRE_BASE_COLOR = new THREE.Color(0xff7a30);
+const MOOD_FIRE_MIX = 0.3;
 const FILL_BASE = new THREE.Color(0x35241a);
 
 function colorGap(a: THREE.Color, b: THREE.Color): number {
@@ -245,6 +247,7 @@ export class Lights {
     this.hemi.intensity = this.hemiIntensity + a * MOOD_HEMI_BOOST;
     this.keySpot.color.copy(SPOT_BASE).lerp(this.moodColor, a * MOOD_SPOT_MIX);
     this.lowFill.color.copy(FILL_BASE).lerp(this.moodColor, a * MOOD_FILL_MIX);
+    this.fire.color.copy(FIRE_BASE_COLOR).lerp(this.moodColor, a * MOOD_FIRE_MIX);
   }
 
   setReducedMotion(reduced: boolean): void {
