@@ -142,29 +142,99 @@ const AEOLIAN = [0, 2, 3, 5, 7, 8, 10];
 
 const MOODS = {
   witcher: {
-    title: "The Witcher", verse: "Wind off the Skellige cliffs, a fiddle by the fire", tint: "#4f7a8c", ambience: 0.6,
-    root: 74, scale: DORIAN, bpm: 110, beatsPerBar: 2, subdiv: 3, density: 0.7, moves: [-2, -1, -1, 1, 1, 2],
-    style: "walk", bass: "drone", doubleStop: 0.2, chordsA: [0, 6, 0, 4], chordsB: [2, 6, 3, 0], seed: 1101,
+    title: "The Witcher",
+    verse: "Wind off the Skellige cliffs, a fiddle by the fire",
+    tint: "#4f7a8c",
+    ambience: 0.6,
+    root: 74,
+    scale: DORIAN,
+    bpm: 110,
+    beatsPerBar: 2,
+    subdiv: 3,
+    density: 0.7,
+    moves: [-2, -1, -1, 1, 1, 2],
+    style: "walk",
+    bass: "drone",
+    doubleStop: 0.2,
+    chordsA: [0, 6, 0, 4],
+    chordsB: [2, 6, 3, 0],
+    seed: 1101,
   },
   skyrim: {
-    title: "Skyrim", verse: "Snow on the eaves, a hearth in Whiterun", tint: "#8fa7b8", ambience: 0.55,
-    root: 74, scale: MINOR_PENTA, bpm: 70, beatsPerBar: 4, subdiv: 2, density: 0.3, moves: [-3, -2, -2, 2, 2, 3],
-    style: "walk", bass: "fifths", doubleStop: 0.15, chordsA: [0, 3, 0, 4], chordsB: [2, 3, 4, 0], seed: 2203,
+    title: "Skyrim",
+    verse: "Snow on the eaves, a hearth in Whiterun",
+    tint: "#8fa7b8",
+    ambience: 0.55,
+    root: 74,
+    scale: MINOR_PENTA,
+    bpm: 70,
+    beatsPerBar: 4,
+    subdiv: 2,
+    density: 0.3,
+    moves: [-3, -2, -2, 2, 2, 3],
+    style: "walk",
+    bass: "fifths",
+    doubleStop: 0.15,
+    chordsA: [0, 3, 0, 4],
+    chordsB: [2, 3, 4, 0],
+    seed: 2203,
   },
   minecraft: {
-    title: "Minecraft", verse: "Soft piano at dusk; the blocks can wait", tint: "#6fa86a", ambience: 0.7,
-    root: 79, scale: MAJOR, bpm: 66, beatsPerBar: 4, subdiv: 2, density: 0.16, moves: [-4, -2, -1, 1, 2, 3],
-    style: "walk", bass: "roots", doubleStop: 0.05, chordsA: [0, 3, 5, 4], chordsB: [3, 0, 5, 3], seed: 3307,
+    title: "Minecraft",
+    verse: "Soft piano at dusk; the blocks can wait",
+    tint: "#6fa86a",
+    ambience: 0.7,
+    root: 79,
+    scale: MAJOR,
+    bpm: 66,
+    beatsPerBar: 4,
+    subdiv: 2,
+    density: 0.16,
+    moves: [-4, -2, -1, 1, 2, 3],
+    style: "walk",
+    bass: "roots",
+    doubleStop: 0.05,
+    chordsA: [0, 3, 5, 4],
+    chordsB: [3, 0, 5, 3],
+    seed: 3307,
   },
   "baldurs-gate-3": {
-    title: "Baldur's Gate 3", verse: "Dice on the table, a party far from home", tint: "#c08a3e", ambience: 0.6,
-    root: 74, scale: HARMONIC_MINOR, bpm: 84, beatsPerBar: 4, subdiv: 2, density: 0.85, moves: [-1, 1],
-    style: "arp", bass: "roots", doubleStop: 0, chordsA: [0, 5, 3, 4], chordsB: [5, 2, 3, 4], seed: 4409,
+    title: "Baldur's Gate 3",
+    verse: "Dice on the table, a party far from home",
+    tint: "#c08a3e",
+    ambience: 0.6,
+    root: 74,
+    scale: HARMONIC_MINOR,
+    bpm: 84,
+    beatsPerBar: 4,
+    subdiv: 2,
+    density: 0.85,
+    moves: [-1, 1],
+    style: "arp",
+    bass: "roots",
+    doubleStop: 0,
+    chordsA: [0, 5, 3, 4],
+    chordsB: [5, 2, 3, 4],
+    seed: 4409,
   },
   "dragon-age": {
-    title: "Dragon Age", verse: "A tavern bard, a lute, the Inquisition marching on", tint: "#9b3b2f", ambience: 0.6,
-    root: 76, scale: AEOLIAN, bpm: 92, beatsPerBar: 4, subdiv: 2, density: 0.5, moves: [-2, -1, -1, 1, 1, 2],
-    style: "call", bass: "roots", doubleStop: 0.3, chordsA: [0, 5, 6, 0], chordsB: [3, 0, 6, 4], seed: 5501,
+    title: "Dragon Age",
+    verse: "A tavern bard, a lute, the Inquisition marching on",
+    tint: "#9b3b2f",
+    ambience: 0.6,
+    root: 76,
+    scale: AEOLIAN,
+    bpm: 92,
+    beatsPerBar: 4,
+    subdiv: 2,
+    density: 0.5,
+    moves: [-2, -1, -1, 1, 1, 2],
+    style: "call",
+    bass: "roots",
+    doubleStop: 0.3,
+    chordsA: [0, 5, 6, 0],
+    chordsB: [3, 0, 6, 4],
+    seed: 5501,
   },
 } satisfies Record<string, MoodDef>;
 
@@ -175,9 +245,16 @@ const MOOD_KEYS = Object.keys(MOODS) as MusicMood[];
 function placeholderTrack(mood: MusicMood): MusicTrack {
   const m: MoodDef = MOODS[mood];
   return {
-    id: mood, title: m.title, mood, verse: m.verse, tint: m.tint,
+    id: mood,
+    title: m.title,
+    mood,
+    verse: m.verse,
+    tint: m.tint,
     duration: compose(mood).loopSeconds,
-    loop: true, gain: 1, ambience: m.ambience, kind: "synth",
+    loop: true,
+    gain: 1,
+    ambience: m.ambience,
+    kind: "synth",
   };
 }
 
@@ -238,11 +315,20 @@ function compose(mood: MusicMood): Score {
   const lo = n - 2;
   const hi = 2 * n + 1;
   const chordTones = (chord: number) =>
-    [0, 2, 4, n, n + 2, n + 4].map((t) => chord + t).filter((t) => t >= lo && t <= hi);
+    [0, 2, 4, n, n + 2, n + 4]
+      .map((t) => chord + t)
+      .filter((t) => t >= lo && t <= hi);
   const nearest = (tones: number[], deg: number) =>
-    tones.reduce((best, t) => (Math.abs(t - deg) < Math.abs(best - deg) ? t : best), tones[0] ?? n);
+    tones.reduce(
+      (best, t) => (Math.abs(t - deg) < Math.abs(best - deg) ? t : best),
+      tones[0] ?? n,
+    );
 
-  const phrase = (chords: number[], cadence: boolean, vary?: Note[][]): Note[][] => {
+  const phrase = (
+    chords: number[],
+    cadence: boolean,
+    vary?: Note[][],
+  ): Note[][] => {
     const out: Note[][] = [];
     let deg = n + [0, 2, 4][Math.floor(rng() * 3)]!; // start on a tonic-chord tone
     for (let bar = 0; bar < 4; bar++) {
@@ -258,18 +344,33 @@ function compose(mood: MusicMood): Score {
         const downbeat = s === 0;
         const onBeat = s % m.subdiv === 0;
         if (cadence && bar === 3) {
-          if (s === 0) notes.push({ midi: degreeMidi(m, m.root, n), vel: 0.9, bass: false });
+          if (s === 0)
+            notes.push({
+              midi: degreeMidi(m, m.root, n),
+              vel: 0.9,
+              bass: false,
+            });
           out.push(notes);
           continue;
         }
         if (m.style === "arp") {
           // broken chord up and back down, a rest now and then
-          const tones = [0, 2, 4, n, n + 2, n + 4, n + 2, n].map((t) => chord + t);
+          const tones = [0, 2, 4, n, n + 2, n + 4, n + 2, n].map(
+            (t) => chord + t,
+          );
           if (downbeat || rng() < m.density) {
             const d = Math.min(hi + 2, tones[s % tones.length]!);
-            notes.push({ midi: degreeMidi(m, m.root, d - n), vel: downbeat ? 0.8 : onBeat ? 0.6 : 0.5, bass: false });
+            notes.push({
+              midi: degreeMidi(m, m.root, d - n),
+              vel: downbeat ? 0.8 : onBeat ? 0.6 : 0.5,
+              bass: false,
+            });
             if (s === stepsPerBar - 1 && rng() < 0.5) {
-              notes.push({ midi: degreeMidi(m, m.root, nearest(chordTones(chord), deg)), vel: 0.4, bass: false });
+              notes.push({
+                midi: degreeMidi(m, m.root, nearest(chordTones(chord), deg)),
+                vel: 0.4,
+                bass: false,
+              });
             }
           }
           out.push(notes);
@@ -278,14 +379,29 @@ function compose(mood: MusicMood): Score {
         // call-and-response: the answer bar leaves its last beat empty
         const breath = answer && s >= stepsPerBar - m.subdiv;
         const density = answer ? m.density * 0.8 : m.density;
-        if (!breath && (downbeat || rng() < (onBeat ? density + 0.15 : density))) {
+        if (
+          !breath &&
+          (downbeat || rng() < (onBeat ? density + 0.15 : density))
+        ) {
           if (onBeat && rng() < 0.6) deg = nearest(chordTones(chord), deg);
-          else deg = Math.min(hi, Math.max(lo, deg + m.moves[Math.floor(rng() * m.moves.length)]!));
+          else
+            deg = Math.min(
+              hi,
+              Math.max(lo, deg + m.moves[Math.floor(rng() * m.moves.length)]!),
+            );
           const shift = answer ? -2 : 0;
           const base = downbeat ? 0.85 : onBeat ? 0.7 : 0.55;
-          notes.push({ midi: degreeMidi(m, m.root, deg + shift), vel: answer ? base * 0.8 : base, bass: false });
+          notes.push({
+            midi: degreeMidi(m, m.root, deg + shift),
+            vel: answer ? base * 0.8 : base,
+            bass: false,
+          });
           if (downbeat && rng() < m.doubleStop) {
-            notes.push({ midi: degreeMidi(m, m.root, deg + shift - 2), vel: 0.45, bass: false });
+            notes.push({
+              midi: degreeMidi(m, m.root, deg + shift - 2),
+              vel: 0.45,
+              bass: false,
+            });
           }
         }
         out.push(notes);
@@ -302,7 +418,8 @@ function compose(mood: MusicMood): Score {
       const chord = chords[bar]!;
       const bassRoot = m.root - 24;
       const out = notes.slice();
-      const add = (deg: number, vel: number) => out.push({ midi: degreeMidi(m, bassRoot, deg), vel, bass: true });
+      const add = (deg: number, vel: number) =>
+        out.push({ midi: degreeMidi(m, bassRoot, deg), vel, bass: true });
       switch (m.bass) {
         case "drone":
           if (s === 0) add(0, 0.7);
@@ -316,11 +433,13 @@ function compose(mood: MusicMood): Score {
           break;
         case "walking":
           if (s === 0) add(chord, 0.75);
-          else if (s % m.subdiv === 0) add(chord + ((s / m.subdiv) % 2 === 1 ? 4 : n), 0.5);
+          else if (s % m.subdiv === 0)
+            add(chord + ((s / m.subdiv) % 2 === 1 ? 4 : n), 0.5);
           break;
         default:
           if (s === 0) add(chord, 0.75);
-          else if (s === stepsPerBar / 2 && m.beatsPerBar % 2 === 0) add(chord + 4, 0.45);
+          else if (s === stepsPerBar / 2 && m.beatsPerBar % 2 === 0)
+            add(chord + 4, 0.45);
       }
       return out;
     });
@@ -334,10 +453,14 @@ function compose(mood: MusicMood): Score {
   const C1 = phrase(cC, true, C);
   const A2 = phrase(m.chordsA, true, A1);
   const steps = [
-    ...withBass(A, m.chordsA), ...withBass(A1, m.chordsA),
-    ...withBass(B, m.chordsB), ...withBass(B1, m.chordsB),
-    ...withBass(A, m.chordsA), ...withBass(C, cC),
-    ...withBass(C1, cC), ...withBass(A2, m.chordsA),
+    ...withBass(A, m.chordsA),
+    ...withBass(A1, m.chordsA),
+    ...withBass(B, m.chordsB),
+    ...withBass(B1, m.chordsB),
+    ...withBass(A, m.chordsA),
+    ...withBass(C, cC),
+    ...withBass(C1, cC),
+    ...withBass(A2, m.chordsA),
   ];
   const score = { steps, stepSeconds, loopSeconds: steps.length * stepSeconds };
   scoreCache.set(mood, score);
@@ -350,7 +473,10 @@ function compose(mood: MusicMood): Score {
  */
 function stepFactor(step: number, total: number): number {
   const phase = (step % total) / total;
-  return (1 + 0.04 * phase * phase) * (1 + 0.01 * Math.sin((2 * Math.PI * step) / 23));
+  return (
+    (1 + 0.04 * phase * phase) *
+    (1 + 0.01 * Math.sin((2 * Math.PI * step) / 23))
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -362,7 +488,13 @@ function stepFactor(step: number, total: number): number {
  * the cantilever-bar overtones (6.27x, 17.55x) that die fast. 3 ms attack,
  * exponential decay (~1.5-3 s; lower teeth ring longer).
  */
-function tine(c: AudioContext, out: AudioNode, t: number, midi: number, vel: number): void {
+function tine(
+  c: AudioContext,
+  out: AudioNode,
+  t: number,
+  midi: number,
+  vel: number,
+): void {
   const f = 440 * Math.pow(2, (midi - 69) / 12);
   const decay = Math.min(3, Math.max(1.5, 3.4 - (midi - 48) * 0.045));
   const partials: [number, number, number][] = [
@@ -438,7 +570,12 @@ const TICK_MS = 25;
 let lookahead = LOOKAHEAD;
 const XFADE = 1.2;
 
-function synthPlayer(c: AudioContext, track: MusicTrack, offset: number, when: number): Player {
+function synthPlayer(
+  c: AudioContext,
+  track: MusicTrack,
+  offset: number,
+  when: number,
+): Player {
   const score = compose(track.mood);
   const total = score.steps.length;
   const out = c.createGain();
@@ -465,7 +602,8 @@ function synthPlayer(c: AudioContext, track: MusicTrack, offset: number, when: n
     if (stopped) return;
     while (nextTime < now + lookahead) {
       const idx = step % total;
-      for (const n of score.steps[idx]!) tine(c, voiceBus, nextTime, n.midi, n.bass ? n.vel * 0.8 : n.vel);
+      for (const n of score.steps[idx]!)
+        tine(c, voiceBus, nextTime, n.midi, n.bass ? n.vel * 0.8 : n.vel);
       marks.push([nextTime, idx]);
       if (marks.length > 64) marks.shift();
       nextTime += score.stepSeconds * stepFactor(step, total);
@@ -503,7 +641,13 @@ function synthPlayer(c: AudioContext, track: MusicTrack, offset: number, when: n
   };
 }
 
-function filePlayer(c: AudioContext, track: MusicTrack, buffer: AudioBuffer, offset: number, when: number): Player {
+function filePlayer(
+  c: AudioContext,
+  track: MusicTrack,
+  buffer: AudioBuffer,
+  offset: number,
+  when: number,
+): Player {
   const out = c.createGain();
   out.gain.value = 0;
   const g = c.createGain();
@@ -531,10 +675,13 @@ function filePlayer(c: AudioContext, track: MusicTrack, buffer: AudioBuffer, off
       } catch {
         /* already stopped */
       }
-      setTimeout(() => {
-        g.disconnect();
-        out.disconnect();
-      }, Math.max(0, (at - c.currentTime) * 1000) + 100);
+      setTimeout(
+        () => {
+          g.disconnect();
+          out.disconnect();
+        },
+        Math.max(0, (at - c.currentTime) * 1000) + 100,
+      );
     },
   };
   src.addEventListener("ended", () => {
@@ -544,7 +691,12 @@ function filePlayer(c: AudioContext, track: MusicTrack, buffer: AudioBuffer, off
 }
 
 /** Equal-power fade of `param` from its current value to `to` over `seconds`. */
-function equalPower(c: AudioContext, param: AudioParam, to: number, seconds: number): void {
+function equalPower(
+  c: AudioContext,
+  param: AudioParam,
+  to: number,
+  seconds: number,
+): void {
   const now = c.currentTime;
   const from = param.value;
   param.cancelScheduledValues(now);
@@ -557,7 +709,10 @@ function equalPower(c: AudioContext, param: AudioParam, to: number, seconds: num
   for (let i = 0; i < n; i++) {
     const x = i / (n - 1);
     // cos/sin pair: fade-out uses cos from `from`, fade-in sin up to `to`
-    curve[i] = to > from ? from + (to - from) * Math.sin((x * Math.PI) / 2) : to + (from - to) * Math.cos((x * Math.PI) / 2);
+    curve[i] =
+      to > from
+        ? from + (to - from) * Math.sin((x * Math.PI) / 2)
+        : to + (from - to) * Math.cos((x * Math.PI) / 2);
   }
   try {
     param.setValueCurveAtTime(curve, now, seconds);
@@ -619,16 +774,26 @@ function moodFor(id: string): MusicMood {
 }
 
 function parseTrack(raw: ManifestTrack): MusicTrack | null {
-  if (typeof raw.id !== "string" || !raw.id || typeof raw.files !== "string") return null;
-  const mood = isMood(raw.mood) ? raw.mood : isMood(raw.id) ? raw.id : moodFor(raw.id);
+  if (typeof raw.id !== "string" || !raw.id || typeof raw.files !== "string")
+    return null;
+  const mood = isMood(raw.mood)
+    ? raw.mood
+    : isMood(raw.id)
+      ? raw.id
+      : moodFor(raw.id);
   const num = (v: unknown, lo: number, hi: number, d: number) =>
-    typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d;
+    typeof v === "number" && Number.isFinite(v)
+      ? Math.min(hi, Math.max(lo, v))
+      : d;
   return {
     id: raw.id,
     title: typeof raw.title === "string" && raw.title ? raw.title : raw.id,
     mood,
     verse: typeof raw.verse === "string" ? raw.verse : MOODS[mood].verse,
-    tint: typeof raw.tint === "string" && /^#[0-9a-f]{6}$/i.test(raw.tint) ? raw.tint : MOODS[mood].tint,
+    tint:
+      typeof raw.tint === "string" && /^#[0-9a-f]{6}$/i.test(raw.tint)
+        ? raw.tint
+        : MOODS[mood].tint,
     duration: num(raw.duration, 0, 36000, 0),
     loop: raw.loop !== false,
     gain: num(raw.gain, 0, 4, 1),
@@ -658,7 +823,10 @@ function startTicker(): void {
     const gap = (wall - lastTickAt) / 1000;
     lastTickAt = wall;
     // grow at once on a late tick, relax slowly back to LOOKAHEAD
-    lookahead = Math.min(MAX_LOOKAHEAD, Math.max(LOOKAHEAD, gap * 1.5, lookahead * 0.98));
+    lookahead = Math.min(
+      MAX_LOOKAHEAD,
+      Math.max(LOOKAHEAD, gap * 1.5, lookahead * 0.98),
+    );
     const now = c.currentTime;
     current?.tick(now);
     for (const p of fading) p.tick(now);
@@ -685,10 +853,13 @@ function retire(p: Player, seconds: number): void {
   const end = c.currentTime + seconds;
   p.stopAt(end + 0.02);
   fading.add(p);
-  setTimeout(() => {
-    fading.delete(p);
-    stopTickerIfIdle();
-  }, seconds * 1000 + 100);
+  setTimeout(
+    () => {
+      fading.delete(p);
+      stopTickerIfIdle();
+    },
+    seconds * 1000 + 100,
+  );
 }
 
 function rememberBuffer(id: string, buf: AudioBuffer): void {
@@ -715,7 +886,9 @@ function emitChange(t: MusicTrack): void {
 /* ------------------------------------------------------------------ */
 
 function media(): MediaSession | null {
-  return typeof navigator !== "undefined" && "mediaSession" in navigator ? navigator.mediaSession : null;
+  return typeof navigator !== "undefined" && "mediaSession" in navigator
+    ? navigator.mediaSession
+    : null;
 }
 
 function hookMediaSession(): void {
@@ -742,7 +915,11 @@ function updateMediaSession(): void {
   if (!ms) return;
   const t = findTrack(musicState.currentId);
   if (t && typeof MediaMetadata !== "undefined") {
-    ms.metadata = new MediaMetadata({ title: t.title, artist: "The Innkeeper's Music Box", album: t.verse });
+    ms.metadata = new MediaMetadata({
+      title: t.title,
+      artist: "The Innkeeper's Music Box",
+      album: t.verse,
+    });
   }
   ms.playbackState = musicState.playing ? "playing" : t ? "paused" : "none";
   if (t && musicState.duration > 0) {
@@ -750,7 +927,10 @@ function updateMediaSession(): void {
       ms.setPositionState({
         duration: musicState.duration,
         playbackRate: 1,
-        position: Math.min(musicState.duration, Math.max(0, musicState.position)),
+        position: Math.min(
+          musicState.duration,
+          Math.max(0, musicState.position),
+        ),
       });
     } catch {
       /* setPositionState unsupported or out of range */
@@ -775,7 +955,9 @@ function loadMusic(): Promise<MusicTrack[]> {
         if (res.ok && !type.includes("text/html")) {
           const data = (await res.json()) as { tracks?: ManifestTrack[] };
           if (Array.isArray(data.tracks)) {
-            real = data.tracks.map(parseTrack).filter((t): t is MusicTrack => t !== null);
+            real = data.tracks
+              .map(parseTrack)
+              .filter((t): t is MusicTrack => t !== null);
           }
         }
       } catch {
@@ -783,7 +965,10 @@ function loadMusic(): Promise<MusicTrack[]> {
       }
       // real tracks first; a real track with a placeholder's id replaces it
       const taken = new Set(real.map((t) => t.id));
-      musicState.tracks = [...real, ...MOOD_KEYS.filter((k) => !taken.has(k)).map(placeholderTrack)];
+      musicState.tracks = [
+        ...real,
+        ...MOOD_KEYS.filter((k) => !taken.has(k)).map(placeholderTrack),
+      ];
       return musicState.tracks;
     })();
   }
@@ -830,7 +1015,9 @@ async function playTrack(id: string): Promise<void> {
   if (current) retire(current, crossfade ? XFADE : 0.05);
 
   const when = c.currentTime + 0.03;
-  const p = buffer ? filePlayer(c, track, buffer, offset, when) : synthPlayer(c, track, offset, when);
+  const p = buffer
+    ? filePlayer(c, track, buffer, offset, when)
+    : synthPlayer(c, track, offset, when);
   const input = musicPort.input();
   if (input) p.out.connect(input);
   equalPower(c, p.out.gain, 1, crossfade ? XFADE : 0.6);
@@ -972,7 +1159,7 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
     w.__audio.music = {
       api: player,
       state: () => ({
-        ...JSON.parse(JSON.stringify(musicState)) as MusicState,
+        ...(JSON.parse(JSON.stringify(musicState)) as MusicState),
         wantPlaying,
         fading: fading.size,
         buffered: [...buffers.keys()],
