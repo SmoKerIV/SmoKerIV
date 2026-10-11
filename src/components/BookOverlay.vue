@@ -21,7 +21,9 @@ import {
   artifacts,
   contact,
   colophon,
+  runesPage,
 } from "../data/content";
+import RuneQuote from "./RuneQuote.vue";
 import { sceneAudio } from "../composables/useSceneAudio";
 import { useSettings } from "../composables/useSettings";
 import { track } from "../composables/useAnalytics";
@@ -340,19 +342,6 @@ const starPoints = Array.from({ length: 8 }, (_, i) => {
 
 const CIRCLE_RUNES = "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛈᛇᛉᛊ".split("");
 
-const RUNIC_TEXT = [
-  "ᚦᚨ ᛊᛖᚱᚡᛖᚱ ᛁᛊ ᛞᛟᚹᚾ ᚨᚷᚨᛁᚾ᛫ ᚺᚨᚡᛖ ᚤᛟᚢ ᛏᚱᛁᛖᛞ ᛏᚢᚱᚾᛁᚾᚷ ᛁᛏ ᛟᚠᚠ ᚨᚾᛞ ᛟᚾ ᚨᚷᚨᛁᚾ᛬",
-  "ᚾᛖᚡᛖᚱ ᛞᛖᛈᛚᛟᚤ ᛟᚾ ᚨ ᚠᚱᛁᛞᚨᚤ᛫ ᚦᛖ ᛖᛚᛞᛖᚱ ᛞᛖᚡᛊ ᚹᚨᚱᚾᛖᛞ ᚢᛊ᛫ ᚨᚾᛞ ᛊᛏᛁᛚᛚ ᚹᛖ ᛞᛁᛞ᛬",
-  "ᚦᛁᛊ ᛈᚨᚱᚨᚷᚱᚨᛈᚺ ᛁᛊ ᛞᛖᚲᛟᚱᚨᛏᛁᚡᛖ᛫ ᛁᚠ ᚤᛟᚢ ᚲᚨᚾ ᚱᛖᚨᛞ ᛁᛏ᛫ ᛈᛚᛖᚨᛊᛖ ᚨᛈᛈᛚᚤ ᚹᛁᚦᛁᚾ᛬",
-];
-
-const MARGIN_SCRIBBLES = [
-  "do not summon in prod",
-  "works on my grimoire",
-  "TODO: refactor this ritual",
-  "here be segfaults →",
-];
-
 const SPELL_ICONS: Record<number, string> = {
   0: "M12 2c2 4 6 6 6 11a6 6 0 0 1-12 0c0-2 .8-3.6 2-5 .2 1.4 1 2.4 2 3 0-3.5.7-6.5 2-9z", // flame
   1: "M12 3a9 9 0 1 0 9 9M12 7a5 5 0 1 0 5 5M12 11a1 1 0 1 0 1 1", // portal rings
@@ -668,8 +657,9 @@ watch(spread, () => {
                 >{{ rune }}</text>
               </svg>
               <p class="m-0 text-center font-body text-xs italic text-ink-faint">
-                fig. 1 — the summoning circle, as drawn by the author at 3 a.m.
+                {{ runesPage.caption }}
               </p>
+              <p class="scribble m-0 -rotate-2" aria-hidden="true">{{ runesPage.jokeNote }}</p>
             </div>
           </template>
 
@@ -824,20 +814,19 @@ watch(spread, () => {
           <!-- runes: forbidden appendix -->
           <template v-else-if="section === 'runes'">
             <h2>Forbidden Appendix</h2>
-            <div class="relative pr-14">
-              <p v-for="(line, i) in RUNIC_TEXT" :key="i" class="runic">{{ line }}</p>
-              <p class="mt-3 font-body text-xs italic text-ink-faint">
-                translation withheld by order of the Archmage of Legal.
-              </p>
-              <!-- margin scribbles -->
-              <div class="absolute -right-1 top-0 flex w-20 flex-col gap-5" aria-hidden="true">
-                <span
-                  v-for="(scribble, i) in MARGIN_SCRIBBLES"
-                  :key="scribble"
-                  class="scribble"
-                  :style="{ transform: `rotate(${i % 2 === 0 ? -6 : 5}deg)`, marginTop: `${i * 10}px` }"
-                >{{ scribble }}</span>
-              </div>
+            <div class="flex flex-col gap-3">
+              <RuneQuote
+                v-for="(q, i) in runesPage.quotes"
+                :key="q.cite"
+                :runes="q.runes"
+                :english="q.text"
+                :cite="q.cite"
+                :note="q.note"
+                :note-runes="q.noteRunes"
+                :tilt="i % 2 === 0 ? -5 : 4"
+                :instant="settings.reducedMotion"
+              />
+              <p class="m-0 mt-1 font-body text-xs italic text-ink-faint">{{ runesPage.hint }}</p>
             </div>
           </template>
 
@@ -1394,13 +1383,6 @@ watch(spread, () => {
   transform: translateY(-3px);
 }
 
-.runic {
-  font-size: 0.95rem;
-  line-height: 1.85;
-  letter-spacing: 0.06em;
-  color: var(--ink-soft);
-  word-break: break-word;
-}
 .scribble {
   font-family: "EB Garamond", serif;
   font-style: italic;

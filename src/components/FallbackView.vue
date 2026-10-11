@@ -17,6 +17,7 @@ import {
   tomeCopy,
   tomeSections,
 } from "../data/content";
+import RuneQuote from "./RuneQuote.vue";
 
 /** Deep-linked section (#/book/<section>) to scroll to on open. */
 const props = defineProps<{
@@ -377,18 +378,23 @@ const SPELL_ICONS = [
             {{ runesPage.caption }}
           </figcaption>
         </figure>
-        <div class="mt-6">
-          <p v-for="(line, i) in runesPage.text" :key="i" class="runic">{{ line }}</p>
-          <p class="m-0 font-body text-sm italic text-ink-faint">{{ runesPage.translation }}</p>
-        </div>
         <p class="scribbles" aria-hidden="true">
-          <span
-            v-for="(scribble, i) in runesPage.scribbles"
-            :key="scribble"
-            class="scribble"
-            :style="{ transform: `rotate(${i % 2 === 0 ? -3 : 2.5}deg)` }"
-          >{{ scribble }}</span>
+          <span class="scribble" style="transform: rotate(-3deg)">{{ runesPage.jokeNote }}</span>
         </p>
+        <div class="mt-6 flex flex-col gap-4">
+          <RuneQuote
+            v-for="(q, i) in runesPage.quotes"
+            :key="q.cite"
+            :runes="q.runes"
+            :english="q.text"
+            :cite="q.cite"
+            :note="q.note"
+            :note-runes="q.noteRunes"
+            layout="below"
+            :tilt="i % 2 === 0 ? -2 : 1.5"
+          />
+          <p class="m-0 font-body text-sm italic text-ink-faint">{{ runesPage.hint }}</p>
+        </div>
       </section>
 
       <!-- Contact -->
@@ -767,13 +773,9 @@ section {
   height: auto;
   animation: slowSpin 90s linear infinite;
 }
-.tome-page .runic {
-  margin: 0 0 0.35rem;
-  font-size: 1rem;
-  line-height: 1.85;
-  letter-spacing: 0.06em;
-  color: var(--ink-soft);
-  word-break: break-word;
+.tome-page .rq {
+  --rq-rune-size: 1rem;
+  --rq-en-size: 1.1rem;
 }
 .scribbles {
   display: flex;
