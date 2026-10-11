@@ -20,6 +20,11 @@ interface FocusPreset {
    */
   wideShift?: THREE.Vector3;
   narrowShift?: THREE.Vector3;
+  /**
+   * Camera offset on tall phones (blended in by narrowness), when the item
+   * needs a closer or steeper view there than a shift alone can give.
+   */
+  narrowOffset?: THREE.Vector3;
 }
 
 const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -502,6 +507,7 @@ export class CameraRig {
     }
     const preset = FOCUS_PRESETS[item];
     const offset = preset.offset.clone();
+    if (preset.narrowOffset) offset.lerp(preset.narrowOffset, this.narrowness(aspect));
     // Narrow aspects: back the camera off along its offset until the item's
     // width fits the horizontal FOV.
     const halfW = this.halfWidths.get(item);
