@@ -44,8 +44,9 @@
  *   prefetch(slots[] | category)     e.g. prefetch('spells') on console open
  *   configureSlot(slot, tuning)      pitch/gain jitter, latency, voices
  *   playLayer(kind, opts?)           synthesized layer for weak slots: kinds
- *                                    "gust-swell", "metal-clink" (sfx bus;
- *                                    same pan/position/source/gain/delay opts)
+ *                                    "gust-swell", "metal-clink", "pluck"
+ *                                    (sfx bus; same pan/position/source/gain/
+ *                                    delay opts; rate = pitch for "pluck")
  *   playFlip/playThump/playChime/playClack  legacy helpers
  *
  * Nothing plays until the page has had a user activation (the Enter click),
@@ -964,7 +965,7 @@ function hasUserActivation(): boolean {
 /* Synth layers (reinforce weak slots)                                  */
 /* ------------------------------------------------------------------ */
 
-export type LayerKind = "gust-swell" | "metal-clink";
+export type LayerKind = "gust-swell" | "metal-clink" | "pluck";
 
 /** Low brown-noise swell under the gust sample (the sample is only a whistle). */
 const layerGustSwell: SynthVoice = (c, out, t) => {
@@ -1003,15 +1004,47 @@ const layerMetalClink: SynthVoice = (c, out, t) => {
   });
 };
 
+/**
+ * One soft comb-tooth pluck (a music-box notch). The 4th voice argument is
+ * the pitch multiplier here: playLayer passes opts.rate through it.
+ */
+const layerPluck: SynthVoice = (c, out, t, rate) => {
+  const freq = 392 * rate;
+  const osc = c.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.value = freq;
+  const shine = c.createOscillator();
+  shine.type = "sine";
+  shine.frequency.value = freq * 3.01;
+  const lp = c.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 2400;
+  const env = c.createGain();
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.exponentialRampToValueAtTime(0.2, t + 0.004);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+  const shineGain = c.createGain();
+  shineGain.gain.value = 0.18;
+  osc.connect(lp);
+  shine.connect(shineGain).connect(lp);
+  lp.connect(env).connect(out);
+  osc.start(t);
+  shine.start(t);
+  osc.stop(t + 0.5);
+  shine.stop(t + 0.5);
+  return [osc, shine];
+};
+
 const LAYERS: Record<LayerKind, SynthVoice> = {
   "gust-swell": layerGustSwell,
   "metal-clink": layerMetalClink,
+  pluck: layerPluck,
 };
 
 /** Play a synthesized layer on the sfx bus (honours the SFX toggle). */
 async function playLayer(
   kind: LayerKind,
-  opts: Pick<PlayOptions, "gain" | "delay" | "pan" | "position" | "source"> = {},
+  opts: Pick<PlayOptions, "gain" | "delay" | "pan" | "position" | "source" | "rate"> = {},
 ): Promise<SoundHandle | null> {
   if (!hasUserActivation()) return null;
   const c = ensureContext();
@@ -1020,7 +1053,7 @@ async function playLayer(
   const when = c.currentTime + Math.max(0, opts.delay ?? 0);
   const gain = (opts.gain ?? 1) * (placement?.gain ?? 1);
   const g = voiceChain(c, buses.sfx, gain, placement?.pan ?? null);
-  const handle = makeHandle(kind === "gust-swell" ? "gust" : "tankard", "synth", g, LAYERS[kind](c, g, when, 1));
+  const handle = makeHandle(kind === "gust-swell" ? "gust" : "tankard", "synth", g, LAYERS[kind](c, g, when, opts.rate ?? 1));
   stats.synth++;
   logPlay(`layer:${kind}`, "synth", gain, opts);
   return handle;
@@ -1276,7 +1309,7 @@ export interface AudioEngine {
   play: (slot: SlotName, opts?: PlayOptions) => Promise<SoundHandle | null>;
   playLayer: (
     kind: LayerKind,
-    opts?: Pick<PlayOptions, "gain" | "delay" | "pan" | "position" | "source">,
+    opts?: Pick<PlayOptions, "gain" | "delay" | "pan" | "position" | "source" | "rate">,
   ) => Promise<SoundHandle | null>;
   startLoop: (slot: SlotName, opts?: LoopOptions) => Promise<boolean>;
   stopLoop: (slot: SlotName, fadeMs?: number) => void;
