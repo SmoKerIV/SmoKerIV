@@ -136,7 +136,7 @@ function build(src, id, loop) {
 function encode(wav, base) {
   const webm = `${base}.webm`
   const m4a = `${base}.m4a`
-  ff('-i', wav, '-ac', '2', '-ar', String(SR), '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, '-vbr', 'on', '-compression_level', '10', '-application', 'audio', webm)
+  ff('-i', wav, '-ac', '2', '-ar', String(SR), '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, '-vbr', 'on', '-compression_level', '10', '-application', 'audio', '-cues_to_front', '1', webm)
   ff('-i', wav, '-ac', '2', '-ar', String(SR), '-c:a', 'aac', '-b:a', `${AAC_KBPS}k`, '-movflags', '+faststart', m4a)
   return { webm, m4a }
 }
