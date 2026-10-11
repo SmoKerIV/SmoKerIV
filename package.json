@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "audio:music": "node scripts/prepare-music.mjs"
   },
   "dependencies": {
     "@fontsource/cinzel": "^5.3.0",

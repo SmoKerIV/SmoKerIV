@@ -30,6 +30,14 @@ All portfolio content is managed in a single file: `src/data/content.ts`. Edit t
 
 For a plain text fallback, append `?flat=1` to the URL to load a simplified, non-interactive version.
 
+## Music
+
+The Innkeeper's Music Box plays your own songs. Drop audio files into `~/Downloads/music/` and run:
+```bash
+pnpm audio:music
+```
+This trims silence, normalises loudness to -18 LUFS, makes seamless loops, encodes Opus/WebM and AAC/M4A into `public/audio/music/`, and updates `public/audio/music/manifest.json`. Name a file after a placeholder (`The Witcher`, `Skyrim`, `Minecraft`, `Baldur's Gate 3`, `Dragon Age`) to replace its generated tune. Options and the manifest fields are documented in `docs/sounds.md` under "Music box tracks". Needs ffmpeg with libopus.
+
 ## Project Layout
 
 - **src/three/** — Three.js scene setup, procedural geometry, and rendering logic

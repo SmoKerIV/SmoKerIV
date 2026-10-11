@@ -317,3 +317,43 @@ Totals: 27 slots, 59 files per format; WebM 0.99 MB, M4A 1.57 MB. `public/audio/
 - **gust**: the source is a soft interior wind whistle, not a hard rush; layer with synthesized filtered noise for a stronger gust.
 - **dice**: wood and polyhedral-on-wood hits, no resin. Randomize pitch to fake variety. dice-3/-4 include one small second bounce.
 - **tankard-1** (kyles) is clipped at the source (0 dBFS), kept for its weight.
+
+## Music box tracks
+
+The Innkeeper's Music Box (`src/composables/useMusic.ts`) plays songs from `public/audio/music/` on the music bus. They are listed in `public/audio/music/manifest.json`.
+
+Until real files exist, five generative music-box tunes stand in, one per game flavour: `witcher`, `skyrim`, `minecraft`, `baldurs-gate-3`, `dragon-age`. A manifest track with one of those ids replaces that placeholder one-for-one; a track with any other id is added. Real tracks come first, in manifest order, followed by the placeholders nobody has replaced. If a track's file fails to load, the tune for its `mood` plays instead.
+
+### Adding songs
+
+1. Put the songs (wav, flac, mp3, ogg, m4a, opus, aiff or webm) in `~/Downloads/music/`. The file name sets the title and the id. Name a file after a placeholder to replace it: `The Witcher.mp3`, `Skyrim.flac`, `Minecraft.wav`, `Baldur's Gate 3.mp3`, `Dragon Age.ogg`.
+2. Run `pnpm audio:music`.
+3. Edit the new entries in `public/audio/music/manifest.json` (verse, tint, mood, ambience, gain) if you want. Your edits are kept on the next run.
+
+Options: `--only id1,id2` rebuilds only those ids. `--once id` makes a song that doesn't loop: it fades out and the player moves on to the next track. `--xfade 4` sets the loop crossfade in seconds. `--src <dir>` (or the `MUSIC_SRC` environment variable) uses another folder. `--keep-work` keeps the intermediate WAVs.
+
+What the script does to each song:
+- decodes it to stereo 48 kHz and trims silence at the start and end (-50 dB peak)
+- makes a loop by crossfading the last 4 s into the start (equal-power, at most 10 % of the song), so the track wraps without a seam
+- gains it to -18 LUFS integrated, then runs a limiter at -2 dBFS sample peak, which comes out at about -1.5 dBTP after encoding
+- encodes Opus 96 kbps stereo in WebM, and AAC 160 kbps in M4A for Safari
+- measures loudness and true peak on the encoded Opus file and prints them
+
+### Manifest schema
+
+`{ "version": 1, "tracks": [ ... ] }`. Each track has these fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | string | Unique slug. A placeholder id (`witcher`, `skyrim`, `minecraft`, `baldurs-gate-3`, `dragon-age`) replaces that tune. |
+| `title` | string | Shown in the player and the OS media controls. |
+| `mood` | string | One of the placeholder ids. Picks the fallback tune. Defaults to `id` when that is a placeholder id. |
+| `verse` | string | One line of flavour text. Also sent as the Media Session album. |
+| `files` | string | Base path under `/audio/` without an extension, `music/<id>`. `.webm` is tried first, then `.m4a`. |
+| `duration` | number | Seconds, for display before decoding. The player uses the decoded length. |
+| `loop` | boolean | `true` loops seamlessly. `false` plays once, then `next()`. |
+| `gain` | number | Linear gain on top of the music volume, 0 to 4 (default 1). |
+| `tint` | string | `#rrggbb` accent for the player UI and the 3D music box. |
+| `ambience` | number | Ambience level while this track plays, 0 to 1 (placeholders use 0.55 to 0.7). |
+
+The script also writes `source` (the original file name) and `measured` (`lufs`, `truePeakDb`, `webmBytes`, `m4aBytes`). The player ignores both.
