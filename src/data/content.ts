@@ -300,22 +300,59 @@ export const contactLines = [
   { kind: "Scrying mirror", label: contact.instagram.label, href: contact.instagram.url },
 ];
 
+/** Letter-by-letter Elder Futhark transliteration ("th" is one rune). */
+const RUNE_MAP: Record<string, string> = {
+  a: "ᚨ", b: "ᛒ", c: "ᚲ", d: "ᛞ", e: "ᛖ", f: "ᚠ", g: "ᚷ", h: "ᚺ", i: "ᛁ",
+  j: "ᛃ", k: "ᚲ", l: "ᛚ", m: "ᛗ", n: "ᚾ", o: "ᛟ", p: "ᛈ", q: "ᚲᚹ", r: "ᚱ",
+  s: "ᛊ", t: "ᛏ", u: "ᚢ", v: "ᚡ", w: "ᚹ", x: "ᚲᛊ", y: "ᚤ", z: "ᛉ",
+};
+
+/** English to runes: commas/colons become ᛫, sentence ends become ᛬. */
+export function runify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/th/g, "ᚦ")
+    .replace(/[,;:]/g, "᛫")
+    .replace(/[.!?]/g, "᛬")
+    .replace(/[a-z]/g, (c) => RUNE_MAP[c] ?? c)
+    .replace(/[^ᚠ-ᛪ᛫᛬ ]/g, "");
+}
+
+const RUNE_QUOTES = [
+  {
+    text: "To go wrong in one's own way is better than to go right in someone else's.",
+    note: "— Dostoevsky, Crime and Punishment",
+    cite: "Fyodor Dostoevsky, Crime and Punishment",
+  },
+  {
+    text: "The struggle itself toward the heights is enough to fill a man's heart.",
+    note: "— Camus, The Myth of Sisyphus",
+    cite: "Albert Camus, The Myth of Sisyphus",
+  },
+  {
+    text: "One must still have chaos in oneself to be able to give birth to a dancing star.",
+    note: "— Nietzsche, Zarathustra",
+    cite: "Friedrich Nietzsche, Thus Spoke Zarathustra",
+  },
+  {
+    text: "Now I have neither happiness nor unhappiness. Everything passes.",
+    note: "— Dazai, No Longer Human",
+    cite: "Osamu Dazai, No Longer Human",
+  },
+];
+
 /** The decorative rune page ("Forbidden Appendix"). */
 export const runesPage = {
   circle: "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛈᛇᛉᛊ",
   caption: "fig. 1 — the summoning circle, as drawn by the author at 3 a.m.",
-  text: [
-    "ᚦᚨ ᛊᛖᚱᚡᛖᚱ ᛁᛊ ᛞᛟᚹᚾ ᚨᚷᚨᛁᚾ᛫ ᚺᚨᚡᛖ ᚤᛟᚢ ᛏᚱᛁᛖᛞ ᛏᚢᚱᚾᛁᚾᚷ ᛁᛏ ᛟᚠᚠ ᚨᚾᛞ ᛟᚾ ᚨᚷᚨᛁᚾ᛬",
-    "ᚾᛖᚡᛖᚱ ᛞᛖᛈᛚᛟᚤ ᛟᚾ ᚨ ᚠᚱᛁᛞᚨᚤ᛫ ᚦᛖ ᛖᛚᛞᛖᚱ ᛞᛖᚡᛊ ᚹᚨᚱᚾᛖᛞ ᚢᛊ᛫ ᚨᚾᛞ ᛊᛏᛁᛚᛚ ᚹᛖ ᛞᛁᛞ᛬",
-    "ᚦᛁᛊ ᛈᚨᚱᚨᚷᚱᚨᛈᚺ ᛁᛊ ᛞᛖᚲᛟᚱᚨᛏᛁᚡᛖ᛫ ᛁᚠ ᚤᛟᚢ ᚲᚨᚾ ᚱᛖᚨᛞ ᛁᛏ᛫ ᛈᛚᛖᚨᛊᛖ ᚨᛈᛈᛚᚤ ᚹᛁᚦᛁᚾ᛬",
-  ],
-  translation: "translation withheld by order of the Archmage of Legal.",
-  scribbles: [
-    "do not summon in prod",
-    "works on my grimoire",
-    "TODO: refactor this ritual",
-    "here be segfaults →",
-  ],
+  hint: "hover, tap or focus a line to read it in the common tongue.",
+  /** Unobtrusive joke scribble beside the circle. */
+  jokeNote: "do not summon in prod",
+  quotes: RUNE_QUOTES.map((q) => ({
+    ...q,
+    runes: runify(q.text),
+    noteRunes: `—\u00a0${runify(q.note.replace(/^— /, ""))}`,
+  })),
 };
 
 /* ------------------------------------------------------------------ */
