@@ -34,8 +34,10 @@ import type { ToastPayload } from "./components/DiceToast.vue";
    time it renders (console / ledger on open, parchment page for flat mode). */
 const loadConsole = () => import("./components/IncantationConsole.vue");
 const loadSettings = () => import("./components/SettingsPanel.vue");
+const loadMusicBox = () => import("./components/MusicBoxPanel.vue");
 const IncantationConsole = defineAsyncComponent(loadConsole);
 const SettingsPanel = defineAsyncComponent(loadSettings);
+const MusicBoxPanel = defineAsyncComponent(loadMusicBox);
 const FallbackView = defineAsyncComponent(
   () => import("./components/FallbackView.vue"),
 );
@@ -99,6 +101,8 @@ const bookOpen = ref(false);
 const bookSection = ref<BookSection>("cover");
 const settingsOpen = ref(false);
 const consoleOpen = ref(false);
+/** The Innkeeper's Music Box player; closing it never stops the music. */
+const musicPanelOpen = ref(false);
 /** matrix3d transforms pinning the DOM ink onto the 3D pages. */
 const pageTransforms = ref<BookPageScreenTransforms | null>(null);
 /** Mobile / coarse pointer: the tome opens as a plain scrollable page. */
@@ -228,11 +232,13 @@ const events: SceneEvents = {
   },
   onReady: () => {
     sceneReady.value = true;
+    syncMusicScene();
     // Warm the on-demand panels once the scene is up so the first open
     // doesn't wait on the network.
     const warm = () => {
       void loadSettings().catch(() => undefined);
       void loadConsole().catch(() => undefined);
+      void loadMusicBox().catch(() => undefined);
     };
     if ("requestIdleCallback" in window) requestIdleCallback(warm);
     else setTimeout(warm, 2000);
@@ -280,6 +286,8 @@ const events: SceneEvents = {
     }
     if (item !== "spellbook") track("item_focus", { item });
     hoveredItem.value = null;
+    // Any other curio takes the camera away from the box: the player yields.
+    if (item !== "musicbox") musicPanelOpen.value = false;
     restoreItem = keyboardHighlighting ? item : null;
     // Re-clicks on the already-focused item (candle snuffing) must not
     // hide the card — focusItem is idempotent and won't settle again.
@@ -288,11 +296,18 @@ const events: SceneEvents = {
       focusCardShown.value = false;
       sceneAudio.itemFocus(item);
     }
+    // Re-opening the box we are already looking at: no new zoom to wait for.
+    if (item === "musicbox" && refocus) musicPanelOpen.value = true;
     focusedItem.value = item;
     appPhase.value = "focused";
     scene?.focusItem(item);
   },
   onFocusSettled: (item) => {
+    if (item === "musicbox") {
+      musicPanelOpen.value = true;
+    } else {
+      musicPanelOpen.value = false;
+    }
     if (item === "spellbook") {
       bookOpen.value = true;
     } else if (item === null) {
@@ -372,6 +387,7 @@ function closeBook(): void {
 function unfocus(): void {
   // Hide the payoff card the instant the return flight starts.
   focusCardShown.value = false;
+  musicPanelOpen.value = false;
   scene?.focusItem(null);
 }
 
@@ -640,6 +656,13 @@ function onKeydown(event: KeyboardEvent): void {
     }
     return;
   }
+  if (musicPanelOpen.value && event.key === "Escape" && !settingsOpen.value) {
+    // First Esc closes the player (the camera stays on the box); the next
+    // one returns to the table like any other focused curio.
+    event.preventDefault();
+    musicPanelOpen.value = false;
+    return;
+  }
   if (settingsOpen.value && event.key === "Escape") {
     event.preventDefault();
     settingsOpen.value = false;
@@ -763,6 +786,84 @@ watch(consoleOpen, (open) => {
   audio.prefetch("spells");
 });
 
+/* ------------------------------------------------------------------ */
+/* Music box ↔ scene                                                    */
+/* ------------------------------------------------------------------ */
+/** HUD button: zoom to the 3D box (the panel opens when it settles). */
+function openMusicBox(): void {
+  if (focusedItem.value === "musicbox") {
+    musicPanelOpen.value = true;
+    return;
+  }
+  if (scene && (appPhase.value === "table" || appPhase.value === "focused")) {
+    events.onSelect?.("musicbox");
+    return;
+  }
+  // No 3D scene to zoom into: open the player directly.
+  musicPanelOpen.value = true;
+}
+
+function syncMusicTint(): void {
+  if (!scene) return;
+  const state = music.musicState;
+  const current = state.tracks.find((t) => t.id === state.currentId);
+  scene.setMoodTint(state.playing && current ? current.tint : null);
+}
+
+/** Level meter: master-bus RMS → the box's tine glow, ~30 Hz, no allocations. */
+let levelRaf = 0;
+let levelAt = 0;
+let levelSmooth = 0;
+let levelBuf = new Float32Array(2048);
+
+function pumpMusicLevel(now: number): void {
+  levelRaf = requestAnimationFrame(pumpMusicLevel);
+  if (now - levelAt < 33) return;
+  levelAt = now;
+  // Reading the tome (or a hidden tab): the box isn't on screen.
+  if (!scene || document.hidden || bookOpen.value || flatBookOpen.value) return;
+  const analyser = music.getMusicAnalyser();
+  if (!analyser) return;
+  if (levelBuf.length < analyser.fftSize) levelBuf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(levelBuf);
+  let sum = 0;
+  for (let i = 0; i < analyser.fftSize; i++) sum += levelBuf[i]! * levelBuf[i]!;
+  // sqrt keeps quiet passages visible (music RMS sits around 0.01-0.04)
+  const target = Math.min(1, Math.sqrt(Math.sqrt(sum / analyser.fftSize)) * 2.4);
+  levelSmooth += (target - levelSmooth) * (target > levelSmooth ? 0.5 : 0.15);
+  scene.setMusicBoxLevel(levelSmooth);
+}
+
+function stopMusicLevel(): void {
+  if (levelRaf) cancelAnimationFrame(levelRaf);
+  levelRaf = 0;
+  levelSmooth = 0;
+  scene?.setMusicBoxLevel(0);
+}
+
+/** Bring a (re)created scene in line with whatever is already playing. */
+function syncMusicScene(): void {
+  if (!scene) return;
+  scene.setMusicBoxPlaying(music.musicState.playing);
+  syncMusicTint();
+  if (music.musicState.playing && !levelRaf) levelRaf = requestAnimationFrame(pumpMusicLevel);
+}
+
+// Play / pause from anywhere (panel, Ledger switch, media keys) moves the box.
+watch(
+  () => music.musicState.playing,
+  (playing) => {
+    scene?.setMusicBoxPlaying(playing);
+    syncMusicTint();
+    if (playing) {
+      if (!levelRaf) levelRaf = requestAnimationFrame(pumpMusicLevel);
+    } else {
+      stopMusicLevel();
+    }
+  },
+);
+watch(() => music.musicState.currentId, syncMusicTint);
+
 /* Hash sync (#/book/<section> while the tome is open) + book analytics */
 watch(
   [bookOpen, bookSection],
@@ -862,6 +963,8 @@ function teardown(): void {
   uninstallUiHover?.();
   uninstallUiHover = null;
   sceneAudio.cancelIdle();
+  if (levelRaf) cancelAnimationFrame(levelRaf);
+  levelRaf = 0;
   window.removeEventListener("keydown", onKeydown);
   window.removeEventListener("focusin", onFocusIn);
   window.removeEventListener("pointermove", onPointerMove);
@@ -922,7 +1025,9 @@ import.meta.hot?.dispose(() => teardown());
         :ambience-on="settings.ambienceOn"
         :book-open="bookOpen"
         :cv-url="cvUrl"
+        :music-playing="music.musicState.playing"
         @toggle-ambience="settings.ambienceOn = !settings.ambienceOn"
+        @open-music="openMusicBox"
         @open-settings="settingsOpen = true"
         @open-console="consoleOpen = true"
       />
@@ -1010,6 +1115,15 @@ import.meta.hot?.dispose(() => teardown());
             @scroll-direction="flatBackHidden = $event === 'down'"
           />
         </div>
+      </Transition>
+
+      <!-- the music box player (opens as the camera settles on the box) -->
+      <Transition name="music-panel">
+        <MusicBoxPanel
+          v-if="musicPanelOpen && !bookOpen"
+          @close="musicPanelOpen = false"
+          @return-to-table="unfocus"
+        />
       </Transition>
 
       <!-- the innkeeper's ledger -->
