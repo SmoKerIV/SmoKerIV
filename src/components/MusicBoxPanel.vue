@@ -268,7 +268,8 @@ const duration = computed(() =>
   onCurrent.value && state.duration ? state.duration : (selected.value?.duration ?? 0),
 );
 /** Downloaded share of the playing file, while it is measurable. */
-const buffered = computed(() => (onCurrent.value ? state.buffered : 0));
+// While loading, currentId still names the previous track: the load is the selected one.
+const buffered = computed(() => (state.loading || onCurrent.value ? state.buffered : 0));
 /** The brass line shows the download until the stream has started, else the position. */
 const downloading = computed(() => state.loading && buffered.value > 0 && buffered.value < 1);
 const loadPct = computed(() => Math.round(buffered.value * 100));
