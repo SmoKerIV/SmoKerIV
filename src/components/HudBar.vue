@@ -7,11 +7,15 @@ defineProps<{
   bookOpen: boolean;
   /** Set only when /baker-cv.pdf actually exists. */
   cvUrl?: string | null;
+  /** The music box is playing: its icon breathes gently. */
+  musicPlaying?: boolean;
 }>();
 
 const emit = defineEmits<{
   "toggle-ambience": [];
   "open-settings": [];
+  /** Focus the 3D music box (or open the player straight away without one). */
+  "open-music": [];
   /** Touch devices can't type `sudo` — give them a door to the spells. */
   "open-console": [];
 }>();
@@ -39,7 +43,7 @@ const emit = defineEmits<{
     </div>
 
     <!-- Icon buttons -->
-    <div class="flex items-center gap-1.5">
+    <div class="hud-icons flex items-center gap-1.5">
       <button
         type="button"
         class="hud-btn"
@@ -54,6 +58,29 @@ const emit = defineEmits<{
           <path d="M12 21c-3.9 0-6.5-2.6-6.5-6 0-1.6.6-3 1.5-4" />
           <path d="M18.5 15c0 1.9-.8 3.4-2 4.4" />
           <line v-if="!ambienceOn" x1="3" y1="3" x2="21" y2="21" stroke-width="1.8" />
+        </svg>
+      </button>
+
+      <button
+        type="button"
+        class="hud-btn"
+        :class="{ 'hud-playing': musicPlaying }"
+        :aria-label="
+          musicPlaying
+            ? 'Open the Innkeeper\'s Music Box (music playing)'
+            : 'Open the Innkeeper\'s Music Box'
+        "
+        data-tip="The Innkeeper's Music Box"
+        @click="emit('open-music')"
+      >
+        <!-- music box: a lidded case with a winding key and a falling note -->
+        <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 11h16v8.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5z" />
+          <path d="M5 11 6.2 8h11.6L19 11" />
+          <path d="M9 15.5h6" />
+          <path d="M20 14.5h2.2" />
+          <path d="M12 5.2V2.6l2.6.7" />
+          <circle cx="11" cy="5.4" r="1.1" fill="currentColor" stroke="none" />
         </svg>
       </button>
 
@@ -154,6 +181,26 @@ const emit = defineEmits<{
   color: var(--arcane);
 }
 
+/* Music playing: a slow brass breath around the button. */
+.hud-playing {
+  color: var(--gold-bright);
+  border-color: rgba(212, 175, 94, 0.55);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hud-playing {
+    animation: hud-breathe 2.6s ease-in-out infinite;
+  }
+}
+@keyframes hud-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(212, 175, 94, 0);
+  }
+  50% {
+    box-shadow: 0 0 12px 1px rgba(212, 175, 94, 0.45);
+  }
+}
+
 /* Tooltip: a small night-toned label above the button, anchored to the
    button's right edge so the rightmost one never leaves the screen.
    Only for hover and keyboard focus (touch has no hover). */
@@ -199,6 +246,18 @@ const emit = defineEmits<{
   }
   .hud-btn::after {
     display: none;
+  }
+}
+
+/* Six round buttons (music box included) need to fit a 390px phone beside
+   the name plate: tighten the row a notch, keep the targets near 44px. */
+@media (pointer: coarse) and (max-width: 420px) {
+  .hud-icons {
+    gap: 0.25rem;
+  }
+  .hud-btn {
+    width: 2.6rem;
+    height: 2.6rem;
   }
 }
 
