@@ -1,0 +1,37 @@
+# Umami analytics — stats.bakeralazzawi.com
+# Compose project /srv/apps/umami, container `umami` bound to 127.0.0.1:3002.
+
+server {
+    server_name stats.bakeralazzawi.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3002;
+        include snippets/proxy-backend.conf;
+    }
+
+    access_log /var/log/nginx/stats-bakeralazzawi.access.log;
+    error_log  /var/log/nginx/stats-bakeralazzawi.error.log;
+
+    listen 443 ssl; # managed by Certbot
+    listen [::]:443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/stats.bakeralazzawi.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/stats.bakeralazzawi.com/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+}
+
+
+server {
+    if ($host = stats.bakeralazzawi.com) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    listen [::]:80;
+    server_name stats.bakeralazzawi.com;
+    return 404; # managed by Certbot
+
+
+}
