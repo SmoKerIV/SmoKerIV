@@ -25,3 +25,8 @@ dist-ssr
 
 # Licensed 3D models (Envato) — never commit, deploy only
 public/models/
+
+# Raw song drops never ship; the player uses processed .webm/.m4a only
+public/audio/music/*.mp3
+public/audio/music/*.wav
+public/audio/music/*.flac
