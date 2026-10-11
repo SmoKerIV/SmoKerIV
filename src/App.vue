@@ -286,8 +286,13 @@ const events: SceneEvents = {
     }
     if (item !== "spellbook") track("item_focus", { item });
     hoveredItem.value = null;
-    // Any other curio takes the camera away from the box: the player yields.
-    if (item !== "musicbox") musicPanelOpen.value = false;
+    if (item === "musicbox") {
+      // The zoom to the box takes a moment: use it to fetch the tune.
+      void music.warm();
+    } else {
+      // Any other curio takes the camera away from the box: the player yields.
+      musicPanelOpen.value = false;
+    }
     restoreItem = keyboardHighlighting ? item : null;
     // Re-clicks on the already-focused item (candle snuffing) must not
     // hide the card — focusItem is idempotent and won't settle again.

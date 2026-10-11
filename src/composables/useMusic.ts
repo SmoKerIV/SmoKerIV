@@ -19,9 +19,13 @@
  *
  * API (const music = useMusic()):
  *   musicState                 reactive { tracks, currentId, playing,
- *                              position (s), duration (s), loading }
+ *                              position (s), duration (s), loading,
+ *                              loadProgress (download 0..1 while loading) }
  *   loadMusic(): Promise<MusicTrack[]>   fetch the manifest (no audio decoded
  *                              until a track is chosen); needs the Enter gesture
+ *   warm(): Promise<void>      loadMusic() + start downloading the track play
+ *                              would start with (current, else first); call it
+ *                              when the box is opened so the seal feels instant
  *   playTrack(id): Promise<void>  ~1.2 s equal-power crossfade from the current
  *                              track; first start of a track this session joins
  *                              in progress at Date.now()/1000 % duration, later
@@ -79,6 +83,8 @@ export interface MusicState {
   position: number;
   duration: number;
   loading: boolean;
+  /** Download progress of the loading track, 0..1 (stays at 1 while decoding). */
+  loadProgress: number;
 }
 
 interface ManifestTrack {
@@ -734,6 +740,7 @@ export const musicState = reactive<MusicState>({
   position: 0,
   duration: 0,
   loading: false,
+  loadProgress: 0,
 });
 
 const manifestUrl = `${musicPort.base}music/manifest.json`;
@@ -746,6 +753,10 @@ const positions = new Map<string, number>();
 /** Decoded file buffers, at most MAX_BUFFERS, oldest first. */
 const buffers = new Map<string, AudioBuffer>();
 const MAX_BUFFERS = 2;
+/** In-flight file loads by track id: play and warm() share one download. */
+const loads = new Map<string, Promise<AudioBuffer | null>>();
+/** Track whose download the UI is waiting on (drives loadProgress). */
+let loadingId: string | null = null;
 /** Tracks whose file failed: they play their mood's melody instead. */
 const failed = new Set<string>();
 /** Bumped by every play/pause so a slow decode can't start a stale track. */
@@ -871,6 +882,37 @@ function rememberBuffer(id: string, buf: AudioBuffer): void {
   }
 }
 
+/** Decoded file for the track (cached + deduped); null if synth or failed. */
+function loadBuffer(track: MusicTrack): Promise<AudioBuffer | null> {
+  const hit = buffers.get(track.id);
+  if (hit) return Promise.resolve(hit);
+  if (track.kind !== "file" || !track.files || failed.has(track.id)) {
+    return Promise.resolve(null);
+  }
+  const pending = loads.get(track.id);
+  if (pending) return pending;
+  const p = musicPort
+    .decode(track.files, (fraction) => {
+      if (track.id === loadingId) musicState.loadProgress = fraction;
+    })
+    .then((buf) => {
+      rememberBuffer(track.id, buf);
+      return buf;
+    })
+    .catch(() => {
+      failed.add(track.id);
+      return null;
+    })
+    .finally(() => loads.delete(track.id));
+  loads.set(track.id, p);
+  return p;
+}
+
+function saveData(): boolean {
+  const nav = navigator as Navigator & { connection?: { saveData?: boolean } };
+  return nav.connection?.saveData === true;
+}
+
 function emitChange(t: MusicTrack): void {
   for (const cb of listeners) {
     try {
@@ -976,6 +1018,17 @@ function loadMusic(): Promise<MusicTrack[]> {
   return manifestPromise;
 }
 
+/**
+ * Start downloading the track the seal would play (current, else the first)
+ * so pressing it feels instant. Skipped on Save-Data connections.
+ */
+async function warm(): Promise<void> {
+  if (!musicPort.context() || saveData()) return;
+  const tracks = await loadMusic();
+  const track = findTrack(musicState.currentId) ?? tracks[0];
+  if (track) void loadBuffer(track);
+}
+
 async function playTrack(id: string): Promise<void> {
   const c = musicPort.context();
   if (!c) return;
@@ -990,18 +1043,15 @@ async function playTrack(id: string): Promise<void> {
   const settings = useSettings();
   if (!settings.musicOn) settings.musicOn = true;
 
-  let buffer: AudioBuffer | null = null;
-  if (track.kind === "file" && track.files && !failed.has(track.id)) {
-    buffer = buffers.get(track.id) ?? null;
-    if (!buffer) {
-      musicState.loading = true;
-      try {
-        buffer = await musicPort.decode(track.files);
-        rememberBuffer(track.id, buffer);
-      } catch {
-        failed.add(track.id);
-      }
-      if (my === token) musicState.loading = false;
+  let buffer = buffers.get(track.id) ?? null;
+  if (!buffer && track.kind === "file" && !failed.has(track.id)) {
+    musicState.loading = true;
+    musicState.loadProgress = 0;
+    loadingId = track.id;
+    buffer = await loadBuffer(track);
+    if (my === token) {
+      musicState.loading = false;
+      loadingId = null;
     }
   }
   if (my !== token) return; // superseded while decoding
@@ -1043,6 +1093,7 @@ function pause(): void {
   token++;
   wantPlaying = false;
   musicState.loading = false;
+  loadingId = null;
   if (current) {
     musicState.position = current.position();
     retire(current, 0.35);
@@ -1106,6 +1157,8 @@ musicPort.onDispose(() => {
   current = null;
   fading.clear();
   buffers.clear();
+  loads.clear();
+  loadingId = null;
   if (ticker) clearInterval(ticker);
   ticker = null;
   manifestPromise = null;
@@ -1116,6 +1169,7 @@ musicPort.onDispose(() => {
 export interface MusicPlayer {
   musicState: MusicState;
   loadMusic: () => Promise<MusicTrack[]>;
+  warm: () => Promise<void>;
   playTrack: (id: string) => Promise<void>;
   pause: () => void;
   resume: () => Promise<void>;
@@ -1130,6 +1184,7 @@ export interface MusicPlayer {
 const player: MusicPlayer = {
   musicState,
   loadMusic,
+  warm,
   playTrack,
   pause,
   resume,

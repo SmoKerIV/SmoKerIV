@@ -27,7 +27,7 @@ const tabsEl = ref<HTMLElement | null>(null);
 useFocusTrap(rootEl, { initialFocus: () => crankEl.value });
 
 onMounted(() => {
-  void music.loadMusic();
+  void music.warm();
 });
 
 /* ------------------------------------------------------------------ */
@@ -267,9 +267,15 @@ const position = computed(() => (onCurrent.value ? state.position : 0));
 const duration = computed(() =>
   onCurrent.value && state.duration ? state.duration : (selected.value?.duration ?? 0),
 );
-const progress = computed(() =>
-  duration.value > 0 ? Math.min(1, position.value / duration.value) : 0,
+/** The brass line shows the download while it is measurable, else the position. */
+const downloading = computed(
+  () => state.loading && state.loadProgress > 0 && state.loadProgress < 1,
 );
+const loadPct = computed(() => Math.round(state.loadProgress * 100));
+const progress = computed(() => {
+  if (downloading.value) return state.loadProgress;
+  return duration.value > 0 ? Math.min(1, position.value / duration.value) : 0;
+});
 
 const announcement = ref("");
 watch(
@@ -386,12 +392,20 @@ onBeforeUnmount(() => {
       <!-- elapsed / total with a slim brass line -->
       <div class="mbp-time" :aria-busy="busy">
         <span class="mbp-clock" aria-hidden="true">{{ clock(position) }}</span>
-        <div class="mbp-line" :class="{ 'mbp-line-loading': busy }" aria-hidden="true">
+        <div class="mbp-line" :class="{ 'mbp-line-loading': busy && !downloading }" aria-hidden="true">
           <i :style="{ transform: `scaleX(${progress})` }" />
         </div>
-        <span class="mbp-clock" aria-hidden="true">{{ state.loading ? "loading…" : clock(duration) }}</span>
+        <span class="mbp-clock" aria-hidden="true">
+          {{ state.loading ? (downloading ? `${loadPct}%` : "loading…") : clock(duration) }}
+        </span>
         <span class="sr-only">
-          {{ state.loading ? "Loading" : `${clock(position)} of ${clock(duration)}` }}
+          {{
+            state.loading
+              ? downloading
+                ? `Loading, ${loadPct}% downloaded`
+                : "Loading"
+              : `${clock(position)} of ${clock(duration)}`
+          }}
         </span>
       </div>
 
