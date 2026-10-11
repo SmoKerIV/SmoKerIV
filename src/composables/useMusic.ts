@@ -950,7 +950,8 @@ function loadMusic(): Promise<MusicTrack[]> {
     manifestPromise = (async () => {
       let real: MusicTrack[] = [];
       try {
-        const res = await fetch(manifestUrl);
+        // /audio/ is served with a 30-day max-age; revalidate so a new deploy's tracks show up.
+        const res = await fetch(manifestUrl, { cache: "no-cache" });
         const type = res.headers.get("content-type") ?? "";
         if (res.ok && !type.includes("text/html")) {
           const data = (await res.json()) as { tracks?: ManifestTrack[] };

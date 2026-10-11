@@ -474,7 +474,8 @@ function loadManifest(): Promise<Manifest | null> {
   if (!manifestPromise) {
     manifestPromise = (async () => {
       try {
-        const res = await fetch(`${audioBase}manifest.json`);
+        // /audio/ is served with a 30-day max-age; revalidate so a new deploy's slots show up.
+        const res = await fetch(`${audioBase}manifest.json`, { cache: "no-cache" });
         if (!res.ok) throw new Error(`manifest ${res.status}`);
         const data = (await res.json()) as Manifest;
         if (!data || typeof data.slots !== "object") throw new Error("bad manifest");
