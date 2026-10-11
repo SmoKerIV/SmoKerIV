@@ -33,12 +33,18 @@
  *
  * API (const music = useMusic()):
  *   musicState                 reactive { tracks, currentId, playing,
- *                              position (s), duration (s), loading, blocked }
+ *                              position (s), duration (s), loading, blocked,
+ *                              buffered }
  *                              blocked = the browser refused play(); stay
  *                              paused and show "tap to play"
  *   loadMusic(): Promise<MusicTrack[]>   fetch the manifest (no audio is
  *                              fetched until a track is chosen); needs the
  *                              Enter gesture
+ *   warm(id?): Promise<void>   loadMusic() + preload="auto" on an idle pooled
+ *                              element for that track (else the current, else
+ *                              the first) so the seal starts from buffered data;
+ *                              playTrack adopts the element. Skipped on
+ *                              Save-Data, or while that track already plays.
  *   playTrack(id): Promise<void>  ~1.2 s equal-power crossfade from the current
  *                              track; first start of a track this session joins
  *                              in progress at Date.now()/1000 % duration, later
@@ -101,6 +107,11 @@ export interface MusicState {
   loading: boolean;
   /** play() was refused by the browser (autoplay policy): offer "tap to play". */
   blocked: boolean;
+  /**
+   * How much of the active (or starting) file is downloaded, 0..1: the end of
+   * the buffered range around the playhead over the duration. 0 for synth.
+   */
+  buffered: number;
 }
 
 interface ManifestTrack {
@@ -690,6 +701,8 @@ interface Voice {
   /** Who holds the voice right now (null = idle). */
   owner: object | null;
   off: (() => void)[];
+  /** Set while the element is preloading a track for warm(). */
+  warm?: { id: string; url: string };
 }
 
 let pool: { ctx: AudioContext; voices: Voice[] } | null = null;
@@ -723,6 +736,19 @@ function listen(v: Voice, type: string, fn: (e: Event) => void): void {
   v.off.push(() => v.el.removeEventListener(type, fn));
 }
 
+/** Downloaded fraction of the file: end of the buffered range at the playhead. */
+function bufferedFraction(el: HTMLAudioElement, fallbackDuration: number): number {
+  const d = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : fallbackDuration;
+  if (!(d > 0)) return 0;
+  const r = el.buffered;
+  let end = 0;
+  for (let i = 0; i < r.length; i++) {
+    if (el.currentTime >= r.start(i) - 0.25 && el.currentTime <= r.end(i) + 0.25) end = r.end(i);
+  }
+  if (!end && r.length) end = r.end(r.length - 1);
+  return Math.min(1, end / d);
+}
+
 /** Drop listeners and free the connection (MDN: removeAttribute('src') + load()). */
 function resetVoice(v: Voice): void {
   for (const fn of v.off) fn();
@@ -733,6 +759,7 @@ function resetVoice(v: Voice): void {
   el.removeAttribute("src");
   el.preload = "none";
   el.load();
+  v.warm = undefined;
   v.gain.disconnect();
   v.gain.gain.cancelScheduledValues(0);
   v.gain.gain.value = 0;
@@ -777,6 +804,7 @@ function startVoice(
   url: string,
   track: MusicTrack,
   wanted: (duration: number) => number,
+  adopt = false,
 ): Promise<{ offset: number; duration: number }> {
   const el = v.el;
   return new Promise((resolve, reject) => {
@@ -788,7 +816,7 @@ function startVoice(
     };
     listen(v, "error", () => reject(new Error(`media error ${el.error?.code ?? "?"}`)));
     listen(v, "playing", () => resolve({ offset, duration: known() }));
-    listen(v, "loadedmetadata", () => {
+    const onMeta = () => {
       const d = known();
       if (!(track.duration > 0)) {
         offset = wanted(d);
@@ -799,10 +827,27 @@ function startVoice(
         offset = wanted(d);
         el.currentTime = offset;
       }
+    };
+    listen(v, "loadedmetadata", onMeta);
+    listen(v, "progress", () => {
+      if (pending === v) musicState.buffered = bufferedFraction(el, track.duration);
     });
-    el.preload = "auto";
     el.loop = false;
-    el.src = url;
+    if (adopt) {
+      // warm() already set src and started the download: keep it going
+      el.preload = "auto";
+      v.warm = undefined;
+      if (el.error) {
+        reject(new Error(`media error ${el.error.code}`));
+        return;
+      }
+      if (el.readyState >= 1) onMeta();
+      musicState.buffered = bufferedFraction(el, track.duration);
+      if (!(track.duration > 0)) return;
+    } else {
+      el.preload = "auto";
+      el.src = url;
+    }
     if (track.duration > 0) {
       offset = wanted(track.duration);
       el.currentTime = offset;
@@ -949,8 +994,13 @@ function filePlayer(
     listen(v, "timeupdate", () => {
       if (mine() && current === player) musicState.position = player.position();
     });
+    listen(v, "progress", () => {
+      if (mine() && current === player) musicState.buffered = bufferedFraction(v.el, track.duration);
+    });
     listen(v, "seeked", () => {
-      if (mine()) player.onSync?.();
+      if (!mine()) return;
+      if (current === player) musicState.buffered = bufferedFraction(v.el, track.duration);
+      player.onSync?.();
     });
     listen(v, "ended", () => {
       if (!mine()) return;
@@ -1028,6 +1078,7 @@ export const musicState = reactive<MusicState>({
   duration: 0,
   loading: false,
   blocked: false,
+  buffered: 0,
 });
 
 const manifestUrl = `${musicPort.base}music/manifest.json`;
@@ -1050,6 +1101,8 @@ const listeners = new Set<(t: MusicTrack) => void>();
 let mediaHooked = false;
 /** The element a still-starting playTrack holds (freed if it is superseded). */
 let pending: Voice | null = null;
+/** The idle element warm() is preloading a track into. */
+let warmVoice: Voice | null = null;
 
 function findTrack(id: string | null): MusicTrack | undefined {
   return id ? musicState.tracks.find((t) => t.id === id) : undefined;
@@ -1278,6 +1331,52 @@ function loadMusic(): Promise<MusicTrack[]> {
   return manifestPromise;
 }
 
+function saveData(): boolean {
+  const nav = navigator as Navigator & { connection?: { saveData?: boolean } };
+  return nav.connection?.saveData === true;
+}
+
+/**
+ * Start downloading a track on an idle pooled element (preload="auto") so
+ * pressing play starts from buffered data: the track given, else the current
+ * one, else the first. Does nothing on Save-Data connections, for synth
+ * tracks, while that track already plays, or when no element is free.
+ */
+async function warm(id?: string): Promise<void> {
+  const c = musicPort.context();
+  if (!c || saveData()) return;
+  const tracks = await loadMusic();
+  const track = findTrack(id ?? musicState.currentId) ?? tracks[0];
+  if (!track || track.kind !== "file" || !track.files || failed.has(track.id)) return;
+  if (current?.track.id === track.id && musicState.playing) return;
+  if (pending || warmVoice?.warm?.id === track.id) return;
+  if (warmVoice) {
+    freeVoice(warmVoice);
+    warmVoice = null;
+  }
+  const owner = {};
+  const v = leaseVoice(c, owner, false);
+  if (!v) return;
+  const url = streamUrl(track, musicPort.formats()[0]!);
+  v.warm = { id: track.id, url };
+  warmVoice = v;
+  listen(v, "error", () => {
+    // missing file or unsupported container: drop it, playTrack will try both
+    if (warmVoice === v) warmVoice = null;
+    freeVoice(v);
+  });
+  v.el.preload = "auto";
+  v.el.loop = false;
+  v.el.src = url;
+  // the likely join point, so the first range request already lands near it
+  if (track.duration > 0) {
+    const t = positions.has(track.id)
+      ? positions.get(track.id)! % track.duration
+      : (Date.now() / 1000) % track.duration;
+    v.el.currentTime = t;
+  }
+}
+
 async function playTrack(id: string): Promise<void> {
   const c = musicPort.context();
   if (!c) return;
@@ -1296,6 +1395,13 @@ async function playTrack(id: string): Promise<void> {
     freeVoice(pending);
     pending = null;
   }
+  // a preloaded element for this very track is adopted below; any other is freed
+  let warmed: Voice | null = null;
+  if (warmVoice) {
+    if (warmVoice.warm?.id === track.id && warmVoice.owner) warmed = warmVoice;
+    else freeVoice(warmVoice);
+    warmVoice = null;
+  }
 
   // join in progress: the bard is already playing
   const wanted = (duration: number): number =>
@@ -1310,14 +1416,21 @@ async function playTrack(id: string): Promise<void> {
   const owner = {};
   if (track.kind === "file" && track.files && !failed.has(track.id)) {
     musicState.loading = true;
-    voice = leaseVoice(c, owner, true);
+    musicState.buffered = 0;
+    if (warmed) {
+      warmed.owner = owner;
+      for (const fn of warmed.off) fn();
+      warmed.off = [];
+    }
+    voice = warmed ?? leaseVoice(c, owner, true);
     pending = voice;
     let refused = false;
     if (voice) {
       for (const fmt of musicPort.formats()) {
         try {
           url = streamUrl(track, fmt);
-          const r = await startVoice(voice, url, track, wanted);
+          const adopt = !!voice.warm && voice.warm.url === url;
+          const r = await startVoice(voice, url, track, wanted, adopt);
           offset = r.offset;
           duration = r.duration;
           break;
@@ -1475,6 +1588,7 @@ musicPort.onDispose(() => {
   wantPlaying = false;
   current = null;
   pending = null;
+  warmVoice = null;
   fading.clear();
   dropPool();
   if (ticker) clearInterval(ticker);
@@ -1483,6 +1597,7 @@ musicPort.onDispose(() => {
   musicState.playing = false;
   musicState.loading = false;
   musicState.blocked = false;
+  musicState.buffered = 0;
 });
 
 /* A hidden tab suspends the AudioContext (engine); pause the elements too so
@@ -1502,6 +1617,7 @@ if (typeof document !== "undefined") {
 export interface MusicPlayer {
   musicState: MusicState;
   loadMusic: () => Promise<MusicTrack[]>;
+  warm: (id?: string) => Promise<void>;
   playTrack: (id: string) => Promise<void>;
   pause: () => void;
   resume: () => Promise<void>;
@@ -1517,6 +1633,7 @@ export interface MusicPlayer {
 const player: MusicPlayer = {
   musicState,
   loadMusic,
+  warm,
   playTrack,
   pause,
   resume,

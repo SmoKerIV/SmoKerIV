@@ -27,7 +27,7 @@ const tabsEl = ref<HTMLElement | null>(null);
 useFocusTrap(rootEl, { initialFocus: () => crankEl.value });
 
 onMounted(() => {
-  void music.loadMusic();
+  void music.warm();
 });
 
 /* ------------------------------------------------------------------ */
@@ -267,9 +267,15 @@ const position = computed(() => (onCurrent.value ? state.position : 0));
 const duration = computed(() =>
   onCurrent.value && state.duration ? state.duration : (selected.value?.duration ?? 0),
 );
-const progress = computed(() =>
-  duration.value > 0 ? Math.min(1, position.value / duration.value) : 0,
-);
+/** Downloaded share of the playing file, while it is measurable. */
+const buffered = computed(() => (onCurrent.value ? state.buffered : 0));
+/** The brass line shows the download until the stream has started, else the position. */
+const downloading = computed(() => state.loading && buffered.value > 0 && buffered.value < 1);
+const loadPct = computed(() => Math.round(buffered.value * 100));
+const progress = computed(() => {
+  if (downloading.value) return buffered.value;
+  return duration.value > 0 ? Math.min(1, position.value / duration.value) : 0;
+});
 
 const announcement = ref("");
 watch(
@@ -324,6 +330,8 @@ onBeforeUnmount(() => {
         type="button"
         :aria-pressed="i === selectedIndex"
         @click="pickTab(i)"
+        @pointerenter="music.warm(track.id)"
+        @focus="music.warm(track.id)"
       >
         {{ track.title }}
       </button>
@@ -386,12 +394,29 @@ onBeforeUnmount(() => {
       <!-- elapsed / total with a slim brass line -->
       <div class="mbp-time" :aria-busy="busy">
         <span class="mbp-clock" aria-hidden="true">{{ clock(position) }}</span>
-        <div class="mbp-line" :class="{ 'mbp-line-loading': busy }" aria-hidden="true">
+        <div class="mbp-line" :class="{ 'mbp-line-loading': busy && !downloading }" aria-hidden="true">
+          <b :style="{ transform: `scaleX(${buffered})` }" />
           <i :style="{ transform: `scaleX(${progress})` }" />
         </div>
-        <span class="mbp-clock" aria-hidden="true">{{ state.loading ? "loading…" : state.blocked ? "tap play" : clock(duration) }}</span>
+        <span class="mbp-clock" aria-hidden="true">
+          {{
+            state.loading
+              ? downloading
+                ? `${loadPct}%`
+                : "loading…"
+              : state.blocked
+                ? "tap play"
+                : clock(duration)
+          }}
+        </span>
         <span class="sr-only">
-          {{ state.loading ? "Loading" : `${clock(position)} of ${clock(duration)}` }}
+          {{
+            state.loading
+              ? downloading
+                ? `Loading, ${loadPct}% downloaded`
+                : "Loading"
+              : `${clock(position)} of ${clock(duration)}`
+          }}
         </span>
       </div>
 
@@ -769,6 +794,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: rgba(20, 12, 8, 0.65);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.mbp-line b {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  background: rgba(226, 193, 114, 0.22);
 }
 .mbp-line i {
   position: absolute;
