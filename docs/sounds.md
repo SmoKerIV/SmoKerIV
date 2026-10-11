@@ -350,6 +350,10 @@ Totals: 27 slots, 59 files per format; WebM 0.99 MB, M4A 1.57 MB. `public/audio/
 
 The Innkeeper's Music Box (`src/composables/useMusic.ts`) plays songs from `public/audio/music/` on the music bus. They are listed in `public/audio/music/manifest.json`.
 
+Songs stream. Nothing is fetched or decoded when the page loads or the manifest is read; when a track is chosen the player points one of two pooled `<audio>` elements at `/audio/music/<id>.webm` (or `.m4a`), and the browser starts playing as soon as it has a little data while the rest downloads. Each element is wired once into the music bus with `createMediaElementSource`, so volume, spell ducking, the ambience dip and the analyser all apply as before. The first start of a track joins in progress, so the browser makes a range request for the bytes at that point instead of reading from 0. This relies on the server answering `Range` requests with `206 Partial Content`, which nginx does for static files (the `location /audio/` block needs no change). Measured with the shipped tracks over a 1.6 Mbps / 150 ms link, a track starts playing in about 1.1 to 1.5 s with 0.25 to 0.7 MB downloaded, where fetching a whole 2 to 4 MB file first would take 9 to 19 s at that speed.
+
+The second element is used for crossfades between tracks (1.2 s, equal power) and for the loop seam: a looping track with under 0.5 s left fades into a copy of itself started at 0 on the other element, because one element's own `loop` can leave a small gap. If the browser refuses `play()` (autoplay policy), `musicState.blocked` is set and the panel shows "tap play". The webm files are written with the Cues index at the front (`-cues_to_front 1`), which saves the browser one extra range request before it can seek.
+
 Five tracks are in place, one per game flavour, in this tab order:
 
 | id               | Piece                           | Artist              | Album (ID3)                                       | Loop length | Source                |
@@ -389,7 +393,7 @@ What the script does to each song:
 | `mood`     | string  | One of the placeholder ids. Picks the fallback tune. Defaults to `id` when that is a placeholder id.                 |
 | `verse`    | string  | One line of flavour text. Also sent as the Media Session album.                                                      |
 | `files`    | string  | Base path under `/audio/` without an extension, `music/<id>`. `.webm` is tried first, then `.m4a`.                   |
-| `duration` | number  | Seconds, for display before decoding. The player uses the decoded length.                                            |
+| `duration` | number  | Seconds. Used to pick the join-in-progress point before the file's metadata arrives; the element's own duration takes over once it loads. |
 | `loop`     | boolean | `true` loops seamlessly. `false` plays once, then `next()`.                                                          |
 | `gain`     | number  | Linear gain on top of the music volume, 0 to 4 (default 1).                                                          |
 | `tint`     | string  | `#rrggbb` accent for the player UI and the 3D music box.                                                             |
