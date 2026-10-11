@@ -324,7 +324,7 @@ export const runesPage = {
 /* ------------------------------------------------------------------ */
 
 /** Items that show a focus card: the tome opens instead, the die just rolls. */
-export type FocusCardItem = Exclude<ItemId, "spellbook" | "dice">;
+export type FocusCardItem = Exclude<ItemId, "spellbook" | "dice" | "musicbox">;
 
 export interface CardEntry {
   primary: string;

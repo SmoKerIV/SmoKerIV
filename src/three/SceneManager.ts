@@ -8,6 +8,7 @@ import {
   type CandleParts,
   type ISceneManager,
   type ItemId,
+  type MusicBoxParts,
   type Quality,
   type SceneEvents,
   type ScenePoint,
@@ -19,6 +20,7 @@ import {
   buildCandle,
   buildCandleFromModel,
   buildDice,
+  buildMusicBox,
   buildPotions,
   buildRoom,
   buildRuneCircle,
@@ -30,6 +32,7 @@ import {
   buildTable,
   buildTableProps,
   buildTankard,
+  MusicBoxController,
 } from "./models";
 import { CameraRig } from "./CameraRig";
 import { Lights } from "./lights";
@@ -56,6 +59,7 @@ import { potionMaps } from "./models/potion";
 import { scrollMaps } from "./models/scroll";
 import { tankardMaps } from "./models/tankard";
 import { spellbookMaps } from "./models/spellbookLook";
+import { musicBoxMaps } from "./models/musicBox";
 import { DicePhysics, measureObstacle } from "./dicePhysics";
 import type { ObstacleSpec } from "./dicePhysics";
 import { Interaction, type InteractionEvents } from "./interaction";
@@ -234,6 +238,7 @@ const TEXTURE_WARMUPS: (() => unknown)[] = [
   scrollMaps,
   tankardMaps,
   spellbookMaps,
+  musicBoxMaps,
   makeRuneCircleTexture,
   makeDotTexture,
   wallMaps,
@@ -352,6 +357,9 @@ const LAYOUT: Record<ItemId, Placement> & { candleB: Placement } = {
   dice: { x: 0.05, z: 0.3, rotY: 0.6 },
   tankard: { x: 0.45, z: -0.55, rotY: -0.5 },
   candle: { x: -0.95, z: -0.4, rotY: 0 },
+  // Back-left, between the candle and the potions; turned a little toward
+  // the viewer so the keyhole front and the winding key both read.
+  musicbox: { x: -0.727, z: -0.53, rotY: 0.15 },
   candleB: { x: 0.95, z: -0.45, rotY: 0 },
 };
 
@@ -448,6 +456,15 @@ export class SceneManager implements ISceneManager {
    *  layer stays untouched (and rock-solid) once the camera settles. */
   private lastPageTransforms: BookPageScreenTransforms | null = null;
   private unregisterBookReading: (() => void) | null = null;
+
+  /** Music box movement + lid (null until the stage exists). */
+  private musicBox: MusicBoxController | null = null;
+  /** World sphere around the open box (in-view test for the spin). */
+  private readonly musicBoxSphere = new THREE.Sphere();
+  private readonly viewFrustum = new THREE.Frustum();
+  private readonly viewProj = new THREE.Matrix4();
+  /** setMusicBoxPlaying() before the stage existed. */
+  private pendingMusicPlaying = false;
 
   private diceRolling = false;
   private dicePhysics: DicePhysics | null = null;
@@ -651,6 +668,13 @@ export class SceneManager implements ISceneManager {
     } else if (this.bookOpen) {
       waits.push(this.playBookClose());
     }
+    const box = this.musicBox;
+    if (box && item === "musicbox") {
+      // The lid lifts once the camera is about halfway in.
+      waits.push(box.setLidOpen(true, this.settings.reducedMotion ? 0 : 0.55));
+    } else if (box?.lidOpen && !box.isPlaying) {
+      waits.push(box.setLidOpen(false));
+    }
 
     void Promise.all(waits).then(() => {
       if (token !== this.focusToken || this.disposed) return;
@@ -680,6 +704,22 @@ export class SceneManager implements ISceneManager {
       ? hit.sub(camera.position)
       : camera.getWorldDirection(new THREE.Vector3());
     physics.roll({ reducedMotion: this.settings.reducedMotion, aim });
+  }
+
+  setMusicBoxPlaying(playing: boolean): void {
+    const box = this.musicBox;
+    if (!box) {
+      this.pendingMusicPlaying = playing;
+      return;
+    }
+    box.setPlaying(playing);
+    if (playing) void box.setLidOpen(true);
+    else if (this._focused !== "musicbox") void box.setLidOpen(false);
+    this.renderSoon = true;
+  }
+
+  setMusicBoxLevel(level: number): void {
+    this.musicBox?.setLevel(level);
   }
 
   castFireball(): void {
@@ -991,6 +1031,7 @@ export class SceneManager implements ISceneManager {
     this.renderSoon = true;
     this.rig.setReducedMotion(reduced);
     this.lights.setReducedMotion(reduced);
+    if (this.musicBox) this.musicBox.reducedMotion = reduced;
     this.updateMothVisibility();
   }
 
@@ -1064,6 +1105,7 @@ export class SceneManager implements ISceneManager {
       this.fireball = null;
     }
     this.dicePhysics?.dispose();
+    this.musicBox?.dispose();
     // Sources of the cloned props (clones in the scene share their GPU
     // resources; disposing twice is harmless).
     this.models.disposeSources();
@@ -1265,6 +1307,7 @@ export class SceneManager implements ISceneManager {
       dice: buildDice,
       tankard: buildTankard,
       candle,
+      musicbox: buildMusicBox,
     };
 
     const entries = Object.entries(builders) as [ItemId, () => THREE.Group][];
@@ -1329,6 +1372,19 @@ export class SceneManager implements ISceneManager {
     });
     this.mothAnchor.copy(MOTH_ANCHORS[0]);
 
+    const musicBox = this.itemGroups.get("musicbox");
+    const musicParts = musicBox?.userData.parts as MusicBoxParts | undefined;
+    if (musicBox && musicParts) {
+      this.musicBox = new MusicBoxController(musicParts);
+      this.musicBox.reducedMotion = this.settings.reducedMotion;
+      // Sphere around the box with its lid standing open.
+      const bounds = new THREE.Box3().setFromObject(musicBox);
+      bounds.getBoundingSphere(this.musicBoxSphere);
+      this.musicBoxSphere.center.y += 0.06;
+      this.musicBoxSphere.radius += 0.06;
+      if (this.pendingMusicPlaying) this.setMusicBoxPlaying(true);
+    }
+
     const dice = this.itemGroups.get("dice");
     if (dice) this.createDicePhysics(dice, table, candleB);
 
@@ -1367,12 +1423,15 @@ export class SceneManager implements ISceneManager {
     const shield = group("shield");
     const scroll = group("scroll");
     const tankard = group("tankard");
+    const musicBox = group("musicbox");
     const potion = group("potion");
     const candle = group("candle");
     if (sword) add(measureObstacle(sword, "box"));
     if (shield) add(measureObstacle(shield, "cylinder"));
     if (scroll) add(measureObstacle(scroll, "box"));
     if (tankard) add(measureObstacle(tankard, "box"));
+    // Measured with the lid closed (an open lid stands well above a roll).
+    if (musicBox) add(measureObstacle(musicBox, "box"));
     // One cylinder per bottle, so the die can roll between them.
     if (potion) {
       for (const bottle of potion.children) add(measureObstacle(potion, "cylinder", bottle));
@@ -2225,6 +2284,7 @@ export class SceneManager implements ISceneManager {
     return (
       this.bookTl !== null ||
       this.pageFlipTween !== null ||
+      (this.musicBox?.lidMoving ?? false) ||
       (this.dicePhysics?.isRolling ?? false) ||
       now < this.shadowBusyUntil
     );
@@ -2242,8 +2302,22 @@ export class SceneManager implements ISceneManager {
       gsap.isTweening(this.moodProxy) ||
       gsap.isTweening(this.lightningProxy) ||
       gsap.isTweening(this.runeProxy) ||
-      gsap.isTweening(this.bookOpenProxy)
+      gsap.isTweening(this.bookOpenProxy) ||
+      this.musicBoxSpinningInView()
     );
+  }
+
+  /**
+   * A turning movement needs the full frame rate, but only while it is on
+   * screen: off-screen (or while reading the tome) it keeps the throttle
+   * and simply steps at the reduced rate.
+   */
+  private musicBoxSpinningInView(): boolean {
+    if (!this.musicBox?.spinning || this.reading) return false;
+    const camera = this.rig.camera;
+    this.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    this.viewFrustum.setFromProjectionMatrix(this.viewProj);
+    return this.viewFrustum.intersectsSphere(this.musicBoxSphere);
   }
 
   /**
@@ -2287,6 +2361,7 @@ export class SceneManager implements ISceneManager {
     this.room?.update(elapsed, delta, this.lights.fireLevel, this.settings.reducedMotion);
     this.particles.update(delta, elapsed);
     this.dicePhysics?.update(delta);
+    this.musicBox?.update(delta);
     this.updateIdleLife(elapsed);
     this.interaction?.update();
 

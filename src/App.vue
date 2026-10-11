@@ -89,7 +89,7 @@ const focusCardShown = ref(false);
 /** The tome opens its own overlay and the die never takes focus. */
 const focusCardItem = computed<FocusCardItem | null>(() => {
   const item = focusedItem.value;
-  if (!item || item === "spellbook" || item === "dice") return null;
+  if (!item || item === "spellbook" || item === "dice" || item === "musicbox") return null;
   return item;
 });
 
@@ -494,6 +494,7 @@ const CURIO_ORDER: ItemId[] = [
   "scroll",
   "dice",
   "tankard",
+  "musicbox",
   "candle",
 ];
 

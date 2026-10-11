@@ -85,6 +85,16 @@ const FOCUS_PRESETS: Record<ItemId, FocusPreset> = {
   dice: { offset: v3(0, 0.32, 0.42), targetOffset: v3(0, 0.02, 0) },
   tankard: { offset: v3(-0.06, 0.4, 0.62), targetOffset: v3(0, 0.08, 0) },
   candle: { offset: v3(0.14, 0.34, 0.48), targetOffset: v3(0, 0.1, 0) },
+  // The opened box from the front-right, slid toward the upper-left on
+  // wide screens (the player panel takes the right-hand column) and into
+  // the top half on phones (the panel covers the bottom ~45%).
+  musicbox: {
+    offset: v3(0.1, 0.36, 0.4),
+    targetOffset: v3(0, 0.08, 0),
+    wideShift: v3(0.085, 0.02, 0),
+    narrowShift: v3(0.005, -0.088, 0.035),
+    narrowOffset: v3(0.05, 0.375, 0.25),
+  },
 };
 
 /** Open spread: cover lands left of the spine; center ≈ x −0.24 off the anchor. */

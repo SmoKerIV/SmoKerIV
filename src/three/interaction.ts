@@ -26,6 +26,7 @@ const KEYBOARD_ORDER: ItemId[] = [
   "scroll",
   "dice",
   "tankard",
+  "musicbox",
   "candle",
 ];
 const CLICK_MAX_DIST = 6;

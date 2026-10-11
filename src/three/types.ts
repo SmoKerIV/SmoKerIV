@@ -9,7 +9,8 @@ export type ItemId =
   | "scroll"
   | "dice"
   | "tankard"
-  | "candle";
+  | "candle"
+  | "musicbox";
 
 /** Sections inside the spellbook DOM overlay. */
 export type BookSection =
@@ -213,6 +214,17 @@ export interface ISceneManager {
    * separately). 1 = forward, -1 = back. No-op unless reading.
    */
   flipBookPage(direction: 1 | -1): void;
+  /**
+   * The music box's movement runs while music plays: the lid opens (and
+   * stays open), the cylinder, governor and key spin up/down with an
+   * eased start/stop. Stopping closes the lid unless the box is focused.
+   */
+  setMusicBoxPlaying(playing: boolean): void;
+  /**
+   * Music level 0..1 (e.g. an AnalyserNode RMS), call per frame while
+   * playing: drives a faint warm glow along the comb's tines.
+   */
+  setMusicBoxLevel(level: number): void;
   setQuality(quality: Quality): void;
   setReducedMotion(reduced: boolean): void;
   /** Switch the inn's mood lighting; "auto" follows the visitor's clock. */
@@ -245,6 +257,19 @@ export interface CandleParts {
   flame: THREE.Mesh;
   /** Wax inner-glow uniform (licensed holder only); follows the flame. */
   waxGlow?: { value: number };
+}
+
+export interface MusicBoxParts {
+  /** Hinged at the back edge: rotation.x 0 closed, −MUSIC_BOX_LID_OPEN open. */
+  lid: THREE.Group;
+  /** Pinned cylinder; spins about its local X axis. */
+  cylinder: THREE.Group;
+  /** Winding key on the right side; turns about X. */
+  key: THREE.Group;
+  /** Fly governor (worm + vanes); spins about Y. */
+  fly: THREE.Group;
+  /** Additive glow strip over the comb (opacity follows the music level). */
+  glint: THREE.Mesh;
 }
 
 export const TABLE_SURFACE_Y = 0.95;
@@ -282,5 +307,9 @@ export const ITEM_LABELS: Record<ItemId, { name: string; flavor: string }> = {
   candle: {
     name: "Candle of Focus",
     flavor: "Burns at both ends.",
+  },
+  musicbox: {
+    name: "The Innkeeper's Music Box",
+    flavor: "Lo-fi tavern tunes to quest and code to.",
   },
 };

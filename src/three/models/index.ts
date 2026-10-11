@@ -12,6 +12,7 @@ export { buildPotions } from "./potion";
 export { buildScroll } from "./scroll";
 export { buildDice } from "./dice";
 export { buildTankard } from "./tankard";
+export { buildMusicBox, MusicBoxController } from "./musicBox";
 export { buildCandle, buildCandleFromModel } from "./candle";
 export { buildTableProps } from "./tableProps";
 export { buildRuneCircle } from "./runeCircle";
