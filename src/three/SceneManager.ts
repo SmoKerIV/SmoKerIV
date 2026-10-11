@@ -718,6 +718,12 @@ export class SceneManager implements ISceneManager {
     this.renderSoon = true;
   }
 
+  /** Lean the room's fill light toward a track tint (null = back to neutral). */
+  setMoodTint(hex: string | null, strength = 1): void {
+    this.lights.setMoodTint(hex, strength);
+    this.renderSoon = true;
+  }
+
   setMusicBoxLevel(level: number): void {
     this.musicBox?.setLevel(level);
   }

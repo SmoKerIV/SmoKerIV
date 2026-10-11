@@ -27,6 +27,20 @@ const MOON_INTENSITY_NIGHT = 0.4;
 const MOON_INTENSITY_DAY = 1.6;
 const HEMI_INTENSITY_NIGHT = 0.28;
 const HEMI_INTENSITY_DAY = 0.45;
+/** Track tint: how far the fill lights lean toward it at full strength. */
+const MOOD_HEMI_MIX = 0.6;
+const MOOD_HEMI_BOOST = 0.1;
+const MOOD_SPOT_MIX = 0.13;
+const MOOD_FILL_MIX = 0.5;
+/** Time constant (s) of the tint glide: settles in about 1.6 s. */
+const MOOD_TAU = 0.4;
+const SPOT_BASE = new THREE.Color(0xffc78e);
+const FILL_BASE = new THREE.Color(0x35241a);
+
+function colorGap(a: THREE.Color, b: THREE.Color): number {
+  return Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b);
+}
+
 /** Candles and fire fall to this fraction in full daylight. */
 const FLAME_DAY_DIM = 0.6;
 
@@ -69,6 +83,16 @@ export class Lights {
   /** 0 = night (baseline), 1 = day; tweened by SceneManager. */
   private dayFactor = 0;
   private reducedMotion = false;
+
+  // Track tint (music box): eased toward moodTarget/moodTargetAmt in update().
+  private readonly hemiSky = new THREE.Color(HEMI_SKY_NIGHT);
+  private readonly hemiGround = new THREE.Color(HEMI_GROUND_NIGHT);
+  private hemiIntensity = HEMI_INTENSITY_NIGHT;
+  private readonly moodColor = new THREE.Color();
+  private readonly moodTarget = new THREE.Color();
+  private moodAmount = 0;
+  private moodTargetAmount = 0;
+  private moodActive = false;
 
   // Idle-life state machines, all driven by the render-loop clock.
   private nextGutterAt = 45 + Math.random() * 45;
@@ -188,13 +212,39 @@ export class Lights {
       MOON_INTENSITY_DAY,
       value,
     );
-    this.hemi.color.lerpColors(HEMI_SKY_NIGHT, HEMI_SKY_DAY, value);
-    this.hemi.groundColor.lerpColors(HEMI_GROUND_NIGHT, HEMI_GROUND_DAY, value);
-    this.hemi.intensity = THREE.MathUtils.lerp(
+    this.hemiSky.lerpColors(HEMI_SKY_NIGHT, HEMI_SKY_DAY, value);
+    this.hemiGround.lerpColors(HEMI_GROUND_NIGHT, HEMI_GROUND_DAY, value);
+    this.hemiIntensity = THREE.MathUtils.lerp(
       HEMI_INTENSITY_NIGHT,
       HEMI_INTENSITY_DAY,
       value,
     );
+    this.applyMoodTint();
+  }
+
+  /**
+   * Lean the fill lights toward a track tint (strength 0..1), or back to the
+   * neutral room with strength 0. Eased over ~1.6 s in update(); no lights
+   * are added or toggled.
+   */
+  setMoodTint(hex: string | null, strength = 1): void {
+    if (hex) {
+      this.moodTarget.set(hex);
+      if (this.moodAmount < 0.002) this.moodColor.copy(this.moodTarget);
+      this.moodTargetAmount = THREE.MathUtils.clamp(strength, 0, 1);
+    } else {
+      this.moodTargetAmount = 0;
+    }
+    this.moodActive = true;
+  }
+
+  private applyMoodTint(): void {
+    const a = this.moodAmount;
+    this.hemi.color.copy(this.hemiSky).lerp(this.moodColor, a * MOOD_HEMI_MIX);
+    this.hemi.groundColor.copy(this.hemiGround).lerp(this.moodColor, a * MOOD_HEMI_MIX * 0.6);
+    this.hemi.intensity = this.hemiIntensity + a * MOOD_HEMI_BOOST;
+    this.keySpot.color.copy(SPOT_BASE).lerp(this.moodColor, a * MOOD_SPOT_MIX);
+    this.lowFill.color.copy(FILL_BASE).lerp(this.moodColor, a * MOOD_FILL_MIX);
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -223,6 +273,7 @@ export class Lights {
    */
   get isAnimating(): boolean {
     if (this.impactFlashStart >= 0 || this.flareStart >= 0) return true;
+    if (this.moodActive) return true;
     if (this.gutterIndex >= 0) return true;
     for (const f of this.candleFlickers) if (f.lit !== f.litTarget) return true;
     return false;
@@ -260,6 +311,21 @@ export class Lights {
       } else {
         this.impactFlash.intensity = IMPACT_FLASH_PEAK * (1 - t) * (1 - t);
       }
+    }
+
+    if (this.moodActive) {
+      const k = 1 - Math.exp(-delta / MOOD_TAU);
+      this.moodColor.lerp(this.moodTarget, k);
+      this.moodAmount += (this.moodTargetAmount - this.moodAmount) * k;
+      const settled =
+        Math.abs(this.moodTargetAmount - this.moodAmount) < 0.002 &&
+        (this.moodTargetAmount === 0 || colorGap(this.moodColor, this.moodTarget) < 0.004);
+      if (settled) {
+        this.moodAmount = this.moodTargetAmount;
+        this.moodColor.copy(this.moodTarget);
+        this.moodActive = false;
+      }
+      this.applyMoodTint();
     }
 
     this.updateGutterSchedule(elapsed);
