@@ -36,8 +36,10 @@ onMounted(() => {
 const tracks = computed(() => state.tracks);
 const count = computed(() => tracks.value.length);
 
+/** The tune playing, or the one a switch is starting (its tab stays pressed). */
+const targetId = computed(() => state.pendingId ?? state.currentId);
 const currentIndex = computed(() =>
-  Math.max(0, tracks.value.findIndex((t) => t.id === state.currentId)),
+  Math.max(0, tracks.value.findIndex((t) => t.id === targetId.value)),
 );
 /** Notch chosen with the key / arrow keys but not yet committed. */
 const pendingIndex = ref<number | null>(null);
@@ -48,6 +50,8 @@ const reducedMotion = (): boolean =>
   settings.reducedMotion ||
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+let commitTimer: ReturnType<typeof setTimeout> | null = null;
+
 /** Pentatonic pitch ratios for the notch plucks. */
 const PLUCK_RATES = [1, 1.122, 1.26, 1.498, 1.682, 1.888, 2];
 function pluck(index: number): void {
@@ -57,14 +61,21 @@ function pluck(index: number): void {
   });
 }
 
+/**
+ * The one place the panel asks for a tune: one gesture (tab, crank release,
+ * a rested key) = at most one request, and the tune already playing or
+ * starting is a no-op. The engine coalesces what is left.
+ */
 function commit(index: number): void {
+  if (commitTimer) clearTimeout(commitTimer);
+  commitTimer = null;
   const track = tracks.value[index];
   pendingIndex.value = null;
   if (!track) return;
+  if (track.id === targetId.value && (state.playing || state.loading)) return;
   void music.playTrack(track.id);
 }
 
-let commitTimer: ReturnType<typeof setTimeout> | null = null;
 /** Keyboard stepping: preview at once, play once the finger rests. */
 function step(index: number): void {
   const next = Math.min(count.value - 1, Math.max(0, index));
@@ -76,8 +87,12 @@ function step(index: number): void {
 }
 
 function pickTab(index: number): void {
-  if (commitTimer) clearTimeout(commitTimer);
-  if (index === currentIndex.value && state.playing) return;
+  if (tracks.value[index]?.id === targetId.value && (state.playing || state.loading)) {
+    if (commitTimer) clearTimeout(commitTimer);
+    commitTimer = null;
+    pendingIndex.value = null;
+    return;
+  }
   pluck(index);
   commit(index);
 }
@@ -142,8 +157,9 @@ function pointerAngle(event: PointerEvent): number {
 }
 
 function onCrankDown(event: PointerEvent): void {
-  if (!count.value) return;
+  if (!count.value || dragging.value) return;
   if (commitTimer) clearTimeout(commitTimer);
+  commitTimer = null;
   dragging.value = true;
   dialEl.value?.setPointerCapture(event.pointerId);
   crankEl.value?.focus({ preventScroll: true });
@@ -164,6 +180,7 @@ function onCrankMove(event: PointerEvent): void {
   if (dragging.value) moveKey(event);
 }
 
+/** pointerup and pointercancel both land here: only the first commits. */
 function onCrankUp(): void {
   if (!dragging.value) return;
   dragging.value = false;
