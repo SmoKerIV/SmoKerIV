@@ -11,30 +11,44 @@
  * fails to load plays the tune of its `mood` (which defaults to its id when
  * that is a placeholder id).
  *
- * Real tracks STREAM: nothing is fetched or decoded up front. Two pooled
- * HTMLAudioElements (A/B) are each wired once with createMediaElementSource
- * (the call throws on reuse, so the nodes live as long as the context). A
- * track starts as soon as the browser has enough data (a Range request, 206,
- * for the first bytes, and another when seeking to the join-in-progress
- * point); the rest downloads while it plays. Crossfades and the loop seam
- * use the second element.
+ * Real tracks STREAM: nothing is fetched or decoded up front. Three pooled
+ * HTMLAudioElements are each wired once with createMediaElementSource (the
+ * call throws on reuse, so the nodes live as long as the context): one for
+ * the current track, one for the track crossfading out, one spare for warm(),
+ * the loop seam or the next start. A track starts as soon as the browser has
+ * enough data (a Range request, 206, for the first bytes, and another when
+ * seeking to the join-in-progress point); the rest downloads while it plays.
  *
- * Graph (per playing track; two exist during a crossfade):
- *   file:  <audio> -> MediaElementSource -> voice gain(track.gain) -> out -> music bus
+ * Graph (one file voice or synth current, at most one fading out):
+ *   file:  <audio> -> MediaElementSource -> voice gain -> music bus
  *   synth: tine voices -> voiceBus -> lowpass -> dry ----------> out -> music bus
  *                                           \-> Convolver -> wet /
  *   music bus -> musicDuck (spells) -> master; analyser tapped on the bus.
  *
+ * Switching: every request (tabs, crank, shuffle, next/prev, media keys,
+ * resume) takes a new generation; every async step of a start checks it and
+ * gives its element back when a newer request or a pause came in. Requests
+ * closer together than 150 ms are coalesced (only the last one loads). Each
+ * voice has a state (idle / warming / starting / active / fadingOut / seam)
+ * and a lease bumped on release, so a late listener, timer or play() promise
+ * of an older use can never touch it. When a new track takes over while a
+ * crossfade still runs, the older outgoing voice is cut in 60 ms; starting
+ * any track fades every other synth tune. Gain changes always hold the
+ * value in flight first (cancelAndHoldAtTime, or cancelScheduledValues +
+ * setValueAtTime) so a fade never jumps. Dev builds check these rules after
+ * each transition and console.warn "[music] invariant violated" otherwise.
+ *
  * Looping: a file element has loop=false; when a looping track has under
- * 0.5 s left, the other element (pre-buffered from 0) fades in over that
+ * 0.5 s left, the spare element (pre-buffered from 0) fades in over that
  * overlap while the first fades out ("ping-pong"), because a single element's
- * own `loop` can leave a small gap. If no second element is free it falls
- * back to loop=true.
+ * own `loop` can leave a small gap. While a switch or crossfade is in
+ * progress, or no element is idle, it falls back to loop=true.
  *
  * API (const music = useMusic()):
- *   musicState                 reactive { tracks, currentId, playing,
- *                              position (s), duration (s), loading, blocked,
- *                              buffered }
+ *   musicState                 reactive { tracks, currentId, pendingId,
+ *                              playing, position (s), duration (s), loading,
+ *                              blocked, buffered }
+ *                              pendingId = the track a switch is starting
  *                              blocked = the browser refused play(); stay
  *                              paused and show "tap to play"
  *   loadMusic(): Promise<MusicTrack[]>   fetch the manifest (no audio is
@@ -49,9 +63,13 @@
  *                              track; first start of a track this session joins
  *                              in progress at Date.now()/1000 % duration, later
  *                              starts resume where it was left. Turns musicOn on.
- *   pause() / resume()         resume() with nothing chosen plays the first track
+ *                              The current track (or the one starting) is a
+ *                              no-op; back to the current one cancels a start.
+ *   pause() / resume()         resume() plays the track last asked for (the
+ *                              first one when nothing was chosen)
  *   seek(seconds)              file tracks only
- *   next() / prev()            wrap around the list
+ *   next() / prev()            wrap around the list, counted from the track
+ *                              last asked for (so presses advance while loading)
  *   shuffle(): string | null   play a random other track; returns its id
  *   setMusicOn(on)             settings toggle: mutes the bus; off pauses, on
  *                              resumes (or starts the first track)
@@ -67,7 +85,7 @@
  * real <audio> elements play, the OS media keys and notification controls
  * route to them.
  *
- * Dev builds add window.__audio.music = { api, state(), rms() }.
+ * Dev builds add window.__audio.music = { api, state(), gains(), check(), rms() }.
  */
 import { reactive } from "vue";
 import { musicPort, useAudio } from "./useAudio";
@@ -101,6 +119,8 @@ export interface MusicTrack {
 export interface MusicState {
   tracks: MusicTrack[];
   currentId: string | null;
+  /** The track a switch is starting (null when none is in flight). */
+  pendingId: string | null;
   playing: boolean;
   position: number;
   duration: number;
@@ -576,30 +596,65 @@ function reverbImpulse(c: AudioContext): AudioBuffer {
 }
 
 /* ------------------------------------------------------------------ */
-/* Players                                                              */
+/* Gain automation                                                      */
 /* ------------------------------------------------------------------ */
 
-interface Player {
+/**
+ * Freeze `param` at its value right now and return that value. A bare
+ * cancelScheduledValues() would restore the value from before a ramp that is
+ * still running (Web Audio spec), an audible jump mid-fade; cancelAndHoldAtTime
+ * keeps the in-flight value. Where it is missing (Firefox) the read value is
+ * written back at once instead.
+ */
+function holdNow(c: AudioContext, param: AudioParam): number {
+  const now = c.currentTime;
+  const from = param.value;
+  if (typeof param.cancelAndHoldAtTime === "function") param.cancelAndHoldAtTime(now);
+  else param.cancelScheduledValues(now);
+  param.setValueAtTime(from, now);
+  return from;
+}
+
+/**
+ * Equal-power fade of `param` from wherever it is to `to` over `seconds`:
+ * hold first, then a chain of short linear ramps along the sin/cos curve
+ * (plain ramps never overlap-throw the way setValueCurveAtTime can).
+ */
+function rampGain(c: AudioContext, param: AudioParam, to: number, seconds: number): void {
+  const from = holdNow(c, param);
+  const now = c.currentTime;
+  if (seconds <= 0.005 || Math.abs(to - from) < 1e-4) {
+    param.linearRampToValueAtTime(to, now + 0.005);
+    return;
+  }
+  const n = 16;
+  for (let i = 1; i <= n; i++) {
+    const x = i / n;
+    const v =
+      to > from
+        ? from + (to - from) * Math.sin((x * Math.PI) / 2)
+        : to + (from - to) * Math.cos((x * Math.PI) / 2);
+    param.linearRampToValueAtTime(v, now + seconds * x);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Synth players                                                        */
+/* ------------------------------------------------------------------ */
+
+interface Synth {
+  serial: number;
   track: MusicTrack;
   out: GainNode;
+  /** Scheduler alive (false once its fade-out finished). */
+  running: boolean;
+  /** stop() was called: fading out. */
+  stopping: boolean;
   /** Nominal position (s) right now. */
   position: () => number;
-  /** Scheduler tick (synth only). */
   tick: (now: number) => void;
-  /** Stop all sources at `when` (ctx time) and disconnect afterwards. */
-  stopAt: (when: number) => void;
-  /** File track ended (non-looping). */
-  onEnded?: () => void;
-  /** File only: position/duration changed in a way the UI should pick up now. */
-  onSync?: () => void;
-  /** File only: stop and free its elements at once. */
-  kill?: () => void;
-  /** File only: free the loop-overlap elements (a new track needs one). */
-  dropSpare?: () => void;
-  seek?: (seconds: number) => void;
-  /** File only: hidden tab, pause the elements / carry on. */
-  suspend?: () => void;
-  unsuspend?: () => void;
+  /** Fade out over `seconds`, stop scheduling, free the graph after the tails. */
+  stop: (seconds: number) => void;
 }
 
 const LOOKAHEAD = 0.12;
@@ -611,14 +666,18 @@ const TICK_MS = 25;
  * the observed gap (max 1 s) so the music box never runs out of notes.
  */
 let lookahead = LOOKAHEAD;
+/** Track-to-track crossfade. */
 const XFADE = 1.2;
+/** Hard cut of an older outgoing voice (short enough to be "now", long enough not to click). */
+const CUT = 0.06;
+/** Switch requests closer together than this are coalesced: only the last one loads. */
+const COALESCE_MS = 150;
+let synthSerial = 0;
 
-function synthPlayer(
-  c: AudioContext,
-  track: MusicTrack,
-  offset: number,
-  when: number,
-): Player {
+/** Every synth scheduler that still exists (the current one and fading ones). */
+const synths = new Set<Synth>();
+
+function synthPlayer(c: AudioContext, track: MusicTrack, offset: number, when: number): Synth {
   const score = compose(track.mood);
   const total = score.steps.length;
   const out = c.createGain();
@@ -639,26 +698,26 @@ function synthPlayer(
   let nextTime = when;
   /** recent [ctxTime, step] pairs for position lookup */
   const marks: [number, number][] = [];
-  let stopped = false;
+  let stopTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const tick = (now: number) => {
-    if (stopped) return;
-    while (nextTime < now + lookahead) {
-      const idx = step % total;
-      for (const n of score.steps[idx]!)
-        tine(c, voiceBus, nextTime, n.midi, n.bass ? n.vel * 0.8 : n.vel);
-      marks.push([nextTime, idx]);
-      if (marks.length > 64) marks.shift();
-      nextTime += score.stepSeconds * stepFactor(step, total);
-      step++;
-    }
-  };
-  tick(c.currentTime);
-
-  return {
+  const s: Synth = {
+    serial: ++synthSerial,
     track,
     out,
-    tick,
+    running: true,
+    stopping: false,
+    tick(now) {
+      if (!s.running) return;
+      while (nextTime < now + lookahead) {
+        const idx = step % total;
+        for (const n of score.steps[idx]!)
+          tine(c, voiceBus, nextTime, n.midi, n.bass ? n.vel * 0.8 : n.vel);
+        marks.push([nextTime, idx]);
+        if (marks.length > 64) marks.shift();
+        nextTime += score.stepSeconds * stepFactor(step, total);
+        step++;
+      }
+    },
     position() {
       const now = c.currentTime;
       for (let i = marks.length - 1; i >= 0; i--) {
@@ -670,18 +729,28 @@ function synthPlayer(
       }
       return (marks[0]?.[1] ?? step % total) * score.stepSeconds;
     },
-    stopAt(at) {
-      stopped = true;
-      const ms = Math.max(0, (at - c.currentTime) * 1000) + 3200; // let tails ring out
-      setTimeout(() => {
-        voiceBus.disconnect();
-        tone.disconnect();
-        conv.disconnect();
-        wet.disconnect();
-        out.disconnect();
-      }, ms);
+    stop(seconds) {
+      s.stopping = true;
+      rampGain(c, out.gain, 0, seconds);
+      if (stopTimer) clearTimeout(stopTimer);
+      // keep scheduling while the fade runs, then stop and let the tails ring out
+      stopTimer = setTimeout(() => {
+        s.running = false;
+        synths.delete(s);
+        setTimeout(() => {
+          voiceBus.disconnect();
+          tone.disconnect();
+          conv.disconnect();
+          wet.disconnect();
+          out.disconnect();
+        }, 3200);
+        stopTickerIfIdle();
+      }, seconds * 1000 + 30);
     },
   };
+  synths.add(s);
+  s.tick(c.currentTime);
+  return s;
 }
 
 /* ------------------------------------------------------------------ */
@@ -690,19 +759,39 @@ function synthPlayer(
 
 /** Overlap of the ping-pong loop seam, in seconds. */
 const SEAM = 0.5;
-/** Start buffering the second element this long before the loop point. */
+/** Start buffering the spare element this long before the loop point. */
 const SEAM_PRELOAD = 8;
+/** current + outgoing + one spare (warm / seam / the next start). */
+const POOL_SIZE = 3;
+
+/**
+ * idle      free: paused, no src, gain 0
+ * warming   preloading a track for warm() (paused, gain 0)
+ * starting  a switch is starting it (gain 0 until it takes over)
+ * active    the current track
+ * fadingOut crossfading / cutting out; released when the fade ends
+ * seam      buffering the current track from 0 for the loop seam (paused, gain 0)
+ */
+type VoiceState = "idle" | "warming" | "starting" | "active" | "fadingOut" | "seam";
 
 interface Voice {
+  index: number;
   el: HTMLAudioElement;
   /** createMediaElementSource may only run once per element: cached here. */
   node: MediaElementAudioSourceNode;
   gain: GainNode;
-  /** Who holds the voice right now (null = idle). */
-  owner: object | null;
+  state: VoiceState;
+  trackId: string | null;
+  /** Bumped on every release: listeners, timers and promises of an older lease bail. */
+  lease: number;
   off: (() => void)[];
-  /** Set while the element is preloading a track for warm(). */
+  timers: ReturnType<typeof setTimeout>[];
+  /** Rejects the startVoice() promise of this lease, if one is waiting. */
+  abort?: () => void;
+  /** warming: what it is preloading. */
   warm?: { id: string; url: string };
+  /** fadingOut: context time the fade ends (the ticker frees it then, if its timer is late). */
+  fadeEnd?: number;
 }
 
 let pool: { ctx: AudioContext; voices: Voice[] } | null = null;
@@ -710,7 +799,7 @@ let pool: { ctx: AudioContext; voices: Voice[] } | null = null;
 function voicePool(c: AudioContext): Voice[] {
   if (pool && pool.ctx === c) return pool.voices;
   dropPool();
-  const make = (): Voice => {
+  const make = (index: number): Voice => {
     const el = new Audio();
     el.preload = "none";
     el.loop = false;
@@ -718,22 +807,41 @@ function voicePool(c: AudioContext): Voice[] {
     const gain = c.createGain();
     gain.gain.value = 0;
     node.connect(gain);
-    return { el, node, gain, owner: null, off: [] };
+    const input = musicPort.input();
+    if (input) gain.connect(input);
+    return { index, el, node, gain, state: "idle", trackId: null, lease: 0, off: [], timers: [] };
   };
-  pool = { ctx: c, voices: [make(), make()] };
+  pool = { ctx: c, voices: Array.from({ length: POOL_SIZE }, (_, i) => make(i)) };
   return pool.voices;
 }
 
 /** The context is gone: its elements can never be wired again, so drop them. */
 function dropPool(): void {
   if (!pool) return;
-  for (const v of pool.voices) resetVoice(v);
+  for (const v of pool.voices) {
+    releaseVoice(v);
+    v.gain.disconnect();
+  }
   pool = null;
 }
 
+/** Listen for this lease only (removed on release). */
 function listen(v: Voice, type: string, fn: (e: Event) => void): void {
-  v.el.addEventListener(type, fn);
-  v.off.push(() => v.el.removeEventListener(type, fn));
+  const lease = v.lease;
+  const guarded = (e: Event) => {
+    if (v.lease === lease) fn(e);
+  };
+  v.el.addEventListener(type, guarded);
+  v.off.push(() => v.el.removeEventListener(type, guarded));
+}
+
+/** setTimeout for this lease only (cleared on release). */
+function later(v: Voice, ms: number, fn: () => void): void {
+  const lease = v.lease;
+  const t = setTimeout(() => {
+    if (v.lease === lease) fn();
+  }, ms);
+  v.timers.push(t);
 }
 
 /** Downloaded fraction of the file: end of the buffered range at the playhead. */
@@ -749,43 +857,70 @@ function bufferedFraction(el: HTMLAudioElement, fallbackDuration: number): numbe
   return Math.min(1, end / d);
 }
 
-/** Drop listeners and free the connection (MDN: removeAttribute('src') + load()). */
-function resetVoice(v: Voice): void {
+/**
+ * Free a voice at once: new lease (so nothing of the old one can touch it),
+ * listeners and timers gone, element paused and emptied (removeAttribute('src')
+ * + load() releases the connection and rejects a pending play() with
+ * AbortError), gain 0. Only call on a silent voice, or after its fade.
+ */
+function releaseVoice(v: Voice): void {
+  if (import.meta.env.DEV && !v.el.paused && v.gain.gain.value > 0.05) {
+    stats.invariantViolations++;
+    console.warn(
+      `[music] invariant violated (release): voice ${v.index} (${v.state}) freed at gain ${v.gain.gain.value.toFixed(3)}`,
+      new Error().stack?.split("\n").slice(1, 5).join(" | "),
+    );
+  }
+  v.lease++;
   for (const fn of v.off) fn();
   v.off = [];
+  for (const t of v.timers) clearTimeout(t);
+  v.timers = [];
+  const abort = v.abort;
+  v.abort = undefined;
   const el = v.el;
   el.pause();
   el.loop = false;
-  el.removeAttribute("src");
+  if (el.hasAttribute("src")) {
+    el.removeAttribute("src");
+    el.load();
+  }
   el.preload = "none";
-  el.load();
   v.warm = undefined;
-  v.gain.disconnect();
-  v.gain.gain.cancelScheduledValues(0);
+  v.fadeEnd = undefined;
+  v.state = "idle";
+  v.trackId = null;
+  const c = pool?.ctx;
+  if (c && c.state !== "closed") {
+    v.gain.gain.cancelScheduledValues(0);
+    v.gain.gain.setValueAtTime(0, c.currentTime);
+  }
   v.gain.gain.value = 0;
+  abort?.();
 }
 
-function freeVoice(v: Voice): void {
-  resetVoice(v);
-  v.owner = null;
-}
-
-/** An idle voice, or null. `steal` may cut a fading tail or loop overlap to get one. */
-function leaseVoice(c: AudioContext, owner: object, steal: boolean): Voice | null {
-  const vs = voicePool(c);
-  const idle = () => vs.find((v) => !v.owner);
-  let v = idle();
-  if (!v && steal) {
-    for (const p of [...fading]) p.kill?.();
-    v = idle();
-  }
-  if (!v && steal) {
-    current?.dropSpare?.();
-    v = idle();
-  }
-  if (!v) return null;
-  v.owner = owner;
-  return v;
+/**
+ * Fade a voice out and release it when the fade is done. `wrap`: a looping
+ * track near its end wraps during the fade instead of stopping dead (the
+ * files are cut to loop); the seam's old lap must not wrap.
+ */
+function fadeOutVoice(c: AudioContext, v: Voice, seconds: number, wrap: boolean): void {
+  for (const fn of v.off) fn();
+  v.off = [];
+  v.state = "fadingOut";
+  v.el.loop = wrap;
+  const end = c.currentTime + seconds;
+  v.fadeEnd = end;
+  rampGain(c, v.gain.gain, 0, seconds);
+  // the audio clock is the authority: a timer that fires before the fade is
+  // over (audio thread behind) waits for the rest instead of cutting it
+  const done = () => {
+    // a later fade on the same voice may have moved the end
+    const left = (v.fadeEnd ?? end) - c.currentTime;
+    if (left > 0.005 && c.state === "running") later(v, left * 1000 + 20, done);
+    else releaseVoice(v);
+  };
+  later(v, seconds * 1000 + 20, done);
 }
 
 function streamUrl(track: MusicTrack, fmt: string): string {
@@ -793,29 +928,41 @@ function streamUrl(track: MusicTrack, fmt: string): string {
 }
 
 /**
- * Point `v` at `url` and start it; resolves on the `playing` event with the
- * offset it started from. The currentTime set before metadata is the
+ * Point `v` at `url` and start it at gain 0; resolves on the `playing` event
+ * with the offset it started from. The currentTime set before metadata is the
  * "default playback start position", so the first request already lands near
  * the join point and play() is called inside the caller's gesture chain.
- * Rejects on a media error or a refused play() (NotAllowedError).
+ * Rejects on a media error, a refused play() (NotAllowedError), or when the
+ * voice is released meanwhile (AbortError).
  */
 function startVoice(
   v: Voice,
   url: string,
   track: MusicTrack,
   wanted: (duration: number) => number,
-  adopt = false,
+  adopt: boolean,
 ): Promise<{ offset: number; duration: number }> {
   const el = v.el;
+  const lease = v.lease;
   return new Promise((resolve, reject) => {
     let offset = 0;
+    let settled = false;
+    const done = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (v.lease === lease) v.abort = undefined;
+      fn();
+    };
+    v.abort = () => done(() => reject(new DOMException("voice released", "AbortError")));
     const known = () =>
       Number.isFinite(el.duration) && el.duration > 0 ? el.duration : track.duration;
     const play = () => {
-      el.play().catch((err: unknown) => reject(err));
+      el.play().catch((err: unknown) => {
+        if (v.lease === lease) done(() => reject(err));
+      });
     };
-    listen(v, "error", () => reject(new Error(`media error ${el.error?.code ?? "?"}`)));
-    listen(v, "playing", () => resolve({ offset, duration: known() }));
+    listen(v, "error", () => done(() => reject(new Error(`media error ${el.error?.code ?? "?"}`))));
+    listen(v, "playing", () => done(() => resolve({ offset, duration: known() })));
     const onMeta = () => {
       const d = known();
       if (!(track.duration > 0)) {
@@ -830,22 +977,23 @@ function startVoice(
     };
     listen(v, "loadedmetadata", onMeta);
     listen(v, "progress", () => {
-      if (pending === v) musicState.buffered = bufferedFraction(el, track.duration);
+      if (pending?.voice === v) musicState.buffered = bufferedFraction(el, track.duration);
     });
+    v.gain.gain.cancelScheduledValues(0);
+    v.gain.gain.value = 0;
     el.loop = false;
+    el.preload = "auto";
     if (adopt) {
       // warm() already set src and started the download: keep it going
-      el.preload = "auto";
       v.warm = undefined;
       if (el.error) {
-        reject(new Error(`media error ${el.error.code}`));
+        done(() => reject(new Error(`media error ${el.error!.code}`)));
         return;
       }
       if (el.readyState >= 1) onMeta();
       musicState.buffered = bufferedFraction(el, track.duration);
       if (!(track.duration > 0)) return;
     } else {
-      el.preload = "auto";
       el.src = url;
     }
     if (track.duration > 0) {
@@ -856,216 +1004,6 @@ function startVoice(
   });
 }
 
-function filePlayer(
-  c: AudioContext,
-  track: MusicTrack,
-  first: Voice,
-  url: string,
-  hooks: { owner: object },
-): Player {
-  const out = c.createGain();
-  out.gain.value = 0;
-  let active = first;
-  /** Previous voice during a loop overlap (fading out). */
-  let tail: Voice | null = null;
-  /** Second voice buffering at 0, waiting for the loop point. */
-  let spare: Voice | null = null;
-  let stopped = false;
-  let suspended = false;
-  let noSeam = false;
-  let retryAt = 0;
-  let seamTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const duration = (): number => {
-    const d = active.el.duration;
-    return Number.isFinite(d) && d > 0 ? d : track.duration;
-  };
-
-  const player: Player = {
-    track,
-    out,
-    tick() {
-      if (stopped || suspended || !track.loop || tail) return;
-      if (noSeam) {
-        // no free element last time: try again every second
-        if (performance.now() < retryAt) return;
-        noSeam = false;
-        active.el.loop = false;
-      }
-      const el = active.el;
-      const d = duration();
-      if (!(d > SEAM_PRELOAD) || el.paused || el.seeking) return;
-      const left = d - el.currentTime;
-      if (!spare && left < SEAM_PRELOAD) prepareSpare();
-      if (spare && left <= SEAM && spare.el.readyState >= 2) swap();
-    },
-    position() {
-      const d = duration();
-      const t = active.el.currentTime;
-      return d > 0 ? Math.min(t, d) : t;
-    },
-    stopAt(at) {
-      stopped = true;
-      const ms = Math.max(0, (at - c.currentTime) * 1000) + 100;
-      setTimeout(() => player.kill?.(), ms);
-    },
-    kill() {
-      stopped = true;
-      if (seamTimer) clearTimeout(seamTimer);
-      for (const v of new Set([active, tail, spare])) if (v) freeVoice(v);
-      tail = spare = null;
-      out.disconnect();
-      fading.delete(player);
-    },
-    dropSpare() {
-      if (seamTimer) clearTimeout(seamTimer);
-      if (tail) freeVoice(tail);
-      if (spare) freeVoice(spare);
-      tail = spare = null;
-    },
-    seek(seconds) {
-      const d = duration();
-      player.dropSpare?.();
-      active.el.currentTime = Math.min(Math.max(0, seconds), Math.max(0, d - 0.1));
-    },
-    suspend() {
-      suspended = true;
-      for (const v of [active, tail]) v?.el.pause();
-    },
-    unsuspend() {
-      if (!suspended) return;
-      suspended = false;
-      for (const v of [active, tail]) void v?.el.play().catch(() => undefined);
-    },
-  };
-
-  function prepareSpare(): void {
-    const v = leaseVoice(c, hooks.owner, false);
-    if (!v) {
-      // no free element for the overlap: let the element loop itself
-      noSeam = true;
-      retryAt = performance.now() + 1000;
-      active.el.loop = true;
-      return;
-    }
-    spare = v;
-    v.gain.gain.value = 0;
-    v.gain.connect(out);
-    v.el.preload = "auto";
-    v.el.loop = false;
-    v.el.src = url;
-    v.el.currentTime = 0;
-  }
-
-  function swap(): void {
-    const next = spare!;
-    const old = active;
-    spare = null;
-    tail = old;
-    active = next;
-    attach(next);
-    void next.el.play().catch(() => undefined);
-    equalPower(c, old.gain.gain, 0, SEAM);
-    equalPower(c, next.gain.gain, track.gain, SEAM);
-    seamTimer = setTimeout(() => {
-      if (tail === old) {
-        freeVoice(old);
-        tail = null;
-      }
-    }, SEAM * 1000 + 120);
-    player.onSync?.();
-  }
-
-  function attach(v: Voice): void {
-    const mine = () => active === v && !stopped;
-    listen(v, "playing", () => {
-      if (!mine()) return;
-      if (current === player) musicState.loading = false;
-      player.onSync?.();
-    });
-    for (const type of ["waiting", "stalled"]) {
-      listen(v, type, () => {
-        // `stalled` also fires when the browser merely stops fetching: only
-        // count it when playback really lacks data.
-        if (mine() && current === player && !v.el.paused && v.el.readyState < 3)
-          musicState.loading = true;
-      });
-    }
-    listen(v, "timeupdate", () => {
-      if (mine() && current === player) musicState.position = player.position();
-    });
-    listen(v, "progress", () => {
-      if (mine() && current === player) musicState.buffered = bufferedFraction(v.el, track.duration);
-    });
-    listen(v, "seeked", () => {
-      if (!mine()) return;
-      if (current === player) musicState.buffered = bufferedFraction(v.el, track.duration);
-      player.onSync?.();
-    });
-    listen(v, "ended", () => {
-      if (!mine()) return;
-      if (track.loop) {
-        // the overlap missed (late tick / starved spare): wrap by hand
-        active.el.currentTime = 0;
-        void active.el.play().catch(() => undefined);
-      } else {
-        player.onEnded?.();
-      }
-    });
-    listen(v, "error", () => {
-      if (!mine()) return;
-      // a media error mid-stream: this file is bad, play the tune instead
-      failed.add(track.id);
-      if (current === player) {
-        current = null;
-        retire(player, 0.05);
-        void playTrack(track.id);
-      }
-    });
-  }
-
-  // the starting voice: drop the startup listeners, keep one set for playback
-  for (const fn of first.off) fn();
-  first.off = [];
-  first.gain.gain.value = track.gain;
-  first.gain.connect(out);
-  attach(first);
-  return player;
-}
-
-/** Equal-power fade of `param` from its current value to `to` over `seconds`. */
-function equalPower(
-  c: AudioContext,
-  param: AudioParam,
-  to: number,
-  seconds: number,
-): void {
-  const now = c.currentTime;
-  const from = param.value;
-  param.cancelScheduledValues(now);
-  if (seconds <= 0.01) {
-    param.setValueAtTime(to, now);
-    return;
-  }
-  const n = 64;
-  const curve = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = i / (n - 1);
-    // cos/sin pair: fade-out uses cos from `from`, fade-in sin up to `to`
-    curve[i] =
-      to > from
-        ? from + (to - from) * Math.sin((x * Math.PI) / 2)
-        : to + (from - to) * Math.cos((x * Math.PI) / 2);
-  }
-  try {
-    param.setValueCurveAtTime(curve, now, seconds);
-  } catch {
-    // an automation still overlapping the curve: plain ramp instead
-    param.setValueAtTime(from, now);
-    param.linearRampToValueAtTime(to, now + seconds);
-  }
-}
-
 /* ------------------------------------------------------------------ */
 /* State                                                                */
 /* ------------------------------------------------------------------ */
@@ -1073,6 +1011,7 @@ function equalPower(
 export const musicState = reactive<MusicState>({
   tracks: [],
   currentId: null,
+  pendingId: null,
   playing: false,
   position: 0,
   duration: 0,
@@ -1081,28 +1020,63 @@ export const musicState = reactive<MusicState>({
   buffered: 0,
 });
 
+/** What is playing: one file voice or one synth. */
+type Slot =
+  | {
+      kind: "file";
+      track: MusicTrack;
+      voice: Voice;
+      /** voice.lease when the slot took it: a released voice is no longer the slot's. */
+      lease: number;
+      url: string;
+      /** Spare buffering the loop seam, if any. */
+      spare: Voice | null;
+    }
+  | { kind: "synth"; track: MusicTrack; synth: Synth };
+
 const manifestUrl = `${musicPort.base}music/manifest.json`;
 let manifestPromise: Promise<MusicTrack[]> | null = null;
-let current: Player | null = null;
-/** Fading-out players still ticking (synth tails). */
-const fading = new Set<Player>();
+let current: Slot | null = null;
+/** The one slot crossfading out (older ones are hard-cut). */
+let outgoing: Slot | null = null;
+/** A start in progress: the generation it belongs to and the element it holds. */
+let pending: { gen: number; track: MusicTrack; voice: Voice | null } | null = null;
+/**
+ * Generation: bumped by every playTrack / pause / next / prev / shuffle /
+ * seek. Every async continuation compares its own against it and bails
+ * (freeing its voice) when a newer request has come in.
+ */
+let gen = 0;
+/** The track the latest request asked for (resume() and next() count from it). */
+let targetId: string | null = null;
+/** True from the moment playback is requested (before the stream starts). */
+let wantPlaying = false;
+/** Hidden tab: the elements are paused, the seam waits. */
+let suspended = false;
+let ticker: ReturnType<typeof setInterval> | null = null;
+let lastTickAt = 0;
+let lastPositionAt = 0;
+let lastCheckAt = 0;
+const listeners = new Set<(t: MusicTrack) => void>();
+let mediaHooked = false;
 /** Last nominal position per track id (join-in-progress happens once). */
 const positions = new Map<string, number>();
 /** Tracks whose file failed: they play their mood's melody instead. */
 const failed = new Set<string>();
-/** Bumped by every play/pause so a slow start can't take over a newer choice. */
-let token = 0;
-/** True from the moment playback is requested (before the stream starts). */
-let wantPlaying = false;
-let ticker: ReturnType<typeof setInterval> | null = null;
-let lastTickAt = 0;
-let lastPositionAt = 0;
-const listeners = new Set<(t: MusicTrack) => void>();
-let mediaHooked = false;
-/** The element a still-starting playTrack holds (freed if it is superseded). */
-let pending: Voice | null = null;
-/** The idle element warm() is preloading a track into. */
-let warmVoice: Voice | null = null;
+/** Coalescing: a burst of requests waits for a quiet COALESCE_MS, then the last one runs. */
+let lastRequestAt = -Infinity;
+let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
+let coalesceWaiters: (() => void)[] = [];
+const stats = {
+  requests: 0,
+  coalesced: 0,
+  loads: 0,
+  superseded: 0,
+  hardCuts: 0,
+  seams: 0,
+  loopFallbacks: 0,
+  invariantViolations: 0,
+};
 
 function findTrack(id: string | null): MusicTrack | undefined {
   return id ? musicState.tracks.find((t) => t.id === id) : undefined;
@@ -1150,6 +1124,188 @@ function parseTrack(raw: ManifestTrack): MusicTrack | null {
 }
 
 /* ------------------------------------------------------------------ */
+/* Slots                                                                */
+/* ------------------------------------------------------------------ */
+
+function slotPosition(s: Slot): number {
+  if (s.kind === "synth") return s.synth.position();
+  const el = s.voice.el;
+  const d = slotDuration(s);
+  return d > 0 ? Math.min(el.currentTime, d) : el.currentTime;
+}
+
+function slotDuration(s: Slot): number {
+  if (s.kind === "synth") return compose(s.track.mood).loopSeconds;
+  const d = s.voice.el.duration;
+  return Number.isFinite(d) && d > 0 ? d : s.track.duration;
+}
+
+/** The slot's voice while the slot still holds it (null once released). */
+function slotVoice(s: Slot | null): Voice | null {
+  return s?.kind === "file" && s.voice.lease === s.lease ? s.voice : null;
+}
+
+function dropSpare(s: Slot): void {
+  if (s.kind !== "file" || !s.spare) return;
+  releaseVoice(s.spare);
+  s.spare = null;
+}
+
+/** Fade a slot out over `seconds` (its voice/synth frees itself afterwards). */
+function fadeSlot(c: AudioContext, s: Slot, seconds: number): void {
+  if (s.kind === "synth") {
+    s.synth.stop(seconds);
+    return;
+  }
+  dropSpare(s);
+  const v = slotVoice(s);
+  // a track fading out wraps if it loops; one already fading (e.g. the seam's
+  // old lap, which must not wrap) keeps what it had
+  if (v) fadeOutVoice(c, v, seconds, v.state === "fadingOut" ? v.el.loop : s.track.loop);
+}
+
+/**
+ * `s` stops being current: remember where it was, fade it over `seconds`
+ * and make it the one outgoing slot. An older outgoing slot is hard-cut so
+ * no more than two things ever sound at once.
+ */
+function retire(c: AudioContext, s: Slot, seconds: number): void {
+  positions.set(s.track.id, slotPosition(s));
+  if (outgoing && outgoing !== s) {
+    stats.hardCuts++;
+    fadeSlot(c, outgoing, CUT);
+  }
+  fadeSlot(c, s, seconds);
+  outgoing = s;
+  const mine = s;
+  setTimeout(() => {
+    if (outgoing === mine) outgoing = null;
+    stopTickerIfIdle();
+  }, seconds * 1000 + 60);
+}
+
+/** Every synth other than `keep` fades out (no orphan schedulers). */
+function stopOtherSynths(keep: Synth | null, seconds: number): void {
+  for (const s of synths) {
+    if (s === keep) continue;
+    if (outgoing?.kind === "synth" && outgoing.synth === s) continue;
+    s.stop(seconds);
+  }
+}
+
+/** Is a voice still needed by someone? */
+function owned(v: Voice): boolean {
+  if (current?.kind === "file" && (current.voice === v || current.spare === v)) return true;
+  if (slotVoice(outgoing) === v) return true;
+  if (pending?.voice === v) return true;
+  return v.state === "warming" || v.state === "fadingOut";
+}
+
+/**
+ * An element for a new start: an idle one, else the warming one, else the
+ * current track's seam spare; as a last resort the outgoing voice is cut.
+ */
+async function acquireVoice(c: AudioContext, stale: () => boolean): Promise<Voice | null> {
+  const vs = voicePool(c);
+  // a released voice that nobody references is idle whatever it says
+  for (const v of vs) if (v.state !== "idle" && !owned(v)) releaseVoice(v);
+  const pick = (): Voice | undefined =>
+    vs.find((v) => v.state === "idle") ??
+    vs.find((v) => v.state === "warming") ??
+    (current?.kind === "file" && current.spare ? current.spare : undefined);
+  let v = pick();
+  if (!v) {
+    // pool full (current + outgoing + one cutting out): cut the oldest and wait for it
+    const outVoice = slotVoice(outgoing);
+    const victim =
+      vs.find((x) => x.state === "fadingOut" && x !== outVoice) ?? outVoice ?? undefined;
+    if (victim) {
+      stats.hardCuts++;
+      fadeOutVoice(c, victim, CUT, victim.el.loop);
+      const lease = victim.lease;
+      if (outVoice === victim) outgoing = null;
+      // fadeOutVoice frees it when the cut is over (audio clock)
+      for (let i = 0; i < 20 && victim.lease === lease; i++)
+        await new Promise((r) => setTimeout(r, CUT * 1000 + 20));
+      if (stale()) return null;
+      if (victim.lease === lease) releaseVoice(victim);
+      v = pick();
+    }
+  }
+  if (!v) return null;
+  if (current?.kind === "file" && current.spare === v) current.spare = null;
+  // a warming voice is returned as is: the caller adopts it or frees it
+  return v;
+}
+
+/* ------------------------------------------------------------------ */
+/* Invariant (dev)                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * At most ONE voice audible-or-fading-in (the current one) plus at most one
+ * crossfading out (+ one being hard-cut for CUT seconds); every other voice
+ * is paused with gain 0; no synth scheduler runs unless it is current or
+ * outgoing. Dev builds warn on a violation.
+ */
+function checkInvariant(where: string): void {
+  if (!import.meta.env.DEV || !pool) return;
+  const problems: string[] = [];
+  const vs = pool.voices;
+  const curVoice = current?.kind === "file" ? current.voice : null;
+  const outVoice = slotVoice(outgoing);
+  for (const v of vs) {
+    const g = v.gain.gain.value;
+    const playing = !v.el.paused;
+    switch (v.state) {
+      case "active":
+        if (v !== curVoice) problems.push(`voice ${v.index} active but not current`);
+        break;
+      case "starting":
+        if (pending?.voice !== v) problems.push(`voice ${v.index} starting but not pending`);
+        if (g > 0.001) problems.push(`voice ${v.index} starting with gain ${g.toFixed(3)}`);
+        break;
+      case "fadingOut":
+        break;
+      case "idle":
+      case "warming":
+      case "seam":
+        if (playing) problems.push(`voice ${v.index} ${v.state} but playing`);
+        if (g > 0.001) problems.push(`voice ${v.index} ${v.state} with gain ${g.toFixed(3)}`);
+        break;
+    }
+    if (v.state === "seam" && !(current?.kind === "file" && current.spare === v))
+      problems.push(`voice ${v.index} seam but not the current spare`);
+    if (v.state === "warming" && v.warm == null) problems.push(`voice ${v.index} warming without a track`);
+  }
+  if (curVoice && curVoice.state !== "active") problems.push(`current voice ${curVoice.index} is ${curVoice.state}`);
+  // one real fade-out at a time; others may only be inside their CUT
+  const now = pool.ctx.currentTime;
+  const longFades = vs.filter(
+    (v) => v.state === "fadingOut" && v.fadeEnd !== undefined && v.fadeEnd - now > CUT + 0.03,
+  );
+  if (longFades.length > 1) problems.push(`${longFades.length} voices on a long fade-out`);
+  if (outVoice && outVoice.state !== "fadingOut" && outVoice.state !== "idle")
+    problems.push(`outgoing voice ${outVoice.index} is ${outVoice.state}`);
+  const audibleIn = vs.filter((v) => v.state === "active" || v.state === "starting");
+  if (audibleIn.length > 2 || vs.filter((v) => v.state === "active").length > 1)
+    problems.push(`more than one active voice`);
+  const curSynth = current?.kind === "synth" ? current.synth : null;
+  const outSynth = outgoing?.kind === "synth" ? outgoing.synth : null;
+  const liveSynths = [...synths].filter((s) => s.running);
+  // synths still fading count as cut tails; more than current + outgoing + one cut is a leak
+  if (liveSynths.length > 3) problems.push(`${liveSynths.length} synth schedulers alive`);
+  const stray = liveSynths.filter((s) => s !== curSynth && s !== outSynth && !s.stopping);
+  if (stray.length) problems.push(`${stray.length} synth scheduler(s) neither current nor fading`);
+  if (curSynth && !curSynth.running) problems.push(`current synth not running`);
+  if (!musicState.playing && !pending && current) problems.push(`current set while paused`);
+  if (problems.length) {
+    stats.invariantViolations++;
+    console.warn(`[music] invariant violated (${where}): ${problems.join("; ")}`);
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Engine glue                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -1174,38 +1330,157 @@ function startTicker(): void {
       Math.max(LOOKAHEAD, gap * 1.5, lookahead * 0.98),
     );
     const now = c.currentTime;
-    current?.tick(now);
-    for (const p of fading) p.tick(now);
+    for (const s of synths) s.tick(now);
+    if (current?.kind === "file") seamTick(c, current);
+    // a busy main thread can make the release timers late: free finished fades here too
+    if (pool)
+      for (const v of pool.voices)
+        if (v.state === "fadingOut" && v.fadeEnd !== undefined && now > v.fadeEnd + 0.03)
+          releaseVoice(v);
     if (wall - lastPositionAt >= 200 && current && musicState.playing) {
       lastPositionAt = wall;
-      musicState.position = current.position();
+      musicState.position = slotPosition(current);
+    }
+    if (import.meta.env.DEV && wall - lastCheckAt >= 250) {
+      lastCheckAt = wall;
+      checkInvariant("tick");
     }
   }, TICK_MS);
 }
 
 function stopTickerIfIdle(): void {
-  if (ticker && !current && fading.size === 0) {
+  if (ticker && !current && !outgoing && !pending && synths.size === 0) {
     clearInterval(ticker);
     ticker = null;
   }
 }
 
-/** Fade a player out over `seconds` and retire it. */
-function retire(p: Player, seconds: number): void {
-  const c = musicPort.context();
-  if (!c) return;
-  positions.set(p.track.id, p.position());
-  equalPower(c, p.out.gain, 0, seconds);
-  const end = c.currentTime + seconds;
-  p.stopAt(end + 0.02);
-  fading.add(p);
-  setTimeout(
-    () => {
-      fading.delete(p);
-      stopTickerIfIdle();
-    },
-    seconds * 1000 + 100,
-  );
+/**
+ * Loop seam ("ping-pong"): under SEAM_PRELOAD s left, buffer the track from
+ * 0 on a free element; under SEAM s left, crossfade into it. Off while a
+ * switch or crossfade is in progress, or when no element is free: then the
+ * element loops itself (loop=true; may leave a tiny gap, never stops).
+ */
+function seamTick(c: AudioContext, s: Extract<Slot, { kind: "file" }>): void {
+  if (suspended || !s.track.loop || !musicState.playing) return;
+  const el = s.voice.el;
+  const d = slotDuration(s);
+  if (!(d > SEAM_PRELOAD) || el.paused || el.seeking) return;
+  const left = d - el.currentTime;
+  // the self-loop fallback wrapped: back to seam mode for the next lap
+  if (el.loop && left > SEAM_PRELOAD + 1) el.loop = false;
+  const busy = !!pending || !!outgoing || !!coalesceTimer;
+  if (busy) {
+    if (s.spare) dropSpare(s);
+    if (left < SEAM_PRELOAD && !el.loop) {
+      el.loop = true;
+      stats.loopFallbacks++;
+    }
+    return;
+  }
+  if (left < SEAM_PRELOAD && !s.spare && !el.loop) {
+    const v = voicePool(c).find((x) => x.state === "idle");
+    if (!v) {
+      el.loop = true;
+      stats.loopFallbacks++;
+      return;
+    }
+    v.state = "seam";
+    v.trackId = s.track.id;
+    s.spare = v;
+    listen(v, "error", () => {
+      if (current === s && s.spare === v) s.spare = null;
+      releaseVoice(v);
+    });
+    v.el.preload = "auto";
+    v.el.loop = false;
+    v.el.src = s.url;
+    v.el.currentTime = 0;
+    return;
+  }
+  if (s.spare && left <= SEAM) {
+    if (s.spare.el.readyState >= 2) swapSeam(c, s);
+    else if (!el.loop) {
+      // spare starved: let the element wrap on its own
+      el.loop = true;
+      stats.loopFallbacks++;
+      dropSpare(s);
+    }
+  }
+}
+
+function swapSeam(c: AudioContext, s: Extract<Slot, { kind: "file" }>): void {
+  const next = s.spare!;
+  const old = s.voice;
+  s.spare = null;
+  stats.seams++;
+  for (const fn of next.off) fn();
+  next.off = [];
+  next.state = "active";
+  s.voice = next;
+  s.lease = next.lease;
+  attach(s, next);
+  void next.el.play().catch(() => undefined);
+  rampGain(c, next.gain.gain, s.track.gain, SEAM);
+  // the old lap is the outgoing slot for SEAM seconds
+  const tail: Slot = { kind: "file", track: s.track, voice: old, lease: old.lease, url: s.url, spare: null };
+  if (outgoing) fadeSlot(c, outgoing, CUT);
+  fadeOutVoice(c, old, SEAM, false);
+  outgoing = tail;
+  setTimeout(() => {
+    if (outgoing === tail) outgoing = null;
+  }, SEAM * 1000 + 60);
+  musicState.position = 0;
+  updateMediaSession();
+  checkInvariant("seam");
+}
+
+/** Playback listeners of the current file voice (this lease only). */
+function attach(s: Extract<Slot, { kind: "file" }>, v: Voice): void {
+  const mine = () => current === s && s.voice === v;
+  const track = s.track;
+  listen(v, "playing", () => {
+    if (!mine()) return;
+    if (!pending) musicState.loading = false;
+    musicState.position = slotPosition(s);
+    updateMediaSession();
+  });
+  for (const type of ["waiting", "stalled"]) {
+    listen(v, type, () => {
+      // `stalled` also fires when the browser merely stops fetching: only
+      // count it when playback really lacks data.
+      if (mine() && !v.el.paused && v.el.readyState < 3) musicState.loading = true;
+    });
+  }
+  listen(v, "timeupdate", () => {
+    if (mine()) musicState.position = slotPosition(s);
+  });
+  listen(v, "progress", () => {
+    if (mine() && !pending) musicState.buffered = bufferedFraction(v.el, track.duration);
+  });
+  listen(v, "seeked", () => {
+    if (!mine()) return;
+    if (!pending) musicState.buffered = bufferedFraction(v.el, track.duration);
+    musicState.position = slotPosition(s);
+    updateMediaSession();
+  });
+  listen(v, "ended", () => {
+    if (!mine()) return;
+    if (track.loop) {
+      // the seam missed (late tick / starved spare): wrap by hand
+      v.el.currentTime = 0;
+      void v.el.play().catch(() => undefined);
+    } else {
+      void next();
+    }
+  });
+  listen(v, "error", () => {
+    if (!mine()) return;
+    // a media error mid-stream: this file is bad, play the tune instead
+    failed.add(track.id);
+    if (import.meta.env.DEV) console.info(`[music:info] ${track.id}: media error mid-stream`, v.el.error?.code);
+    if (current === s) void request(track.id, { force: true });
+  });
 }
 
 function emitChange(t: MusicTrack): void {
@@ -1232,6 +1507,7 @@ function hookMediaSession(): void {
   const ms = media();
   if (!ms || mediaHooked) return;
   mediaHooked = true;
+  // the same coalesced request path as the panel
   const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
     ["play", () => void resume()],
     ["pause", () => pause()],
@@ -1340,7 +1616,7 @@ function saveData(): boolean {
  * Start downloading a track on an idle pooled element (preload="auto") so
  * pressing play starts from buffered data: the track given, else the current
  * one, else the first. Does nothing on Save-Data connections, for synth
- * tracks, while that track already plays, or when no element is free.
+ * tracks, while that track already plays or starts, or when no element is idle.
  */
 async function warm(id?: string): Promise<void> {
   const c = musicPort.context();
@@ -1349,21 +1625,20 @@ async function warm(id?: string): Promise<void> {
   const track = findTrack(id ?? musicState.currentId) ?? tracks[0];
   if (!track || track.kind !== "file" || !track.files || failed.has(track.id)) return;
   if (current?.track.id === track.id && musicState.playing) return;
-  if (pending || warmVoice?.warm?.id === track.id) return;
-  if (warmVoice) {
-    freeVoice(warmVoice);
-    warmVoice = null;
-  }
-  const owner = {};
-  const v = leaseVoice(c, owner, false);
+  if (pending || coalesceTimer) return;
+  const vs = voicePool(c);
+  if (vs.some((v) => v.state === "warming" && v.warm?.id === track.id)) return;
+  // one warm element at most: re-point it, else take an idle one
+  const v = vs.find((x) => x.state === "warming") ?? vs.find((x) => x.state === "idle");
   if (!v) return;
+  if (v.state === "warming") releaseVoice(v);
   const url = streamUrl(track, musicPort.formats()[0]!);
+  v.state = "warming";
+  v.trackId = track.id;
   v.warm = { id: track.id, url };
-  warmVoice = v;
   listen(v, "error", () => {
     // missing file or unsupported container: drop it, playTrack will try both
-    if (warmVoice === v) warmVoice = null;
-    freeVoice(v);
+    releaseVoice(v);
   });
   v.el.preload = "auto";
   v.el.loop = false;
@@ -1375,33 +1650,82 @@ async function warm(id?: string): Promise<void> {
       : (Date.now() / 1000) % track.duration;
     v.el.currentTime = t;
   }
+  checkInvariant("warm");
 }
 
-async function playTrack(id: string): Promise<void> {
-  const c = musicPort.context();
-  if (!c) return;
-  if (!musicState.tracks.length) await loadMusic();
-  const track = findTrack(id);
-  if (!track) return;
-  if (current?.track.id === id && musicState.playing) return;
-  const my = ++token;
+/**
+ * Every switch goes through here (tabs, crank, shuffle, next/prev, media
+ * keys, resume). A new generation at once; requests closer together than
+ * COALESCE_MS wait for the burst to end so only the last one loads.
+ */
+function request(id: string, opts: { force?: boolean } = {}): Promise<void> {
+  stats.requests++;
+  const now = performance.now();
+  const burst = now - lastRequestAt < COALESCE_MS;
+  lastRequestAt = now;
+  const myGen = ++gen;
+  targetId = id;
   wantPlaying = true;
   musicState.blocked = false;
+  if (!burst && !coalesceTimer) return begin(id, myGen, opts.force === true);
+  stats.coalesced++;
+  if (coalesceTimer) clearTimeout(coalesceTimer);
+  return new Promise<void>((resolve) => {
+    coalesceWaiters.push(resolve);
+    coalesceTimer = setTimeout(() => {
+      coalesceTimer = null;
+      const waiters = coalesceWaiters;
+      coalesceWaiters = [];
+      void begin(targetId ?? id, gen, opts.force === true).finally(() => {
+        for (const w of waiters) w();
+      });
+    }, COALESCE_MS);
+  });
+}
+
+function flushCoalesced(): void {
+  if (coalesceTimer) clearTimeout(coalesceTimer);
+  coalesceTimer = null;
+  const waiters = coalesceWaiters;
+  coalesceWaiters = [];
+  for (const w of waiters) w();
+}
+
+/** Cancel a start in progress (its voice goes back to the pool). */
+function cancelPending(): void {
+  if (!pending) return;
+  stats.superseded++;
+  if (pending.voice) releaseVoice(pending.voice);
+  pending = null;
+  musicState.pendingId = null;
+  musicState.loading = false;
+}
+
+async function begin(id: string, myGen: number, force: boolean): Promise<void> {
+  const c = musicPort.context();
+  if (!c || myGen !== gen) return;
+  if (!musicState.tracks.length) await loadMusic();
+  if (myGen !== gen) return;
+  const track = findTrack(id);
+  if (!track) return;
   // pressing play in the music box means "music on"
   useAudio().setMusicOn(true);
   const settings = useSettings();
   if (!settings.musicOn) settings.musicOn = true;
-  if (pending) {
-    freeVoice(pending);
-    pending = null;
+
+  // already there: back to the current track cancels a start in flight
+  if (!force && current?.track.id === id && musicState.playing) {
+    cancelPending();
+    checkInvariant("noop");
+    return;
   }
-  // a preloaded element for this very track is adopted below; any other is freed
-  let warmed: Voice | null = null;
-  if (warmVoice) {
-    if (warmVoice.warm?.id === track.id && warmVoice.owner) warmed = warmVoice;
-    else freeVoice(warmVoice);
-    warmVoice = null;
+  if (!force && pending?.track.id === id) {
+    // already starting this one: it carries on under the new generation
+    pending.gen = myGen;
+    return;
   }
+  cancelPending();
+  musicState.pendingId = id;
 
   // join in progress: the bard is already playing
   const wanted = (duration: number): number =>
@@ -1413,65 +1737,81 @@ async function playTrack(id: string): Promise<void> {
   let url = "";
   let duration = 0;
   let offset = 0;
-  const owner = {};
+  let lastStartError: unknown = null;
+  const mine: NonNullable<typeof pending> = { gen: myGen, track, voice: null };
+  pending = mine;
+  // superseded (a newer request or pause): give the element back if still ours
+  const stale = (): boolean => {
+    if (pending === mine && mine.gen === gen) return false;
+    if (pending === mine) cancelPending();
+    return true;
+  };
   if (track.kind === "file" && track.files && !failed.has(track.id)) {
     musicState.loading = true;
     musicState.buffered = 0;
-    if (warmed) {
-      warmed.owner = owner;
-      for (const fn of warmed.off) fn();
-      warmed.off = [];
+    voice = await acquireVoice(c, () => pending !== mine || mine.gen !== gen);
+    if (stale()) {
+      if (voice && voice.state !== "idle" && !owned(voice)) releaseVoice(voice);
+      return;
     }
-    voice = warmed ?? leaseVoice(c, owner, true);
-    pending = voice;
+    if (voice && voice.state === "warming" && voice.warm?.id !== track.id) releaseVoice(voice);
     let refused = false;
     if (voice) {
+      const warmed = voice.state === "warming" && voice.warm?.id === track.id ? voice.warm : undefined;
+      if (voice.state !== "idle" && !warmed) releaseVoice(voice);
+      for (const fn of voice.off) fn();
+      voice.off = [];
+      voice.state = "starting";
+      voice.trackId = track.id;
+      mine.voice = voice;
+      stats.loads++;
+      checkInvariant("starting");
       for (const fmt of musicPort.formats()) {
         try {
           url = streamUrl(track, fmt);
-          const adopt = !!voice.warm && voice.warm.url === url;
+          const adopt = !!warmed && warmed.url === url;
           const r = await startVoice(voice, url, track, wanted, adopt);
           offset = r.offset;
           duration = r.duration;
           break;
         } catch (err) {
-          if (my !== token) break;
+          lastStartError = err;
+          if (stale()) return; // superseded: whoever superseded us freed the voice
           if (err instanceof DOMException && err.name === "NotAllowedError") {
             refused = true;
             break;
           }
           // missing file / unsupported container: try the other one
-          resetVoice(voice);
+          releaseVoice(voice);
+          voice.state = "starting";
+          voice.trackId = track.id;
           url = "";
         }
       }
     }
-    if (my !== token) {
-      // superseded while the stream was starting
-      if (voice && voice.owner === owner) freeVoice(voice);
-      if (pending === voice) pending = null;
-      return;
-    }
-    if (pending === voice) pending = null;
+    if (stale()) return;
     if (refused) {
-      if (voice) freeVoice(voice);
+      cancelPending();
       wantPlaying = false;
-      musicState.loading = false;
       musicState.blocked = true;
+      checkInvariant("refused");
       return; // stay as we were; the panel offers "tap to play"
     }
-    if (!url && voice) {
-      freeVoice(voice);
+    if (!url || !voice) {
+      if (voice) releaseVoice(voice);
       voice = null;
       failed.add(track.id);
+      if (import.meta.env.DEV) console.info(`[music:info] ${track.id}: no playable file, using the tune`, lastStartError);
     }
-    if (!voice) failed.add(track.id);
-    musicState.loading = false;
   }
   if (c.state === "closed") {
-    if (voice) freeVoice(voice);
+    if (voice) releaseVoice(voice);
+    pending = null;
     return;
   }
+  pending = null;
+  musicState.pendingId = null;
+  musicState.loading = false;
 
   if (!voice) {
     duration = compose(track.mood).loopSeconds;
@@ -1479,23 +1819,27 @@ async function playTrack(id: string): Promise<void> {
   }
 
   const crossfade = !!current && musicState.playing;
-  if (current) retire(current, crossfade ? XFADE : 0.05);
+  const fadeIn = crossfade ? XFADE : 0.6;
+  if (current) retire(c, current, crossfade ? XFADE : CUT);
 
-  const p = voice
-    ? filePlayer(c, track, voice, url, { owner })
-    : synthPlayer(c, track, offset, c.currentTime + 0.03);
-  const input = musicPort.input();
-  if (input) p.out.connect(input);
-  equalPower(c, p.out.gain, 1, crossfade ? XFADE : 0.6);
-  p.onEnded = () => {
-    if (current === p) void next();
-  };
-  p.onSync = () => {
-    if (current !== p) return;
-    musicState.position = p.position();
-    updateMediaSession();
-  };
-  current = p;
+  let slot: Slot;
+  if (voice) {
+    voice.state = "active";
+    for (const fn of voice.off) fn();
+    voice.off = [];
+    slot = { kind: "file", track, voice, lease: voice.lease, url, spare: null };
+    attach(slot, voice);
+    rampGain(c, voice.gain.gain, track.gain, fadeIn);
+  } else {
+    const synth = synthPlayer(c, track, offset, c.currentTime + 0.03);
+    const input = musicPort.input();
+    if (input) synth.out.connect(input);
+    rampGain(c, synth.out.gain, 1, fadeIn);
+    slot = { kind: "synth", track, synth };
+  }
+  current = slot;
+  // starting anything silences every other tune
+  stopOtherSynths(slot.kind === "synth" ? slot.synth : null, CUT);
   positions.set(track.id, offset);
 
   const changed = musicState.currentId !== track.id;
@@ -1503,62 +1847,76 @@ async function playTrack(id: string): Promise<void> {
   musicState.playing = true;
   musicState.duration = duration;
   musicState.position = offset;
+  if (voice) musicState.buffered = bufferedFraction(voice.el, track.duration);
   startTicker();
   updateBed();
   if (changed) updateMediaMetadata();
   updateMediaSession();
   if (changed) emitChange(track);
+  checkInvariant("activate");
+}
+
+function playTrack(id: string): Promise<void> {
+  return request(id);
 }
 
 function pause(): void {
-  token++;
+  gen++;
+  flushCoalesced();
   wantPlaying = false;
-  musicState.loading = false;
-  if (pending) {
-    freeVoice(pending);
-    pending = null;
-  }
-  if (current) {
-    musicState.position = current.position();
-    retire(current, 0.35);
+  cancelPending();
+  const c = musicPort.context();
+  if (current && c) {
+    musicState.position = slotPosition(current);
+    retire(c, current, 0.35);
     current = null;
   }
+  if (c) stopOtherSynths(null, 0.35);
   musicState.playing = false;
+  musicState.loading = false;
   updateBed();
   updateMediaSession();
+  checkInvariant("pause");
 }
 
 /** Jump within the current file track (the synth tunes can't seek). */
 function seek(seconds: number): void {
-  if (!current?.seek || !Number.isFinite(seconds)) return;
-  current.seek(seconds);
-  musicState.position = current.position();
+  if (current?.kind !== "file" || !Number.isFinite(seconds)) return;
+  const s = current;
+  dropSpare(s);
+  const d = slotDuration(s);
+  s.voice.el.loop = false;
+  s.voice.el.currentTime = Math.min(Math.max(0, seconds), Math.max(0, d - 0.1));
+  musicState.position = slotPosition(s);
   updateMediaSession();
 }
 
 async function resume(): Promise<void> {
-  if (musicState.playing || wantPlaying) return;
+  if ((musicState.playing && !pending) || wantPlaying) return;
   if (!musicState.tracks.length) await loadMusic();
-  const id = musicState.currentId ?? musicState.tracks[0]?.id;
-  if (id) await playTrack(id);
+  const id = targetId ?? musicState.currentId ?? musicState.tracks[0]?.id;
+  if (id) await request(id);
 }
 
+/** next/prev count from the track last asked for, so repeated presses advance while loading. */
 function step(delta: number): Promise<void> {
   const list = musicState.tracks;
   if (!list.length) return Promise.resolve();
-  const i = list.findIndex((t) => t.id === musicState.currentId);
+  const from = (wantPlaying ? targetId : null) ?? musicState.currentId;
+  const i = list.findIndex((t) => t.id === from);
   const nextIndex = i < 0 ? 0 : (i + delta + list.length) % list.length;
-  return playTrack(list[nextIndex]!.id);
+  return request(list[nextIndex]!.id);
 }
 
 const next = (): Promise<void> => step(1);
 const prev = (): Promise<void> => step(-1);
 
 function shuffle(): string | null {
-  const list = musicState.tracks.filter((t) => t.id !== musicState.currentId);
+  const from = (wantPlaying ? targetId : null) ?? musicState.currentId;
+  const list = musicState.tracks.filter((t) => t.id !== from);
   if (!list.length) return null;
   const pick = list[Math.floor(Math.random() * list.length)]!;
-  void playTrack(pick.id);
+  void request(pick.id);
   return pick.id;
 }
 
@@ -1584,12 +1942,14 @@ function getMusicAnalyser(): AnalyserNode | null {
 }
 
 musicPort.onDispose(() => {
-  token++;
+  gen++;
+  flushCoalesced();
   wantPlaying = false;
   current = null;
+  outgoing = null;
   pending = null;
-  warmVoice = null;
-  fading.clear();
+  for (const s of synths) s.running = false;
+  synths.clear();
   dropPool();
   if (ticker) clearInterval(ticker);
   ticker = null;
@@ -1598,18 +1958,22 @@ musicPort.onDispose(() => {
   musicState.loading = false;
   musicState.blocked = false;
   musicState.buffered = 0;
+  musicState.pendingId = null;
 });
 
 /* A hidden tab suspends the AudioContext (engine); pause the elements too so
- * their clocks and downloads don't run on silently, and carry on when shown. */
+ * their clocks and downloads don't run on silently, and carry on when shown.
+ * Only the current voice resumes: fading ones are released by their timers. */
 if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
+    if (!pool) return;
     if (document.hidden) {
-      current?.suspend?.();
-      for (const p of fading) p.suspend?.();
+      suspended = true;
+      for (const v of pool.voices) if (v.state === "active" || v.state === "fadingOut") v.el.pause();
     } else {
-      current?.unsuspend?.();
-      for (const p of fading) p.unsuspend?.();
+      suspended = false;
+      if (current?.kind === "file" && musicState.playing)
+        void current.voice.el.play().catch(() => undefined);
     }
   });
 }
@@ -1667,21 +2031,40 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
       state: () => ({
         ...(JSON.parse(JSON.stringify(musicState)) as MusicState),
         wantPlaying,
-        fading: fading.size,
+        targetId,
+        generation: gen,
+        coalescing: coalesceTimer !== null,
+        ctxTime: pool ? Number(pool.ctx.currentTime.toFixed(3)) : 0,
+        current: current ? `${current.kind}:${current.track.id}` : null,
+        outgoing: outgoing ? `${outgoing.kind}:${outgoing.track.id}` : null,
         voices: pool
           ? pool.voices.map((v) => ({
-              busy: !!v.owner,
+              i: v.index,
+              state: v.state,
+              track: v.trackId,
               paused: v.el.paused,
+              loop: v.el.loop,
               t: Number(v.el.currentTime.toFixed(2)),
               ready: v.el.readyState,
               src: v.el.getAttribute("src"),
               gain: Number(v.gain.gain.value.toFixed(3)),
+              eff: Number(v.gain.gain.value.toFixed(3)),
+              timers: v.timers.length,
+              fadeEnd: v.fadeEnd === undefined ? null : Number(v.fadeEnd.toFixed(3)),
+              lease: v.lease,
             }))
           : [],
+        players: [...synths].map((s) => ({
+          kind: "synth",
+          id: s.track.id,
+          running: s.running,
+          gain: Number(s.out.gain.value.toFixed(3)),
+        })),
         failed: [...failed],
         positions: Object.fromEntries(positions),
         ticker: ticker !== null,
         lookahead: Number(lookahead.toFixed(3)),
+        stats: { ...stats },
         mediaSession: media()
           ? {
               title: media()!.metadata?.title ?? null,
@@ -1690,6 +2073,12 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
             }
           : null,
       }),
+      /** Effective gain of every voice and synth right now (stress-test trace). */
+      gains: () => [
+        ...(pool ? pool.voices.map((v) => ({ key: `v${v.index}`, v: v.el.paused ? 0 : v.gain.gain.value })) : []),
+        ...[...synths].map((s) => ({ key: `s${s.serial}`, v: s.out.gain.value })),
+      ],
+      check: () => checkInvariant("manual"),
       rms: () => rmsOf(musicPort.analyser()),
     };
   }
